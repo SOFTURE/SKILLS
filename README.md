@@ -61,8 +61,12 @@ decision in the artifact. The orchestrators always use it.
 
 Bump `version` in `package.json` and merge to the main branch. The workflow validates the
 package, test-installs it into a scratch project, and publishes to npm with provenance, but
-only if that version is not published yet. Requires the `NPM_TOKEN` secret (an automation
-token of the `softure-ai` npm org).
+only if that version is not published yet.
+
+Publishing uses npm **trusted publishing (OIDC)**: the trusted publisher on npmjs.com is
+`SOFTURE/SKILLS` → `release.yml`, and no token is stored. An `NPM_TOKEN` secret (a granular
+token with "Bypass 2FA") is only needed when bootstrapping a brand-new package, before its
+trusted publisher can be configured.
 
 `node scripts/validate.mjs` is the release gate: frontmatter, the `softure-` prefix, and no
 third-party course branding in any shipped file.

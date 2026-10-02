@@ -43,6 +43,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - name: ⬆️ npm with trusted publishing (OIDC) support
+        run: npm install -g npm@latest
       - name: 🔎 Skip when this version is already published
         id: guard
         run: |
@@ -55,11 +57,8 @@ jobs:
           fi
       - name: 🚀 Publish
         if: steps.guard.outputs.publish == 'true'
-        run: |
-          if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "::error::Missing NPM_TOKEN secret (npm automation token with publish rights to the softure-ai org)."
-            exit 1
-          fi
-          npm publish --provenance --access public
+        # Trusted publishing (OIDC) is used when NPM_TOKEN is not set. The token is only needed for the
+        # very first publish, before the trusted publisher can be configured on npmjs.com.
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
