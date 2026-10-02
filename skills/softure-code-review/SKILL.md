@@ -3,10 +3,10 @@ name: softure-code-review
 description: >
   Review a diff, a pull request or a set of paths against the project's own conventions:
   the SOFTURE rules block in AGENTS.md, the project's AGENTS.md/CLAUDE.md, and the numbered
-  rules in context/foundation/lessons.md. Separates hard violations from taste-level
-  suggestions, cites the rule behind every finding, and can apply the fixes. Use when the
-  user says "review this code", "code review", "check my changes", "review PR 42",
-  "take a look at this PR".
+  rules in context/foundation/lessons.md. Grades findings Critical / Warning / Suggestion,
+  cites the rule behind every finding, ends with one verdict (approve, request changes, needs
+  discussion), and can apply the fixes after asking. Use when the user says "review this
+  code", "code review", "check my changes", "review PR 42", "take a look at this PR".
 argument-hint: "[<change-id> | <pr-number> | <branch> | <path>...] [--fix] [--auto]"
 allowed-tools:
   - Read
@@ -20,8 +20,13 @@ allowed-tools:
 
 # softure-code-review: hold the code to the rules the project already wrote down
 
-This skill does not invent a standard. Every finding points at a written rule. Without a
-rule behind it, a finding can only be a Suggestion, and it says so.
+This skill does not invent a standard. Every finding points at a written rule, or at a
+concrete defect (a bug, a security hole) that needs no rule to be wrong. Without either, a
+finding can only be a Suggestion, and it says so.
+
+Read `references/example-review.md` (a complete review of a team-wiki pull request, with the
+fix round that followed) before writing your first report in a session, and whenever unsure how
+to grade or word a finding.
 
 ## Scope resolution
 
@@ -72,22 +77,49 @@ Read all of them before reading the code. Note which rules are relevant to the t
    - **UI:** accessibility (labels, roles, focus), user-visible text through the project's
      message layer, design tokens instead of raw values.
    - **Reuse:** a SOFTURE module or an existing helper that already does this (WORKFLOW §10).
-4. Classify each finding:
-   - **Violation**: breaks a cited rule, or is a correctness or security defect.
+4. Grade each finding:
+   - **Critical**: a bug, a security hole, data loss, or a broken contract (an API, a schema, a
+     public type other code relies on). Must be fixed before merge. Cite the rule when there is
+     one; a reproducible defect stands on its evidence.
+   - **Warning**: breaks a cited rule (convention, lesson, architecture test) without an
+     immediate defect. Should be fixed; does not block on its own.
    - **Suggestion**: an improvement without a rule behind it. Label it as taste.
-5. Write the report. With `--fix` (or the user's approval), apply violations in small edits,
-   run the gates from workflow.json, and report what changed. Never commit unless asked. Inside
-   a change, the caller commits.
+
+   Critical and Warning together are the **violations**. When torn between Critical and Warning,
+   ask what happens in production if nobody touches it.
+5. Pick the verdict, exactly one:
+   - `APPROVE`: no Critical; the Warnings are minor or already acknowledged in the change.
+   - `REQUEST CHANGES`: at least one Critical, or Warnings that together make the change unsafe
+     to merge.
+   - `NEEDS DISCUSSION`: the diff raises a design question it cannot settle by itself (two
+     rules pull in opposite directions, the approach contradicts the plan or the PR description).
+     Name the question.
+6. Write the report and print it. Then fix (step 7) or stop.
+7. **Fixes.**
+   - With `--fix`: apply every violation with a local, mechanical fix.
+   - Interactive, without `--fix`: ask once, recommended answer first: "Fix Critical and
+     Warning findings" (recommended when there is anything to fix), "Fix Critical only", "Let me
+     pick" (one question listing the findings), "Leave it as a report".
+   - Apply in small edits, one finding at a time, without touching code no finding names. Run the
+     gates from workflow.json and add a `## Fixes applied` section (finding, what changed, gates
+     result). Never commit unless asked; inside a change, the caller commits. On a PR, never post
+     comments or push unless the user asks.
 
 ## Output
 
 ```markdown
 # Code review: <scope>
 
-Rules read: AGENTS.md, softure block, lessons L-001…L-0NN · Files: N · Gates: ✓/✗ (when run)
+Rules read: AGENTS.md (project sections, softure block), lessons L-001…L-0NN, eslint config ·
+Files: N reviewed, M skipped (generated) · Gates: ✓/✗ (when run)
 
-## Violations
-1. **path:line**: <what is wrong>. Rule: <AGENTS.md "Security" / L-014>. Fix: <concrete change>.
+**Verdict: REQUEST CHANGES** (one line why)
+
+## Critical
+1. **path:line**: <what is wrong, and the evidence>. Rule: <citation or "defect">. Fix: <concrete change>.
+
+## Warnings
+1. **path:line**: <what is wrong>. Rule: <citation>. Fix: <concrete change>.
 
 ## Suggestions (taste)
 1. **path:line**: <idea>. No rule behind it; take or leave.
@@ -99,19 +131,35 @@ Naming, Types, …
 One paragraph: the most important thing to fix and the overall risk.
 ```
 
-Print the report in the chat. When a change-id is given, also write it to `reviews/code-review.md`.
+Omit an empty severity section; list the category under "Clean categories" instead. Order
+findings by impact within a section, and do not bury one real bug under twenty nits: when there
+are more than about fifteen findings, merge those with one root cause and list every location.
+
+**Citing a rule.** Name the source and the section, short enough to find: `AGENTS.md
+"Security"`, `softure block "Data"`, `L-014`, `eslint no-floating-promises`,
+`architecture test domain-has-no-ui-imports`. A citation the reader cannot find is not a citation.
+
+**One finding, one fix.** The fix is a concrete edit ("pass `pageId` as a bound parameter"), not
+advice ("consider improving the query"). When the right fix is a design choice, the finding is
+NEEDS DISCUSSION material, and the verdict says so.
+
+Print the report in the chat. When a change-id is given, also write it to `reviews/code-review.md`
+(headings fixed English, prose in the workflow.json `language`).
 
 ## --auto
 
-Apply every violation that has a local, mechanical fix. Leave suggestions unapplied. Record
-what was applied and what was left. Ask nothing. Escalate only a security violation whose fix
-changes behaviour visible to users.
+Behave as with `--fix`: apply every violation (Critical or Warning) that has a local, mechanical
+fix, leave Suggestions unapplied, and record what was applied and what was left in `## Fixes
+applied`. Ask nothing. A NEEDS DISCUSSION question is answered with the safer option and recorded
+under `## Decisions (auto)` (WORKFLOW §8). Escalate only a security violation whose fix changes
+behaviour visible to users.
 
 ## Checklist
 
 - [ ] Every violation cites a rule or is a concrete correctness/security defect.
 - [ ] Suggestions are labelled as such.
 - [ ] Existing helpers and SOFTURE modules checked before flagging duplication.
+- [ ] Every finding has a location, a severity and a concrete fix; the verdict is exactly one line.
 - [ ] Gates run after any applied fix.
 
 ## Anti-patterns
@@ -120,6 +168,8 @@ changes behaviour visible to users.
 - Burying one real bug under twenty nits. Order findings by impact.
 - Flagging code outside the diff, unless the change makes it wrong.
 - Rewriting working code to the reviewer's taste under `--fix`.
+- Grading a rule violation Critical to force a change, or a real bug Suggestion to stay polite.
+- Advice instead of a fix: "consider", "might want to", "could be cleaner".
 
 ## Handoff
 

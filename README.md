@@ -63,6 +63,10 @@ autonomous mode.
 Every interactive skill accepts `--auto`: it decides instead of asking and records each
 decision in the artifact. The orchestrators always use it.
 
+Each `SKILL.md` stays scannable: the procedure, the questions it asks and its quality bar.
+Long material (question banks, rubrics, templates, complete worked examples, good and bad)
+lives next to it in `references/` and is read when the skill points to it.
+
 ## Releasing
 
 Releases are tag-driven:

@@ -47,7 +47,39 @@ to report progress. It must stay machine-friendly.
    not block the next phase. They are listed for the owner at the end.
 9. Never delete or rename an item after implementation starts. When the plan changes
    mid-flight, add new items with the next free number and mark obsolete ones
-   `- [x] ~~1.4 old text~~ — dropped: <reason>`.
+   `- [x] ~~1.4 old text~~ — dropped: <reason>`. Numbers are never reused, so gaps are fine.
+   Before implementation starts (plan and plan review), items may still be renumbered.
+10. Within a phase, boxes may be ticked as each criterion is checked; the SHA is appended to all
+    of them at once after the phase commit. A ticked item without a SHA in the phase being
+    worked on is a valid intermediate state, not drift.
+11. Checkboxes appear **only** here. The `## Phase N:` blocks above list their Done-when
+    criteria as plain `- ` bullets, and every one of them has exactly one item here.
+
+## What does not belong in Progress
+
+- Nested checkboxes. One criterion is one line; sub-steps belong in the phase block.
+- Estimates, owners, due dates.
+- Prose between phases or groups. The section is headings and items only, because tools parse it.
+- Status markers or completion banners. The status lives in change.md frontmatter; completion
+  is derived from the boxes.
+
+## Deriving state (for skills and scripts that read Progress)
+
+- **Resume point:** the first `- [ ]` under an `#### Automated` heading.
+- **Current phase:** the phase that holds the resume point, or the last phase when there is none.
+- **Completion:** ticked items divided by all items, dropped items counted as ticked.
+- **Open owner checks:** every `- [ ]` under `#### Manual`. They go to the roadmap's
+  `## Owner decisions and checks` at archive time.
+
+Drift between change.md and Progress, worth reporting wherever it is noticed:
+
+| change.md status | Progress shows | Likely meaning |
+| --- | --- | --- |
+| `planned` or `plan_reviewed` | a ticked item without a SHA | work started without moving the status (ticked items with SHAs are normal after a re-plan) |
+| `implementing` | nothing ticked | the status moved, no work was recorded |
+| `implementing` | every Automated item ticked | the status should be `implemented` |
+| `implemented` | an open Automated item | a phase was skipped or a box was never ticked |
+| any | a ticked item without a SHA in a phase that is not the current one | a phase was committed without its bookkeeping |
 
 ## Example (one phase done, one in flight)
 
@@ -76,4 +108,26 @@ to report progress. It must stay machine-friendly.
 - [ ] 2.4 Owner confirms the pending state feels responsive on a slow network
 ```
 
-Resume point here: item 2.2.
+Resume point here: item 2.2. Item 2.1 is ticked without a SHA because phase 2 is not committed
+yet. Item 2.4 stays open for the owner and does not block phase 3.
+
+## Example: a re-plan in the middle of phase 2
+
+Research for the remaining work showed that the E2E check belongs to a later phase, and a new
+criterion appeared. Nothing is renamed or renumbered:
+
+```markdown
+### Phase 2: Every long action uses it
+
+#### Automated
+- [x] 2.1 All server-action forms pass `isPending` from `useFormStatus`
+- [x] ~~2.2 E2E: clicking "Recalculate" shows the pending state within 100 ms~~ — dropped: moved to phase 3
+- [ ] 2.5 Disabled buttons expose `aria-disabled` while pending
+- [ ] 2.3 Gates green (typecheck, lint, test)
+
+#### Manual
+- [ ] 2.4 Owner confirms the pending state feels responsive on a slow network
+```
+
+The gates item keeps its number and stays last. The new item takes the next free number (2.5,
+because 2.4 is the manual item).

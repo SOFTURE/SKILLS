@@ -82,8 +82,8 @@ forces one on a project that already has its own.
 context/
   workflow.json
   foundation/
-    shape-notes.md      softure-shape     (frontmatter: session, status, created, updated; optional `## Frame` from softure-frame)
-    prd.md              softure-prd       (frontmatter: version, status: draft | accepted, source, updated)
+    shape-notes.md      softure-shape     (frontmatter: session, status, context_type: greenfield | brownfield, created, updated; optional `## Frame` from softure-frame)
+    prd.md              softure-prd       (frontmatter: version, status: draft | accepted, context_type, source, updated)
     roadmap.md          softure-roadmap   (§5) the ONE active (main) roadmap
     roadmaps/roadmap-<slug>.md            queued thematic roadmaps, status: waiting (§5.1)
     archive/<YYYY-MM-DD>-roadmap.md       finished roadmaps (also old prd.md / shape-notes.md versions)
@@ -96,6 +96,7 @@ context/
     reviews/
       plan-review.md    softure-plan-review
       impl-review.md    softure-impl-review
+      impl-review-p<N>.md  softure-impl-review phase <N> (optional, per-phase; leaves the status alone)
       code-review.md    softure-code-review (when run on a change)
   archive/<YYYY-MM-DD>-<change-id>/   softure-archive (date = change.md `created`)
   backlog/              everything planned for "later", never what is in flight:
@@ -154,6 +155,9 @@ Free-form. Orchestrators append signals here.
 | `archived` | softure-archive | folder moved to archive |
 
 Every skill that changes `status` also sets `updated`.
+Statuses move forward, with one exception: a refine or re-plan of the remaining phases moves `plan_reviewed` or
+`implementing` back to `planned`, so the revised phases get a plan review before more code is written. Ticked
+Progress items stay ticked.
 `softure-frame` leaves the status unchanged (`preparing`). When `softure-plan-review` finds a CRITICAL issue the plan
 cannot fix, the status stays `planned` and the finding names the step to redo (`research` or `plan`). Orchestrators
 read that finding before re-running plan-review.
