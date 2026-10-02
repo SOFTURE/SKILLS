@@ -11,5 +11,5 @@ and skill or agent instructions. This holds even when the conversation with the 
   never inline in code.
 - When you touch a file that contains Polish code, comments or identifiers, translate them in the
   same change.
-- Before every commit, check the diff for Polish (diacritics `ąćęłńóśźż` and Polish words) outside
+- Before every commit, check the diff for Polish (Polish diacritics and Polish words) outside
   message dictionaries. Treat any hit as a failing gate.
