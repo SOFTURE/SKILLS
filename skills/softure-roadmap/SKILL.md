@@ -8,7 +8,7 @@ description: >
   turned into work, or to revise the order. Triggers: "make a roadmap", "slice the PRD",
   "what do we build first", "order the work",
   "turn feedback into roadmap items".
-argument-hint: "[--revise] [--open-changes] [--from-feedback <path>] [--auto]"
+argument-hint: "[--revise] [--open-changes] [--queue <slug> | --promote <slug>] [--from-feedback <path>] [--auto]"
 allowed-tools:
   - Read
   - Glob
@@ -36,7 +36,21 @@ The format is a contract: `softure-worktree` and `softure-worktree-manager` pars
 - `context/workflow.json` (for `language`, `maxParallel`, `migrations`).
 - If an existing `roadmap.md` has items not yet `done`, this is **revise mode**. Never
   renumber IDs and never drop an `in_progress` item. Move a finished roadmap to
-  `context/foundation/roadmaps/<YYYY-MM-DD>-<slug>.md` before starting a new one.
+  `context/foundation/archive/<YYYY-MM-DD>-roadmap.md` before starting a new one.
+
+## Modes
+
+- **main** (default): writes `context/foundation/roadmap.md`, the one roadmap that is executed.
+- **`--queue <slug>`**: writes a queued thematic roadmap per WORKFLOW §5.1:
+  `context/foundation/roadmaps/roadmap-<slug>.md` (`status: waiting`, `backlog:`, `trigger:`), plus
+  `context/backlog/roadmap-<slug>/README.md` (table `| ID | Entry | Title | Condition | Kind |`, where Kind
+  is `start`, `dependency` or `owner`) and one `<change-id>/change.md` per item (§4 format, `status: backlog`,
+  `## Intent`, `## Context` with the item block, `## Constraints`). Use this for every theme that is not
+  next in line. Several queued roadmaps can exist; each has its own ID prefix.
+- **`--promote <slug>`**: the owner makes a queued roadmap the main one. Archive the current main
+  roadmap, `git mv` the queued file to `roadmap.md`, set `status: ready`, and take its ready entries
+  (`git mv …/change.md context/changes/<id>/backlog-input.md`, then the `softure-new` format).
+  Never promote on your own initiative, not even in `--auto`.
 
 ## Procedure
 

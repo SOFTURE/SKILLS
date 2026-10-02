@@ -71,8 +71,9 @@ context/
   foundation/
     shape-notes.md      softure-shape     (frontmatter: session, status, created, updated; optional `## Frame` from softure-frame)
     prd.md              softure-prd       (frontmatter: version, status: draft | accepted, source, updated)
-    roadmap.md          softure-roadmap   (§5)
-    roadmaps/<YYYY-MM-DD>-<slug>.md      previous roadmaps, archived by softure-roadmap
+    roadmap.md          softure-roadmap   (§5) the ONE active (main) roadmap
+    roadmaps/roadmap-<slug>.md            queued thematic roadmaps, status: waiting (§5.1)
+    archive/<YYYY-MM-DD>-roadmap.md       finished roadmaps (also old prd.md / shape-notes.md versions)
     lessons.md          softure-lesson    (§7)
   changes/<change-id>/
     change.md           softure-new       (§4)
@@ -84,9 +85,9 @@ context/
       impl-review.md    softure-impl-review
       code-review.md    softure-code-review (when run on a change)
   archive/<YYYY-MM-DD>-<change-id>/   softure-archive (date = change.md `created`)
-  backlog/              ideas and deferred findings not on the roadmap yet:
-                        <topic>.md (flat list, see below) or <group>/<id>/change.md (a prepared change;
-                        when picked up it is moved to changes/<id>/backlog-input.md)
+  backlog/              everything planned for "later", never what is in flight:
+    roadmap-<slug>/     one folder per queued roadmap (§5.1): README.md + <change-id>/change.md (status: backlog)
+    <topic>.md          flat list of deferred findings and loose ideas (see below)
 ```
 
 `change-id` is kebab-case, ASCII, at most 40 characters, unique across `changes/` and `archive/`.
@@ -129,6 +130,7 @@ Free-form. Orchestrators append signals here.
 
 | status | set by | meaning / resume point |
 |---|---|---|
+| `backlog` | softure-roadmap | prepared entry in `context/backlog/roadmap-<slug>/`; not in flight |
 | `new` | softure-new | next: research |
 | `preparing` | softure-research | research written; next: frame (optional) or plan |
 | `planned` | softure-plan | next: plan review |
@@ -150,7 +152,7 @@ read that finding before re-running plan-review.
 project: "Name"
 roadmap: short-slug
 version: 1
-status: draft | ready | done
+status: draft | waiting | ready | done
 prd_version: 4
 updated: 2026-10-01
 ---
@@ -214,6 +216,30 @@ Parsing rules (scripts depend on them):
 - **Stages** (first token inside the parentheses of `in_progress`): `research`, `frame`, `plan`,
   `plan-review`, `implement N/M`, `impl-review`, `integration`, `archive`.
 - The item block mirrors the row status in `- **Status:** …` directly under `- **Change ID:**`.
+
+### 5.1 Thematic roadmaps and the backlog
+
+Only `roadmap.md` is executed. Everything planned for later lives in **queued thematic roadmaps**,
+each paired with a backlog folder of prepared entries:
+
+```
+context/foundation/roadmaps/roadmap-<slug>.md     the plan: order, dependencies, owner decisions, item blocks
+context/backlog/roadmap-<slug>/README.md          table of entries: | ID | Entry | Title | Condition | Kind |
+context/backlog/roadmap-<slug>/<change-id>/change.md   §4 format with `status: backlog`
+```
+
+- Queued roadmap frontmatter adds `status: waiting`, `backlog: context/backlog/roadmap-<slug>/` and
+  `trigger: "<what has to happen before it becomes the main roadmap>"`. Its table rows use the §5 format;
+  every row is `proposed`, `ready` or `blocked (…)`.
+- **One topic, one place.** An entry is in exactly one of `backlog/`, `changes/` or `archive/`, never copied,
+  never as a pointer stub.
+- **Taking an entry** (it becomes active work): `git mv context/backlog/roadmap-<slug>/<id>/change.md
+  context/changes/<id>/backlog-input.md`, remove the empty folder, then `softure-new <id>` writes the real
+  `change.md` (status `new`) from it. Relative links in the moved file lose one `../`.
+- **Promoting a roadmap** (owner's call, when the main one is done): archive the main roadmap to
+  `foundation/archive/<YYYY-MM-DD>-roadmap.md`, `git mv roadmaps/roadmap-<slug>.md roadmap.md`, set
+  `status: ready`, then take its ready entries as above. The backlog folder stays until it is empty, then is removed.
+- An entry that got done or rejected elsewhere moves into that change's archive folder as `backlog-input.md`.
 
 ## 6. `plan.md`
 
