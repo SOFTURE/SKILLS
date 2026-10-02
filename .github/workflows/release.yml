@@ -1,10 +1,17 @@
-name: SOFTURE SKILLS - VALIDATE AND PUBLISH TO NPM
+name: SOFTURE SKILLS - VALIDATE AND RELEASE
 
-# Publishes @softure-ai/skills when package.json carries a version that is not on npm yet.
-# A push without a version bump only validates.
+# Every push and pull request is validated.
+# Pushing a tag `vX.Y.Z` (matching package.json) releases that version:
+#   1. npmjs.com      @softure-ai/skills  (trusted publishing over OIDC, with provenance)
+#   2. GitHub Packages @softure/skills    (GitHub Packages requires the scope to equal the org)
+#   3. GitHub Release vX.Y.Z              (generated notes + the package tarball as an asset)
+# Cut a release with: npm version patch|minor|major && git push --follow-tags
+#
+# Keep this file name: the npm trusted publisher is bound to `release.yml`.
 on:
   push:
     branches: [main, master]
+    tags: ["v*.*.*"]
   pull_request:
   workflow_dispatch:
 
@@ -14,6 +21,8 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,12 +37,25 @@ jobs:
           test -f /tmp/consumer/.claude/softure-skills.json
           node scripts/uninstall.mjs --target /tmp/consumer
           test ! -f /tmp/consumer/.claude/softure-skills.json
-      - name: 📦 Pack dry run
-        run: npm pack --dry-run
+      - name: 🏷️ Read version (and match it against the tag)
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${VERSION}"
+            exit 1
+          fi
+      - name: 📦 Pack
+        run: npm pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: "*.tgz"
 
-  publish:
+  publish-npm:
     needs: validate
-    if: github.event_name != 'pull_request'
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,20 +68,75 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: ⬆️ npm with trusted publishing (OIDC) support
         run: npm install -g npm@latest
-      - name: 🔎 Skip when this version is already published
-        id: guard
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if npm view "@softure-ai/skills@${VERSION}" version >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version ${VERSION} already on npm, skipping."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: 🚀 Publish
-        if: steps.guard.outputs.publish == 'true'
-        # Trusted publishing (OIDC) is used when NPM_TOKEN is not set. The token is only needed for the
-        # very first publish, before the trusted publisher can be configured on npmjs.com.
-        run: npm publish --provenance --access public
+      - name: 🚀 Publish to npmjs.com
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          if npm view "@softure-ai/skills@${VERSION}" version >/dev/null 2>&1; then
+            echo "@softure-ai/skills@${VERSION} is already on npm, skipping."
+          else
+            npm publish --provenance --access public
+          fi
+
+  publish-github:
+    needs: validate
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: "@softure"
+      - name: 🔁 Rename to the org scope required by GitHub Packages
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.name = "@softure/skills";
+            pkg.publishConfig = { registry: "https://npm.pkg.github.com" };
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+      - name: 🚀 Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          if npm view "@softure/skills@${VERSION}" version >/dev/null 2>&1; then
+            echo "@softure/skills@${VERSION} is already on GitHub Packages, skipping."
+          else
+            npm publish
+          fi
+
+  github-release:
+    needs: [validate, publish-npm, publish-github]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      - name: 📝 Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          NOTES=$(printf '%s\n' \
+            "Install from npm: \`npm i -D @softure-ai/skills@${VERSION}\`" \
+            "" \
+            "Install from this release (no registry, no auth): \`npm i -D https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/softure-ai-skills-${VERSION}.tgz\`" \
+            "" \
+            "GitHub Packages: \`@softure/skills@${VERSION}\` (requires a token with read:packages)")
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" softure-ai-skills-*.tgz --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" softure-ai-skills-*.tgz \
+              --verify-tag --generate-notes --title "${GITHUB_REF_NAME}" --notes "${NOTES}"
+          fi

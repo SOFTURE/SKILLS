@@ -59,14 +59,27 @@ decision in the artifact. The orchestrators always use it.
 
 ## Releasing
 
-Bump `version` in `package.json` and merge to the main branch. The workflow validates the
-package, test-installs it into a scratch project, and publishes to npm with provenance, but
-only if that version is not published yet.
+Releases are tag-driven:
 
-Publishing uses npm **trusted publishing (OIDC)**: the trusted publisher on npmjs.com is
-`SOFTURE/SKILLS` → `release.yml`, and no token is stored. An `NPM_TOKEN` secret (a granular
-token with "Bypass 2FA") is only needed when bootstrapping a brand-new package, before its
-trusted publisher can be configured.
+```bash
+npm version patch          # or minor / major: bumps package.json and creates tag vX.Y.Z
+git push --follow-tags
+```
+
+The `v*.*.*` tag runs `.github/workflows/release.yml`, which:
+1. validates and test-installs the package, and checks that the tag matches `package.json`;
+2. publishes `@softure-ai/skills` to **npmjs.com** through trusted publishing (OIDC, provenance,
+   no stored token);
+3. publishes `@softure/skills` to **GitHub Packages** (GitHub requires the scope to match the org);
+4. creates the **GitHub Release** with generated notes and the package tarball attached.
+
+Ways to install a release:
+
+| Source | Command |
+|---|---|
+| npm | `npm i -D @softure-ai/skills` |
+| GitHub Release (no auth) | `npm i -D https://github.com/SOFTURE/SKILLS/releases/download/vX.Y.Z/softure-ai-skills-X.Y.Z.tgz` |
+| GitHub Packages | `npm i -D @softure/skills` with `@softure:registry=https://npm.pkg.github.com` and a token with `read:packages` |
 
 `node scripts/validate.mjs` is the release gate: frontmatter, the `softure-` prefix, and no
 third-party course branding in any shipped file.
