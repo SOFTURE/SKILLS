@@ -1,0 +1,33 @@
+{
+  "name": "@softure-ai/skills",
+  "version": "0.1.0",
+  "description": "SOFTURE agent skills: a spec-driven delivery workflow (shape → prd → roadmap → plan → implement → review) plus parallel worktree orchestration",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SOFTURE/SKILLS.git"
+  },
+  "type": "module",
+  "files": [
+    "skills/",
+    "rules/",
+    "WORKFLOW.md",
+    "scripts/install.mjs",
+    "scripts/uninstall.mjs",
+    "README.md"
+  ],
+  "bin": {
+    "softure-skills": "scripts/install.mjs"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.mjs --postinstall",
+    "validate": "node scripts/validate.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

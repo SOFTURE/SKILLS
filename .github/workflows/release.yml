@@ -1,0 +1,65 @@
+name: SOFTURE SKILLS - VALIDATE AND PUBLISH TO NPM
+
+# Publishes @softure-ai/skills when package.json carries a version that is not on npm yet.
+# A push without a version bump only validates.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: ✅ Validate skills
+        run: node scripts/validate.mjs
+      - name: 🧪 Install into a scratch project
+        run: |
+          mkdir -p /tmp/consumer && echo '{}' > /tmp/consumer/package.json
+          node scripts/install.mjs --target /tmp/consumer
+          test -f /tmp/consumer/.claude/softure-skills.json
+          node scripts/uninstall.mjs --target /tmp/consumer
+          test ! -f /tmp/consumer/.claude/softure-skills.json
+      - name: 📦 Pack dry run
+        run: npm pack --dry-run
+
+  publish:
+    needs: validate
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: 🔎 Skip when this version is already published
+        id: guard
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@softure-ai/skills@${VERSION}" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${VERSION} already on npm, skipping."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 🚀 Publish
+        if: steps.guard.outputs.publish == 'true'
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::error::Missing NPM_TOKEN secret (npm automation token with publish rights to the softure-ai org)."
+            exit 1
+          fi
+          npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
