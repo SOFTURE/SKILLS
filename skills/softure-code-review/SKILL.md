@@ -53,6 +53,8 @@ Read all of them before reading the code. Note which rules are relevant to the t
 2. For each file, read enough surrounding code to judge the change in place. "Too long" and
    "impure" are only meaningful relative to what the function does and who calls it.
 3. Walk the categories. A category with nothing to report is stated as clean.
+   - **Language:** any non-English code, identifier, comment, commit message or log text
+     outside message dictionaries is a violation (the mandatory language rule in AGENTS.md).
    - **Correctness:** logic errors, unhandled states, off-by-one, time zones, async without
      error handling.
    - **Boundaries:** input validation, authorization, SQL parameterization, secrets, leaked

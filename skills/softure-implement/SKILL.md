@@ -120,6 +120,7 @@ Use the format in `softure-plan/references/progress-format.md`:
 
 - [ ] Every ticked box was actually checked in this session, by command, query or screenshot.
 - [ ] Gates are green at every phase commit.
+- [ ] The diff is English-only outside message dictionaries (language rule in AGENTS.md).
 - [ ] There is one commit per phase with the WORKFLOW §9 message, and nothing unrelated is staged.
 - [ ] TDD phases show a red test before the implementation.
 - [ ] Drift is recorded. No silent design changes.

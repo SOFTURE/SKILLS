@@ -1,6 +1,22 @@
 # SOFTURE workflow and conventions
 
-Installed by `@softure-ai/skills`. Project-specific rules outside this block take precedence.
+Installed by `@softure-ai/skills`. Project-specific rules outside this block take precedence,
+except the language rule below, which always applies.
+
+## Language: English in everything you write to the repository (mandatory)
+
+Code, identifiers, comments, commit messages, script and log output, error messages, file and
+folder names, configuration keys, and agent or skill instructions are written in **English**.
+This holds even when the conversation with the user is in another language.
+
+- A request in another language still produces English code. Do not carry the conversation
+  language into the code.
+- The only exception is user-facing product copy. It lives in message dictionaries
+  (e.g. `messages/pl.ts`), never inline in code.
+- When you touch a file with non-English code, comments or identifiers, translate them in the
+  same change.
+- Before every commit, scan the diff for non-English text outside message dictionaries. Any hit
+  is a failing gate, just like a red test.
 
 ## How work flows
 
@@ -23,8 +39,6 @@ and the artifact language come from `context/workflow.json`. Before building any
 ## Conventions
 
 **Code**
-- Code, identifiers, comments, commit messages and log output are in English, whatever language
-  the conversation is in. User-facing copy lives only in message dictionaries.
 - Name things by what they do: functions start with a verb, booleans read as questions
   (`isActive`, `hasAccess`), constants are UPPER_SNAKE_CASE, and a file is named after its main export.
 - One function does one job. More than three inputs become an options object. Return early
