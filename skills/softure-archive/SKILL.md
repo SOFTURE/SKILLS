@@ -26,8 +26,9 @@ Contract: `WORKFLOW.md` §3 (paths), §4 (status), §5 (roadmap rows and statuse
 
 | Check | Hard stop | Soft warning |
 |---|---|---|
-| `git status --porcelain` is empty | yes: commit or stash first; never archive over uncommitted work | |
+| no uncommitted changes in the change folder, `roadmap.md` or the files the change touched (`git status --porcelain -- <paths>`) | yes: commit them first; never archive over uncommitted work of the change | other uncommitted paths (someone else's WIP): leave them, never stage them |
 | change.md `status` is `impl_reviewed` | | `implemented` (no review) or earlier |
+| plan.md exists | | no: work done without the chain (interactively, or a change that turned out to need no code). Archive it anyway, see "Without a plan" |
 | plan.md Progress: no open `#### Automated` items | yes: name them | |
 | plan.md Progress: open `#### Manual` items | | yes: they become owner checks (step 4) |
 | `reviews/impl-review.md` has no CRITICAL without a decision | yes | |
@@ -65,6 +66,18 @@ on warnings, stop on hard stops.
    match, and no dangling `changes/<id>` links remain.
 7. **Commit** with `chore(archive): close <change-id>`, staging only the touched paths.
 
+## Without a plan
+
+A change folder must not outlive its work: a delivered change left in `changes/` looks in flight
+to every orchestrator and blocks closing the roadmap. When there is no `plan.md`:
+
+- under `## Notes`, record what delivered the outcome (commit SHAs or the merge) and how it was
+  verified, or that it was dropped and why;
+- open items that need no code (an owner's visual check, a decision) go to the roadmap's
+  `## Owner decisions and checks` (or stay under `## Notes` for an unlinked change); they never
+  keep the folder in `changes/`;
+- the row becomes `done`, `done_code (…)` or, for a dropped change, `done` with the reason in `## Done`.
+
 ## --auto
 
 Proceed on soft warnings. Record each one in the archive commit body and in the roadmap owner
@@ -79,7 +92,7 @@ row during the merge. Do not touch rows of other items.
 
 ## Checklist
 
-- [ ] No uncommitted files before and after.
+- [ ] No uncommitted files of the change before and after; nobody else's WIP staged.
 - [ ] `status: archived`, `archived_at` set.
 - [ ] Folder name uses the `created` date.
 - [ ] Roadmap row last cell, item block status, `## Done` and `updated` all changed.

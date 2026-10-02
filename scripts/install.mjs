@@ -6,6 +6,10 @@
 //   manifest            -> <project>/.claude/softure-skills.json (drives updates and uninstall)
 //
 // Flags: --postinstall (never fails the host install), --dry-run, --target <dir>, --no-gitignore
+//
+// Per-project choices live in context/workflow.json -> "install" (all optional):
+//   "gitignore": false              commit the installed skills instead of ignoring them
+//   "rules": ["workflow", ...]      rule sections to inject; default: every section in RULE_SECTIONS
 
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +22,9 @@ const BLOCK_BEGIN = "<!-- softure-skills:begin (managed by @softure-ai/skills, d
 const BLOCK_END = "<!-- softure-skills:end -->";
 const GITIGNORE_BEGIN = "# softure-skills:begin (managed by @softure-ai/skills)";
 const GITIGNORE_END = "# softure-skills:end";
+const WORKFLOW_CONFIG_PATH = path.join("context", "workflow.json");
+// Section key -> heading prefix in rules/AGENTS.md. The text before the first section always ships.
+const RULE_SECTIONS = { language: "## Language", workflow: "## How work flows", conventions: "## Conventions" };
 
 function parseArgs(argv) {
   const options = { isPostinstall: false, isDryRun: false, target: null, shouldIgnore: true };
@@ -42,6 +49,38 @@ function readManifest(projectRoot) {
   const file = path.join(projectRoot, MANIFEST_PATH);
   if (!fs.existsSync(file)) return { skills: [] };
   return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function readInstallConfig(projectRoot) {
+  const file = path.join(projectRoot, WORKFLOW_CONFIG_PATH);
+  if (!fs.existsSync(file)) return {};
+  try {
+    const config = JSON.parse(fs.readFileSync(file, "utf8"));
+    return config && typeof config.install === "object" && config.install !== null ? config.install : {};
+  } catch (error) {
+    throw new Error(`cannot parse ${WORKFLOW_CONFIG_PATH}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function resolveRuleSections(installConfig) {
+  if (installConfig.rules === undefined) return Object.keys(RULE_SECTIONS);
+  if (!Array.isArray(installConfig.rules)) throw new Error(`${WORKFLOW_CONFIG_PATH}: install.rules must be an array`);
+  const unknown = installConfig.rules.filter((key) => !(key in RULE_SECTIONS));
+  if (unknown.length > 0) {
+    throw new Error(`${WORKFLOW_CONFIG_PATH}: unknown install.rules ${unknown.join(", ")} (known: ${Object.keys(RULE_SECTIONS).join(", ")})`);
+  }
+  return installConfig.rules;
+}
+
+// Keeps the preamble and the "## " sections whose key is selected; drops the rest.
+function selectRuleSections(rules, selectedKeys) {
+  const parts = rules.split(/\n(?=## )/);
+  const kept = parts.filter((part, index) => {
+    if (index === 0 && !part.startsWith("## ")) return true;
+    const key = Object.keys(RULE_SECTIONS).find((candidate) => part.startsWith(RULE_SECTIONS[candidate]));
+    return key === undefined || selectedKeys.includes(key);
+  });
+  return kept.join("\n");
 }
 
 function listPackageSkills() {
@@ -74,6 +113,9 @@ function install(options) {
   }
 
   const previous = readManifest(projectRoot);
+  const installConfig = readInstallConfig(projectRoot);
+  const ruleSections = resolveRuleSections(installConfig);
+  const shouldIgnore = options.shouldIgnore && installConfig.gitignore !== false;
   const skills = listPackageSkills();
   const skillsRoot = path.join(projectRoot, ".claude", "skills");
   const actions = [];
@@ -102,22 +144,28 @@ function install(options) {
   const claudeFile = path.join(projectRoot, "CLAUDE.md");
   const rulesTarget = fs.existsSync(agentsFile) || !fs.existsSync(claudeFile) ? agentsFile : claudeFile;
   if (fs.existsSync(rulesSource)) {
-    actions.push(`rules block -> ${path.relative(projectRoot, rulesTarget)}`);
+    actions.push(`rules block (${ruleSections.join(", ")}) -> ${path.relative(projectRoot, rulesTarget)}`);
     if (!options.isDryRun) {
       const existing = fs.existsSync(rulesTarget) ? fs.readFileSync(rulesTarget, "utf8") : "";
-      const rules = fs.readFileSync(rulesSource, "utf8");
+      const rules = selectRuleSections(fs.readFileSync(rulesSource, "utf8"), ruleSections);
       fs.writeFileSync(rulesTarget, replaceManagedBlock(existing, BLOCK_BEGIN, BLOCK_END, rules));
     }
   }
 
   const installed = skills.filter((name) => !actions.includes(`skip ${name} (folder exists and is not managed by this package)`));
-  if (options.shouldIgnore) {
-    const gitignore = path.join(projectRoot, ".gitignore");
+  const gitignore = path.join(projectRoot, ".gitignore");
+  if (shouldIgnore) {
     const lines = [...installed.map((name) => `/.claude/skills/${name}/`), `/${MANIFEST_PATH}`].join("\n");
     actions.push("gitignore block (installed skills are restored by npm install)");
     if (!options.isDryRun) {
       const existing = fs.existsSync(gitignore) ? fs.readFileSync(gitignore, "utf8") : "";
       fs.writeFileSync(gitignore, replaceManagedBlock(existing, GITIGNORE_BEGIN, GITIGNORE_END, lines));
+    }
+  } else if (fs.existsSync(gitignore) && fs.readFileSync(gitignore, "utf8").includes(GITIGNORE_BEGIN)) {
+    // The project switched to committing the skills: drop the block an earlier install wrote.
+    actions.push("gitignore block removed (skills are committed)");
+    if (!options.isDryRun) {
+      fs.writeFileSync(gitignore, replaceManagedBlock(fs.readFileSync(gitignore, "utf8"), GITIGNORE_BEGIN, GITIGNORE_END, null));
     }
   }
 
@@ -129,7 +177,8 @@ function install(options) {
       installedAt: new Date().toISOString(),
       skills: installed,
       rulesTarget: path.relative(projectRoot, rulesTarget),
-      gitignore: options.shouldIgnore,
+      rules: ruleSections,
+      gitignore: shouldIgnore,
     };
     fs.writeFileSync(path.join(projectRoot, MANIFEST_PATH), JSON.stringify(manifest, null, 2) + "\n");
   }
@@ -148,4 +197,4 @@ try {
   process.exit(isPostinstall ? 0 : 1);
 }
 
-export { replaceManagedBlock };
+export { replaceManagedBlock, selectRuleSections };

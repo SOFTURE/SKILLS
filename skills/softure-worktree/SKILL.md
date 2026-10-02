@@ -115,6 +115,16 @@ branch, and the *other* sessions are other containers that see **only
 `origin`** — a stage written to a local `<main>` is invisible to them, so two
 cloud sessions could take the same item.
 
+**`worktree.cloudState: "branch"`** changes points 1 and 6: the claim and every
+stage are committed **on the session branch only** (`wt-roadmap.py` does it by
+itself in that mode) and nothing goes to `origin/<main>` before the merge. Use
+it when a coordinator assigns the items — then the assignment, not a claim on
+`<main>`, keeps two sessions off one item, so A1 takes the item it was given
+and does not need `origin/<main>` to show it free. The branch carries the
+state: push it at READY (point 5), and earlier only if the project wants the
+board live (each first push of a ref may run the pre-push hook). Default
+`"main"` is the flow below.
+
 **1. Claim first, on origin, before anything else.** Right after A1 picks the
 item — before installing dependencies, before research — mark it taken **on
 `origin/<main>`**:
@@ -169,6 +179,13 @@ often no outbound access to production hosts or ssh. So:
 - Anything that needs production (a request to the live site, ssh) goes to
   **Pending owner checks**, with the exact command.
 - Browsers: use the preinstalled ones; never download browser binaries.
+- Long commands (the full test gate, a push whose hook runs it): start them in
+  the background with the longest timeout the tool allows — the default limit
+  kills a long suite midway and looks like a failure. Never stop a process by
+  a pattern (`pkill -f vitest`, `pkill -f "next dev"`): the pattern matches the
+  tool's own shell and kills it; find the PID (`pgrep -f …`) and kill that.
+- When the push hook already runs the full test gate, the push *is* that gate:
+  don't run the suite by hand right before it.
 
 **5. The session branch may go to origin; `<main>` may not.** Push the session
 branch at least at READY (`git push -u origin HEAD`) — the container is
@@ -177,10 +194,10 @@ reclaimed after inactivity, and a pushed branch is the copy that survives it.
 first push of a ref without an upstream may run the pre-push hook's full suite
 — minutes of silence, expected; never bypass it.
 
-**6. READY.** A3.8 runs before A4, as locally. A5 merges `origin/<main>` (after
-`git fetch origin <main>`), not the local one. Then
-`wt-roadmap.py ready <change-id>` (pushed to origin), push the session branch,
-report, stop.
+**6. READY.** A3.8 runs before A4, as locally (unless the cadence defers it).
+A5 merges `origin/<main>` (after `git fetch origin <main>`), not the local one.
+Then `wt-roadmap.py ready <change-id>` (pushed to origin; with `cloudState:
+"branch"` committed on the branch), push the session branch, report, stop.
 
 **No deploy from a cloud session, ever** — and, while `release.owner` is true,
 from any session: no ssh to servers, no tags, no `gh release`, no edit of
@@ -449,9 +466,12 @@ work, and a tree-wide pre-commit hook sees only your tree. Disabling hooks
 should never be needed here; if it seems to be, something foreign got in —
 find it.
 
-**Integration: the full suite, once per item — A3.8.** Running only "your"
-integration tests lets regressions through that no session sees; the full
-suite on the final tree is what READY reports.
+**Integration: the full suite, once per item — A3.8** (with the default
+`integration.cadence: "change"`). Running only "your" integration tests lets
+regressions through that no session sees; the full suite on the final tree is
+what READY reports. With `"roadmap"` the project trades that per-item signal
+for one run on `<main>` at the end (the coordinator's M7): skip A3.8 and say
+so in READY.
 
 **Baseline for "see it red first".** Put a baseline worktree **in the
 scratchpad**, detached, never as a sibling `../<repo>-baseline` — a sibling
@@ -594,7 +614,8 @@ no code rode along. Any touch of code, migrations, scripts or config puts you
 back on full gates.
 
 Keep the commit subject form `<type>(<change-id>): <phase title> (p<N>)`
-(`WORKFLOW.md` §9). Never `--no-verify`, never `--amend`.
+(`WORKFLOW.md` §9). Never `--no-verify`, never `--amend` (the Progress SHA goes in
+with the next commit, `WORKFLOW.md` §6).
 
 ##### Verify the manual checks yourself
 
@@ -652,7 +673,12 @@ the review file with every finding decided.
 
 #### A3.8 — Full integration suite
 
-After the impl-review fixes are committed and before archiving — the tree the
+**`integration.cadence: "roadmap"`** → skip this step: no stage `integration`,
+no run. READY says `integration: deferred to the roadmap run (cadence:
+roadmap)`. The touched files' own integration tests still run if the project
+can run them cheaply; their result goes into READY as `own tests:`.
+
+Otherwise: after the impl-review fixes are committed and before archiving — the tree the
 item delivers is final except for paperwork. Stage `integration` on `<main>`,
 then:
 
@@ -876,7 +902,8 @@ merge at the end.
   from A2 with the current stage, `ready_to_merge` at READY,
   `done` / `done_code` after the merge.
 - **Every file edit from A2 to B1 lands under `<WT>`**, never in the main tree.
-- **Integration: the full suite, once per item** — A3.8, after impl-review and
+- **Integration: the full suite, once per item** (cadence `change`; once per
+  roadmap at the coordinator's M7 with cadence `roadmap`) — A3.8, after impl-review and
   its fixes, before archive. New reds are fixed before READY; reds already on
   `<main>` are reported.
 - **Lesson numbers come from `wt-status.sh`**, never from `<main>` alone.

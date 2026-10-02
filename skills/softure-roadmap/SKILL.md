@@ -8,7 +8,7 @@ description: >
   turned into work, or to revise the order. Triggers: "make a roadmap", "slice the PRD",
   "what do we build first", "order the work",
   "turn feedback into roadmap items".
-argument-hint: "[--revise] [--open-changes] [--queue <slug> | --promote <slug>] [--from-feedback <path>] [--auto]"
+argument-hint: "[--revise] [--open-changes] [--queue <slug> | --promote <slug> | --close] [--from-feedback <path>] [--auto]"
 allowed-tools:
   - Read
   - Glob
@@ -51,6 +51,15 @@ The format is a contract: `softure-worktree` and `softure-worktree-manager` pars
   roadmap, `git mv` the queued file to `roadmap.md`, set `status: ready`, and take its ready entries
   (`git mv …/change.md context/changes/<id>/backlog-input.md`, then the `softure-new` format).
   Never promote on your own initiative, not even in `--auto`.
+- **`--close`**: the main roadmap is realised; archive it per WORKFLOW §5.2. Check the three gates
+  first and report every failing one at once: rows not `done` / `done_code` and not carried over,
+  leftover folders in `context/changes/` (archive each through `softure-archive`, a change without a
+  plan included, before continuing), and the full integration result on `<main>` when configured.
+  Then write `## Summary` (`| ID | Item | What changed | Merge |`, the merge SHA from
+  `git log --merges --grep "<change-id>"` on `<main>`, plus the integration line), move the file to
+  `foundation/archive/<YYYY-MM-DD>-roadmap.md`, clean up the promoted roadmap's backlog folder and
+  index row, and commit. Do not promote the next roadmap in the same step: that is `--promote`, the
+  owner's call. In `--auto`, a failing gate stops the close and is reported; it is never forced.
 
 ## Procedure
 

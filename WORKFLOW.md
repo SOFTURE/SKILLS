@@ -37,6 +37,7 @@ or languages.
 ```jsonc
 {
   "language": "en",                 // ISO code (e.g. "pl"): language of artifacts and reports (skills themselves are English)
+  "timezone": "Europe/Warsaw",      // optional IANA zone for every time shown in reports; default: the machine's zone
   "mainBranch": "master",
   "gates": {                        // run before every implementation commit; all must pass
     "typecheck": "npx tsc --noEmit",
@@ -45,7 +46,9 @@ or languages.
   },
   "integration": {                  // optional: the slow, full suite
     "local": "npm run test:integration:full",
-    "remote": null                  // e.g. a script that runs the suite on CI and waits: "bash scripts/ci-integration.sh"
+    "remote": null,                 // e.g. a script that runs the suite on CI and waits: "bash scripts/ci-integration.sh"
+    "cadence": "change"             // "change": every change runs it before archive (default);
+                                    // "roadmap": once on the main branch when the roadmap is realised (softure-worktree-manager M7)
   },
   "migrations": {                   // optional: lets orchestrators detect collisions between parallel changes
     "dir": "drizzle",
@@ -54,14 +57,24 @@ or languages.
   },
   "worktree": {
     "setup": ["npm ci", "cp ../{repo}/.env .env"],   // run inside a fresh worktree
-    "maxParallel": 4
+    "maxParallel": 4,
+    "cloudState": "main"            // cloud sessions: "main" pushes the claim and every stage to origin/<main> at once (default);
+                                    // "branch" commits them on the session branch only, <main> changes only by the merge
   },
   "release": { "owner": true },     // releases and deploys are never done by skills when true
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
+  },
+  "install": {                      // optional: read by the installer on every `npm install`
+    "gitignore": true,              // false: commit the installed skills (e.g. cloud sessions that never run npm install)
+    "rules": ["language", "workflow", "conventions"]   // sections of rules/AGENTS.md to inject; default: all
   }
 }
 ```
+
+Every key beyond `language`, `mainBranch` and `gates` is optional, and a missing key means the default
+behaviour described where the key is used. A project adopts a convention by setting its key; nothing here
+forces one on a project that already has its own.
 
 ## 3. Artifacts
 
@@ -161,6 +174,7 @@ updated: 2026-10-01
 
 > Run-wide orders, read by orchestrators (not parsed):
 > - Push main branch: no | at the end
+> - Archive roadmap: no | at the end
 > - Parallelism: up to 4 at once
 
 ## At a glance
@@ -241,6 +255,28 @@ context/backlog/roadmap-<slug>/<change-id>/change.md   §4 format with `status: 
   `status: ready`, then take its ready entries as above. The backlog folder stays until it is empty, then is removed.
 - An entry that got done or rejected elsewhere moves into that change's archive folder as `backlog-input.md`.
 
+### 5.2 Closing a roadmap
+
+`softure-roadmap --close` (run by `softure-worktree-manager` M7 when the header orders "Archive roadmap: at
+the end", otherwise by the owner). Gates, all checked on `<main>` and reported together:
+
+1. every row is `done` or `done_code`, or is explicitly carried over (`blocked` on something outside the repo,
+   `Mode: owner`), and the carried rows are named in the report;
+2. `context/changes/` holds only its README, plus the folders of carried rows. Any other folder is archived first
+   (`softure-archive`, including work done without a plan), never deleted and never left behind;
+3. when `integration` is configured: one green full run on the final `<main>` (its result line goes into the archive).
+
+Then, in one commit (`docs(roadmap): close <slug>`):
+
+- move `roadmap.md` to `foundation/archive/<YYYY-MM-DD>-roadmap.md` (same-day collision: `-2`, `-3`, never other
+  suffixes) and append `## Summary`: one table `| ID | Item | What changed | Merge |` (merge SHA per row) and the
+  integration result line. It is the version history; release notes can be built from it;
+- carried rows move to the next roadmap or to a queued one, never silently dropped;
+- if this roadmap was promoted from `roadmaps/roadmap-<slug>.md`, remove its backlog folder
+  `backlog/roadmap-<slug>/` (move entries that are still alive to another queued roadmap first) and its row in an
+  index file such as `foundation/roadmaps/README.md`, if the project keeps one;
+- afterwards: every file in `roadmaps/` is a waiting roadmap, and every folder in `backlog/` has its roadmap file.
+
 ## 6. `plan.md`
 
 ```markdown
@@ -281,8 +317,9 @@ Rules:
   - done: `- [x] N.M text — <sha>`;
   - a Manual item the agent verified itself: `- [x] N.M text — <sha> (verified by agent: <how>)`;
   - dropped mid-flight: `- [x] ~~N.M text~~ — dropped: <reason>`.
-- SHA: the phase commit is created first, then the SHA is written into Progress by amending that commit before
-  anything is pushed. If the commit is already pushed, record it in a separate `docs(<change-id>): progress p<N>` commit.
+- SHA: the phase commit is created first, then its SHA is written into Progress. Never amend that edit into the
+  phase commit (the amend changes the SHA it records). It rides with the next commit of the change, or goes into a
+  separate `docs(<change-id>): progress p<N>` commit when nothing follows (last phase, branch about to be pushed).
 - A plan has **no open questions**. Unresolved ones go back to research or to the owner.
 
 ## 7. `lessons.md`
@@ -317,7 +354,7 @@ Every interactive skill accepts `--auto` (orchestrators always pass it). In `--a
 - Implementation: `<type>(<change-id>): <phase title> (p<N>)`. Type is `feat`, `fix`, `refactor`,
   `test`, `docs` or `chore`.
 - Review fixes: `fix(<change-id>): address impl review`.
-- Progress bookkeeping (only when amending is impossible): `docs(<change-id>): progress p<N>`.
+- Progress bookkeeping (when no later commit of the change carries it): `docs(<change-id>): progress p<N>`.
 - Archive: `chore(archive): close <change-id>`.
 - Roadmap stage updates: `docs(roadmap): <ID> <stage>`.
 - Lessons: `docs(lessons): L-<NNN> <title>`. Rule-file edits: `docs(rules): <what>`.

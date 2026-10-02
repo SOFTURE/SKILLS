@@ -26,7 +26,13 @@ What the installer does (idempotent; re-run on every `npm install`):
 | manifest | `.claude/softure-skills.json` |
 
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
-`--no-gitignore` (commit the skills instead). Uninstall:
+`--no-gitignore` (commit the skills instead).
+
+Per-project choices go into `context/workflow.json` → `install` and are applied on every install,
+postinstall included: `"gitignore": false` commits the skills, and `"rules": ["workflow", "conventions"]`
+injects only those sections of the rules block (sections: `language`, `workflow`, `conventions`; default:
+all). Put project-specific skills in folders without the `softure-` prefix: installed folders are
+overwritten on every install. Uninstall:
 `node node_modules/@softure-ai/skills/scripts/uninstall.mjs`.
 
 ## The chain

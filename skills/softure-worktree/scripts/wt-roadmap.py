@@ -27,6 +27,12 @@ see only `origin`. The commit is then built directly on `origin/<main>` (fetch -
 `commit-tree` on a temporary index) and **pushed at once**; the working tree and the current
 branch stay untouched. A rejected push (someone pushed meanwhile) -> fetch and retry from the
 fresh state. `--branch <name>` overrides the branch written into the row (default: current).
+
+With `worktree.cloudState: "branch"` in context/workflow.json, a cloud session instead commits
+the edit **on its own branch** (the checkout) and pushes nothing: the branch carries the state
+and `<main>` changes only through the merge. Use it when a coordinator assigns the items (so
+nobody needs to see a claim on `<main>`) and a push to `<main>` is expensive (a pre-push hook
+that runs the full suite) or contended by many sessions.
 """
 from __future__ import annotations
 
@@ -41,7 +47,7 @@ import time
 
 sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/skills
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wt_config import main_branch, main_root  # noqa: E402
+from wt_config import load_config, main_branch, main_root  # noqa: E402
 
 ROADMAP = "context/foundation/roadmap.md"
 COAUTHOR = "Co-Authored-By: Claude <noreply@anthropic.com>"
@@ -208,6 +214,33 @@ def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dr
     sys.exit(f"push to origin/{main} failed after 6 attempts: {push.stderr.strip()[:300] if push else ''}")
 
 
+def run_cloud_branch(mode: str, change_id: str, arg: str | None, branch: str | None, dry: bool) -> None:
+    """Commit one roadmap edit on the session's own branch (the checkout); push nothing."""
+    repo = git(".", "rev-parse", "--show-toplevel").strip()
+    repo_name = os.path.basename(repo)
+    current = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    if current == main_branch(repo):
+        sys.exit(f"cloudState=branch: the session stands on `{current}` — switch to the change branch first")
+    if branch is None:
+        branch = current
+    work_path = os.path.join(repo, ROADMAP)
+    with open(work_path, encoding="utf-8") as fh:
+        old = fh.read()
+    new = edit(old, mode, change_id, arg, repo_name, cloud_branch=branch if mode == "open" else None)
+    if dry:
+        sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True), current, "commit"))
+        return
+    with open(work_path, "w", encoding="utf-8") as fh:
+        fh.write(new)
+    msg = commit_message(old, mode, change_id, arg, f"cloud session, branch {branch}")
+    session = os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID", "")
+    if session.startswith("cse_"):
+        msg += f"\nClaude-Session: https://claude.ai/code/session_{session[4:]}"
+    git(repo, "commit", "-q", "-m", msg, "--", ROADMAP)
+    sha = git(repo, "rev-parse", "--short", "HEAD").strip()
+    print(f"{sha} {msg.splitlines()[0]} -> {current} (not pushed; the branch carries the state)")
+
+
 def run_local(mode: str, change_id: str, arg: str | None, dry: bool) -> None:
     main_wt = main_root()
     repo_name = os.path.basename(main_wt)
@@ -291,7 +324,9 @@ def main() -> None:
         sys.exit(__doc__)
     mode, change_id = args[0], args[1]
     arg = note if mode == "open" else (args[2] if mode == "stage" else None)
-    if cloud:
+    if cloud and (load_config().get("worktree") or {}).get("cloudState") == "branch":
+        run_cloud_branch(mode, change_id, arg, branch, dry)
+    elif cloud:
         run_cloud(mode, change_id, arg, branch, dry)
     else:
         run_local(mode, change_id, arg, dry)

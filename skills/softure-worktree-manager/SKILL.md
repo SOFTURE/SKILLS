@@ -354,7 +354,7 @@ job), then:
 CronCreate(
   cron: "4,19,34,49 * * * *",            # every 15 min, off the :00/:30 marks
   recurring: true,
-  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report briefly as a table: ID, stage, what moved since the last status, session alive?; what merged; what is next. Nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; free slot and a ready item without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (push <main> only if the roadmap header orders it; then the integration suite on <main> and its result into the report; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in the language from context/workflow.json.")
+  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; free slot and a ready item without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in the language and the times in the timezone from context/workflow.json.")
 ```
 
 This prompt is also the run's **heartbeat**: a worker stuck on a usage limit
@@ -368,9 +368,23 @@ M7 deletes it. Tell the owner the first fire time, that it waits while a merge
 is in progress (cron fires only when the session is idle), and that stage
 events and merges are still reported immediately.
 
-The report itself: a table — ID, stage, what moved since the last report (new
-commits on the branch, stage change), session alive? — then merged since the
-last report and next in line. Nothing moved → one line; don't pad it.
+The report itself — the same shape every time, on the clock and on request
+(`status`): one table with **every** row of the roadmap, not only the ones in
+flight, so the owner never has to ask what happened to the rest:
+
+| ID | Title | Stage | Waits for |
+| --- | --- | --- | --- |
+| FC-3 | <title> | in progress (implement 2/3), session alive | — |
+| FC-6 | <title> | waiting | FC-4, FC-5 |
+| FC-1 | <title> | on `<main>` @ `<merge sha>` | release |
+
+Stage is one of: waiting · in progress (`<stage>`, session alive / stalled) ·
+ready to merge · on `<main>` @ `<sha>`. Below the table one line: `<N> of <M>
+on <main>`, then what moved since the last report (new commits, stage changes,
+merges). Every claim carries its evidence — a merge SHA, a commit, a run URL —
+never "done" without one. Times are shown in `workflow.json` → `timezone`
+(default: the machine's zone), with the zone named once. Nothing moved since
+the last report → one line; don't pad it.
 
 | event | action |
 | --- | --- |
@@ -437,7 +451,9 @@ points of this skill:
   empty entry is noise in the lists the owner reads before a deploy. Commit
   together with the merge's roadmap fix-up (documents only, own paths).
 
-  **Integration line of the READY report.** New reds must be "none" — a worker
+  **Integration line of the READY report** (with `integration.cadence:
+  "roadmap"` it reads `deferred to the roadmap run` — that is expected; the
+  run happens once at M7). New reds must be "none" — a worker
   reporting READY with new reds has not finished A3.8; send it back
   (`SendMessage`), don't merge. Reds the worker lists as **already on
   `<main>`** are a signal of their own: unless a roadmap row already carries
@@ -496,9 +512,20 @@ and the owner's signal before the release. Put the line into the final report:
 new roadmap row and a worker (test names and the run URL in its `change.md`,
 the header note points to the row); after its merge, push (if ordered) and run
 this again. `75` → the run is still going; wait for it and read the result,
-don't start a new run over a moving one. **Tag, release and deploy never** —
-the owner publishes the release after answering `## Owner decisions and
-checks`.
+don't start a new run over a moving one. With `integration.cadence:
+"roadmap"` this is the roadmap's only full run, so its reds are measured
+against the previous result on `<main>`, not per change.
+
+**Then close the roadmap — only when the header orders it** ("Archive roadmap:
+at the end") and the run above is green: `/softure-roadmap --close --auto`
+(WORKFLOW §5.2). A failing gate (a leftover folder in `context/changes/`, a
+row not settled) is fixed first — leftovers are archived, unsettled rows go to
+a worker — never forced. The close is a documents-only commit on `<main>`; if a
+push is ordered, push it too (a second, documents-only push, through the hook). No header order → leave the roadmap in
+place and list it in the report as the owner's step.
+
+**Tag, release and deploy never** — the owner publishes the release after
+answering `## Owner decisions and checks`.
 
 ## status
 

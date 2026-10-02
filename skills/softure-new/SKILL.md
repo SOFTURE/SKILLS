@@ -6,7 +6,7 @@ description: >
   every unit of delivery work, before research. Triggers: "new change", "open a change",
   "start change <id>", "/softure-new",
   "start the next roadmap item".
-argument-hint: "<change-id> [roadmap-item-id] [--title \"...\"] [--auto]"
+argument-hint: "<change-id> [roadmap-item-id] [--title \"...\"] [--backlog <slug>] [--auto]"
 allowed-tools:
   - Read
   - Glob
@@ -39,9 +39,26 @@ and moves its `status`. The contract lives in `WORKFLOW.md` §3–§4 of the SOF
      (`pending-states`, not `fix-button`).
    - If the user gave a roadmap item, read its block in `roadmap.md`. Use its `Change ID` when one
      is set. Otherwise propose one and write it back into the item block and the table row.
-   - **Uniqueness:** the id must not exist as `context/changes/<id>/` nor as
-     `context/archive/*-<id>/`. Check both with Glob. On a clash, propose a suffixed alternative
-     (`-v2` or a more precise noun). Never reuse an archived id.
+   - **Uniqueness:** the id must not exist as `context/changes/<id>/`, as
+     `context/archive/*-<id>/`, nor as `context/backlog/roadmap-*/<id>/`. Check all three with Glob.
+     On a clash, propose the first free numeric suffix (`-2`, `-3`, …) or a more precise noun. Never
+     reuse an archived id. If the id exists in the backlog, this is *taking* that entry
+     (WORKFLOW §5.1): move it in as `backlog-input.md` instead of starting from scratch.
+
+2a. **Place the change** when no roadmap item was given. A change outside every roadmap is
+   invisible to the orchestrators and to whoever reads the roadmap as the board. Offer, with the
+   recommended option first:
+   - **work now** → a new row and item block in the main `roadmap.md` (next free ID of the
+     closest prefix, status `ready`);
+   - **later** → an entry in a queued thematic roadmap whose theme fits (`--backlog <slug>`):
+     `context/backlog/roadmap-<slug>/<id>/change.md` with `status: backlog`, plus its row in the
+     thematic roadmap and in the backlog README (WORKFLOW §5.1), and nothing in `changes/`;
+   - **new theme** → only when no queued roadmap fits: `softure-roadmap --queue <slug>` first;
+   - **unlinked** → a one-off with `roadmap_item: null`.
+
+   The project's rules may make one of these mandatory (for example "every change belongs to a
+   roadmap"); follow them. In `--auto`, take the project's rule, else "work now" when the request
+   is for work now, else "later", and record the choice under `## Notes`.
 
 3. **Gather the content.** Fill these four sections. Ask only for what you cannot infer.
    - **Intent:** what must be true when this change is done, and for whom. One short paragraph.
@@ -76,6 +93,7 @@ change_id: <id>
 title: "<one sentence: the outcome, not the activity>"
 status: new
 roadmap_item: <ID or null>
+branch: null
 created: <YYYY-MM-DD>
 updated: <YYYY-MM-DD>
 archived_at: null
@@ -107,7 +125,8 @@ archived_at: null
 
 ## Quality checklist
 
-- [ ] The id is unique across `changes/` and `archive/`, kebab-case and ≤ 40 characters.
+- [ ] The id is unique across `changes/`, `archive/` and `backlog/`, kebab-case and ≤ 40 characters.
+- [ ] The change is placed: a roadmap row (main or thematic) or a recorded decision to leave it unlinked.
 - [ ] The title states an outcome a reviewer can verify.
 - [ ] Feedback is quoted verbatim and attributed.
 - [ ] Constraints name concrete paths when ownership matters for parallel work.

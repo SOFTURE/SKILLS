@@ -80,9 +80,11 @@ the only state, so anyone can stop and anyone can resume.
    - Stage only this change's files and check `git status` before committing.
    - One commit per phase, with message `<type>(<change-id>): <phase title> (p<N>)`, where type
      is `feat`, `fix`, `refactor`, `test`, `docs` or `chore`.
-   - Then tick the verified boxes and append ` — <short sha>`. Include the Progress update in the
-     same commit by amending before any push, or commit it as a follow-up `docs(<change-id>):
-     progress p<N>` if amending is not safe. Never push, tag, release or deploy.
+   - Then tick the verified boxes and append ` — <short sha>` of that commit. Do **not** amend the
+     Progress edit into it: amending changes the SHA you just recorded. The edit rides with the
+     next commit of the change (next phase, review fix, archive); after the last phase, or when the
+     branch is about to be pushed, commit it as `docs(<change-id>): progress p<N>`. Never push, tag,
+     release or deploy.
 
 8. **Continue or pause.** In interactive mode, report the phase result and ask whether to continue
    to the next phase. In `--auto`, continue until all phases are done or an escalation is hit.
@@ -120,7 +122,7 @@ Use the format in `softure-plan/references/progress-format.md`:
 
 - [ ] Every ticked box was actually checked in this session, by command, query or screenshot.
 - [ ] Gates are green at every phase commit.
-- [ ] The diff is English-only outside message dictionaries (language rule in AGENTS.md).
+- [ ] The diff follows the language rule in AGENTS.md (when the project carries one).
 - [ ] There is one commit per phase with the WORKFLOW §9 message, and nothing unrelated is staged.
 - [ ] TDD phases show a red test before the implementation.
 - [ ] Drift is recorded. No silent design changes.
