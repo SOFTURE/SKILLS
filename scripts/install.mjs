@@ -180,6 +180,11 @@ function install(options) {
       rules: ruleSections,
       gitignore: shouldIgnore,
     };
+    // A re-install that changes nothing keeps the old timestamp, so a committed manifest
+    // does not dirty every fresh clone or worktree after `npm ci`.
+    const { installedAt: previousAt, ...previousRest } = previous;
+    const { installedAt: _ignored, ...currentRest } = manifest;
+    if (previousAt && JSON.stringify(previousRest) === JSON.stringify(currentRest)) manifest.installedAt = previousAt;
     fs.writeFileSync(path.join(projectRoot, MANIFEST_PATH), JSON.stringify(manifest, null, 2) + "\n");
   }
 
