@@ -192,7 +192,9 @@ branch at least at READY (`git push -u origin HEAD`) — the container is
 reclaimed after inactivity, and a pushed branch is the copy that survives it.
 `<main>` still changes only by the merge on the owner's signal (point 7). The
 first push of a ref without an upstream may run the pre-push hook's full suite
-— minutes of silence, expected; never bypass it.
+— minutes of silence, expected; never bypass it. Every push may also start the
+project's CI on origin: push at READY and to sync before the merge, **never per
+phase or per commit** (WORKFLOW §2, CI minutes).
 
 **6. READY.** A3.8 runs before A4, as locally (unless the cadence defers it).
 A5 merges `origin/<main>` (after `git fetch origin <main>`), not the local one.
@@ -674,7 +676,9 @@ the review file with every finding decided.
 #### A3.8 — Full integration suite
 
 **`integration.cadence: "roadmap"`** → skip this step: no stage `integration`,
-no run. READY says `integration: deferred to the roadmap run (cadence:
+no run — a "finish" item (the roadmap's last, cross-item one) included: the
+coordinator's M7 run, or the release when it covers the roadmap, is the
+measurement. READY says `integration: deferred to the roadmap run (cadence:
 roadmap)`. The touched files' own integration tests still run if the project
 can run them cheaply; their result goes into READY as `own tests:`.
 
@@ -695,8 +699,12 @@ first). Output lines and exit codes:
 | --- | --- | --- |
 | `0` | green (flaky tests that passed on retry are listed as `flaky:`) | on to A3.9. A flaky test in a file your change touched is yours: remove the cause, don't raise retries |
 | `1` | red — or the run could not start | **`new-red:` lines are yours** (reds absent from `<main>`'s latest result). Fix them before READY (see it red first — the run itself is the red), commit `fix(<change-id>): integration — <what>` after full gates, run A3.8 again with the same name. **Reds already on `<main>`** (`red:` but not `new-red:`) are not the item's to fix: report them in READY; the coordinator queues them as their own row. When the command cannot tell new from old, treat every red as yours unless you show it red on `<main>` (scratchpad worktree detached at `origin/<main>`, the same script with name `<change-id>-baseline`) |
-| `75` | no result in time | nothing is lost — the run continues. Follow the printed link, wait for it to finish, read its result. Running A3.8 again starts a **new** run — do that only when the run itself failed to start or died. Never report READY without a result |
+| `75` | no result in time | nothing is lost — the run continues. Follow the printed link, wait for it to finish, read its result. Running A3.8 again starts a **new** run — do that only when the run itself failed to start or died (`--fresh`). Never report READY without a result |
 | `78` | integration not configured | READY says `integration: not configured`; suggest configuring it in the report |
+
+With `integration.lookup` configured, a green result already stored for the
+same HEAD is reused (`stored green result reused`): the same commit is the
+same code, so it is never tested twice.
 
 **Only documentation in the whole change** (the docs-only case, no test gate
 either) → no integration run; READY says `integration: n/a — documentation

@@ -354,7 +354,7 @@ job), then:
 CronCreate(
   cron: "4,19,34,49 * * * *",            # every 15 min, off the :00/:30 marks
   recurring: true,
-  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; free slot and a ready item without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in the language and the times in the timezone from context/workflow.json.")
+  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; free slot and a ready item without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>, unless the release covers it; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in the language and the times in the timezone from context/workflow.json.")
 ```
 
 This prompt is also the run's **heartbeat**: a worker stuck on a usage limit
@@ -516,8 +516,27 @@ don't start a new run over a moving one. With `integration.cadence:
 "roadmap"` this is the roadmap's only full run, so its reds are measured
 against the previous result on `<main>`, not per change.
 
+**One run per commit, not more.** With `integration.lookup` configured, the
+script reuses a green result already stored for the same `<main>` commit (for
+example a run a worker or the release made on it) instead of starting a new
+one — the same commit is the same code. `--fresh` only when a run died or
+could not start.
+
+**Covered by the release** — `integration.coveredByRelease: true` **and** the
+header orders "Release: at the end" (the owner's approval, quoted): the
+release pipeline runs the same full suite on the released commit, so a run
+here would test that commit twice. Skip the run and write in the report:
+`integration <main>: covered by the release pipeline on <sha>
+(coveredByRelease)`. The release itself is still the owner's (or follows the
+project's own rules) — this skill never starts it. Its red result is handled
+as above: each red becomes a row and a worker. Without that header order, run
+the suite here as usual.
+
 **Then close the roadmap — only when the header orders it** ("Archive roadmap:
-at the end") and the run above is green: `/softure-roadmap --close --auto`
+at the end") and the run above is green (covered by the release → the gate
+reads the release's stored green result for the final `<main>` commit,
+WORKFLOW §5.2; no result yet → leave the close as the step after the release
+and say so): `/softure-roadmap --close --auto`
 (WORKFLOW §5.2). A failing gate (a leftover folder in `context/changes/`, a
 row not settled) is fixed first — leftovers are archived, unsettled rows go to
 a worker — never forced. The close is a documents-only commit on `<main>`; if a
@@ -576,5 +595,6 @@ Everything else is decided and written into the report.
   anything is in flight (unless `--status-every 0`) and deleted at M7.
 - **No tag, no release, no deploy, ever** (while `release.owner` is true).
   **No push of `<main>`** — except the single push at M7 that the roadmap
-  header orders; the full integration suite on `<main>` follows it and goes
-  into the final report.
+  header orders; the full integration suite on `<main>` follows it (or the
+  release covers it, `integration.coveredByRelease`) and goes into the final
+  report.

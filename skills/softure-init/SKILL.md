@@ -112,6 +112,8 @@ only when it was detected or the user asked for it:
 |---|---|---|
 | `timezone` | the machine's zone | the user names a zone |
 | `integration.cadence` | `"change"` (every change runs the suite before archive) | the user wants one run per roadmap (`"roadmap"`) |
+| `integration.lookup` | every call starts a run | the project stores results per commit (e.g. a git note) and has a command that prints one |
+| `integration.coveredByRelease` | `false` | the release pipeline runs the same full suite on the released commit |
 | `worktree.cloudState` | `"main"` | the user runs cloud sessions that must keep state on the branch (`"branch"`) |
 | `research.sources` | none | step 2 found docs, ADRs or a PRD (interactive: listed in the plan; `--auto`: only paths that exist) |
 | `install` | gitignore the skills, inject all rule sections | the user wants committed skills or fewer rule sections |

@@ -165,6 +165,8 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
    - Do not choose an order that prejudges an open owner question; the items it decides are
      `blocked (<question>)` until it is answered.
    - Put a "finish" item last when the theme needs a final measurement or review across items.
+     With `integration.cadence: "roadmap"` it does not start the full integration suite of its own:
+     the coordinator's run on `<main>` (M7), or the release when it covers the roadmap, is that run.
 
 8. **Unknowns and blockers.** Per item, `- <question> (owner: research | <person>; blocks: yes | no)`.
    One with `blocks: yes` makes the row `blocked (<question, short>)`. External dependencies the
@@ -191,7 +193,9 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
 11. **Header and `## Order`.**
     - frontmatter: `prd_version` = the PRD `version`;
     - run-wide orders in the quote block: push main or not; archive the roadmap at the end or not;
-      parallelism (default: `workflow.json` → `worktree.maxParallel`); which items need the owner
+      release at the end or not (only with the owner's approval, quoted: it tells the coordinator a release
+      follows, and with `integration.coveredByRelease` the release's suite is the roadmap's run; skills
+      still never release); parallelism (default: `workflow.json` → `worktree.maxParallel`); which items need the owner
       at the keyboard (`Mode: owner`);
     - `## Order` opens with the framing (optimising for, first proof, main risk, depth), then the
       reasoning for the order, `### Starting point` (the confirmed baseline, one line per layer

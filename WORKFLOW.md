@@ -47,8 +47,12 @@ or languages.
   "integration": {                  // optional: the slow, full suite
     "local": "npm run test:integration:full",
     "remote": null,                 // e.g. a script that runs the suite on CI and waits: "bash scripts/ci-integration.sh"
-    "cadence": "change"             // "change": every change runs it before archive (default);
+    "cadence": "change",            // "change": every change runs it before archive (default);
                                     // "roadmap": once on the main branch when the roadmap is realised (softure-worktree-manager M7)
+    "lookup": null,                 // optional: command printing the stored result for INTEGRATION_SHA (exit 0 green, 1 red, 3 none);
+                                    // wt-integration.sh reuses a green result for the same commit instead of starting a run
+    "coveredByRelease": false       // true: the release pipeline runs the same full suite on the released commit, so a roadmap
+                                    // whose header orders "Release: at the end" gets no separate run at M7 (§5.2)
   },
   "migrations": {                   // optional: lets orchestrators detect collisions between parallel changes
     "dir": "drizzle",
@@ -75,6 +79,21 @@ or languages.
 Every key beyond `language`, `mainBranch` and `gates` is optional, and a missing key means the default
 behaviour described where the key is used. A project adopts a convention by setting its key; nothing here
 forces one on a project that already has its own.
+
+### CI minutes
+
+Parallel sessions push often, and every push can start the project's CI. The skills keep their share small:
+
+- a session branch is pushed at READY (and again only to sync with `<main>` before the merge), never per phase
+  or per commit;
+- the full integration suite runs once per item (`cadence: "change"`) or once per roadmap (`"roadmap"`), never
+  twice on the same commit: `integration.lookup` lets `wt-integration.sh` reuse a stored green result, and
+  `integration.coveredByRelease` hands the roadmap's run to the release pipeline when a release follows anyway;
+- a "finish" item does not start a run of its own under `cadence: "roadmap"`.
+
+The project's side: when the git hooks already run the gates (`pre-commit`, `pre-push`), CI does not need to
+repeat them on every pushed branch. Run CI on pull requests, on the main branch or on demand, skip changes
+that touch only documents, and cancel superseded runs (`concurrency`).
 
 ## 3. Artifacts
 
@@ -179,6 +198,7 @@ updated: 2026-10-01
 > Run-wide orders, read by orchestrators (not parsed):
 > - Push main branch: no | at the end
 > - Archive roadmap: no | at the end
+> - Release: no | at the end (the owner's approval, quoted; skills still never release)
 > - Parallelism: up to 4 at once
 
 ## At a glance
@@ -269,6 +289,9 @@ the end", otherwise by the owner). Gates, all checked on `<main>` and reported t
 2. `context/changes/` holds only its README, plus the folders of carried rows. Any other folder is archived first
    (`softure-archive`, including work done without a plan), never deleted and never left behind;
 3. when `integration` is configured: one green full run on the final `<main>` (its result line goes into the archive).
+   With `integration.coveredByRelease: true` and the order "Release: at the end", that run is the release's: the
+   gate reads the green result the release pipeline stored for the final `<main>` commit (`integration.lookup`).
+   Until the release has run, the close waits and the report names it as the step after the release.
 
 Then, in one commit (`docs(roadmap): close <slug>`):
 

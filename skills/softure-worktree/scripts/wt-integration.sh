@@ -2,9 +2,14 @@
 # Run the project's full integration suite for the current HEAD, as configured in
 # context/workflow.json (`integration.remote`, else `integration.local`).
 #
-#   wt-integration.sh <name> [--wait <minutes>]     # default 30
+#   wt-integration.sh <name> [--wait <minutes>] [--fresh]     # wait default 30
 #
 # Run it from inside the tree to test (cd <WT> && bash …/wt-integration.sh <change-id>).
+#
+# `integration.lookup` (optional) — a project command that prints the stored result for
+# INTEGRATION_SHA (same stdout lines as below) and exits 0 green · 1 red · 3 no result.
+# A stored green result for the very commit is reused: no new run (the same commit is the
+# same code). `--fresh` skips the lookup — for a run that died or could not start.
 #
 # `integration.remote` — a project command that runs the suite elsewhere (CI) for the
 # committed HEAD and waits for the result. It receives INTEGRATION_NAME, INTEGRATION_SHA and
@@ -25,19 +30,38 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 CFG() { python3 "$SCRIPTS/wt_config.py" "$@"; }
 
 NAME="${1:-}"
-[ -n "$NAME" ] || { sed -n '2,24p' "$0"; exit 2; }
+[ -n "$NAME" ] || { sed -n '2,26p' "$0"; exit 2; }
 shift
 WAIT=30
-[ "${1:-}" = "--wait" ] && { WAIT="$2"; shift 2; }
+FRESH=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --wait) WAIT="${2:-}"; shift 2 ;;
+    --fresh) FRESH=1; shift ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+case "$WAIT" in ''|*[!0-9]*) echo "--wait: minutes as a number" >&2; exit 2 ;; esac
 case "$NAME" in *[!a-zA-Z0-9._/-]*) echo "name: letters, digits, . _ - / only" >&2; exit 2 ;; esac
 
 ROOT="$(git rev-parse --show-toplevel)"
 SHA="$(git rev-parse HEAD)"
 REMOTE="$(CFG integration.remote)"
 LOCAL="$(CFG integration.local)"
+LOOKUP="$(CFG integration.lookup)"
 
 [ -z "$(git status --porcelain --untracked-files=no)" ] \
   || echo "⚠ uncommitted changes are NOT part of the run — commit ${SHA:0:8} is what gets tested" >&2
+
+if [ -n "$LOOKUP" ] && [ "$FRESH" = 0 ] && { [ -n "$REMOTE" ] || [ -n "$LOCAL" ]; }; then
+  STORED="$( cd "$ROOT" && INTEGRATION_NAME="$NAME" INTEGRATION_SHA="$SHA" bash -c "$LOOKUP" 2>/dev/null )"
+  if [ $? = 0 ]; then
+    echo "▸ integration for ${SHA:0:8}: stored green result reused, no new run (integration.lookup)"
+    printf '%s\n' "$STORED"
+    echo "commit: $SHA"
+    exit 0
+  fi
+fi
 
 if [ -n "$REMOTE" ]; then
   echo "▸ integration (remote) for ${SHA:0:8} as '$NAME': $REMOTE"
