@@ -1,6 +1,6 @@
 {
   "name": "@softure-ai/skills",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "SOFTURE agent skills: a spec-driven delivery workflow (shape → prd → roadmap → plan → implement → review) plus parallel worktree orchestration",
   "license": "MIT",
   "repository": {
