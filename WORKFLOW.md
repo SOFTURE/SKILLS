@@ -45,6 +45,8 @@ or languages.
   "mode": "manual",                 // "manual" (default when absent): the owner checks every step; "autonomous": the agent
                                     // decides, merges and coordinates on its own. Rules for both: §8 and rules/AGENTS.md
   "language": "en",                 // ISO code (e.g. "pl"): language of artifacts and reports (skills themselves are English)
+  "chatLanguage": "pl",             // optional: language of every message to the owner (chat, reports, thread results)
+                                    // when it differs from the artifact language; default: `language`
   "timezone": "Europe/Warsaw",      // optional IANA zone for every time shown in reports; default: the machine's zone
   "mainBranch": "master",
   "gates": {                        // run before every implementation commit; all must pass

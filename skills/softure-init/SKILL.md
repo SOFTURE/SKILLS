@@ -122,6 +122,7 @@ only when it was detected or the user asked for it:
 | Key | Default when absent | Init writes it when |
 |---|---|---|
 | `timezone` | the machine's zone | the user names a zone |
+| `chatLanguage` | `language` | the owner talks in another language than the artifacts use (e.g. English repo, Polish owner) |
 | `integration.cadence` | `"change"` (every change runs the suite before archive) | the user wants one run per roadmap (`"roadmap"`) |
 | `integration.lookup` | every call starts a run | the project stores results per commit (e.g. a git note) and has a command that prints one |
 | `integration.coveredByRelease` | `false` | the release pipeline runs the same full suite on the released commit |

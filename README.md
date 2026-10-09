@@ -39,8 +39,10 @@ installer injects only that mode's section into the rules block:
 | parallel sessions, reports | only when the owner starts them | coordinator + one session per change, report every 30 min |
 | release | the owner | the owner while `release.owner` is true; production deploy always the owner |
 
-The autonomous standard (session hygiene, merge queue, report table `ID | What it does | Stage | Link`,
-issues as the queue) lives in the rules block, so every session, cloud ones included, reads it from
+The autonomous standard (roles of the coordinator and its threads, results always sent to the main
+chat, condensed messages with the decision first, the coordinator's go on green PRs, threads closed only
+after the merge, the report table `ID | What it does | Stage | Link` with the `X of N` counter, issues
+for SOFTURE package bugs) lives in the rules block, so every session, cloud ones included, reads it from
 `AGENTS.md` without being told. Tune it with `autonomy` (WORKFLOW §2). Switch modes only on the
 owner's word: change `mode`, re-run the installer, commit both.
 

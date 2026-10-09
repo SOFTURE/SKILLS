@@ -369,7 +369,7 @@ job), then:
 CronCreate(
   cron: "4,19,34,49 * * * *",            # every 15 min, off the :00/:30 marks
   recurring: true,
-  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; free slot and a ready item without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>, unless the release covers it; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in the language and the times in the timezone from context/workflow.json.")
+  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; free slot and a ready item without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>, unless the release covers it; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in chatLanguage (default: language) and the times in the timezone from context/workflow.json; paste the content into the message, never a file to link.")
 ```
 
 This prompt is also the run's **heartbeat**: a worker stuck on a usage limit
@@ -389,23 +389,24 @@ is in progress (cron fires only when the session is idle), and that stage
 events and merges are still reported immediately.
 
 The report itself — the same shape every time, on the clock and on request
-(`status`): one table with **every** row of the roadmap, not only the ones in
-flight, so the owner never has to ask what happened to the rest:
+(`status`): a title, one sentence with the current counter `X of N on <main>`
+(what is done), then one table with **every row not done yet** (done rows are
+only counted), then `Decision: …` when there is one and one line with the
+times:
 
 | ID | What it does | Stage | Link |
 | --- | --- | --- | --- |
 | **FC-3** | <outcome in a few words> | implement 2/3 | `<change-id>` (`claude attach <short-id>`) |
 | **FC-6** | <outcome in a few words> | waiting for FC-4, FC-5 | — |
-| **FC-1** | <outcome in a few words> | on `<main>` @ `<merge sha>` | — |
 
 This is the report standard of every SOFTURE project (`AGENTS.md` → Operating
-mode: autonomous → Reports): the same four columns, headers in the report's language;
+mode: autonomous → Roadmap reports): the same four columns, headers in
+`chatLanguage` (default `language`);
 Link is the session that carries the item (here the background session), never
 a forge URL. Stage is one of: `waiting for <IDs>` · a chain stage (`research`
 … `archive`, `implement N/M`; `stalled` when the session has not moved) ·
-`ready to merge` · `on <main> @ <sha>` · `blocked (<why>)`. Above the table a
-progress line `<N> of <M> on <main>`; below it what moved since the last report
-(new commits, stage changes, merges), next to merge and the next report time. Every claim carries its evidence — a merge SHA, a commit, a run URL —
+`ready to merge` · `blocked (<why>)` · `waits for the owner (<what>)`. The
+content goes into the message itself, never into a file to link. Every claim carries its evidence — a merge SHA, a commit, a run URL —
 never "done" without one. Times are shown in `workflow.json` → `timezone`
 (default: the machine's zone), with the zone named once. Nothing moved since
 the last report → one line; don't pad it.

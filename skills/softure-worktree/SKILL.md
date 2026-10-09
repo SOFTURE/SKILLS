@@ -116,8 +116,11 @@ Read `mode` at A0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8, the project's
   signal**. It lives in the repository, so it is not consent relayed by another
   session. At READY:
   1. launched by a coordinator (the prompt or the brief names one): send the
-     READY report to the coordinator and wait for its go. The go is your slot in
-     the serial merge queue, not the consent. Keep the session alive meanwhile;
+     READY report to the coordinator's session (`send_message` / `SendMessage`,
+     condensed, decision first, never a reply in your own thread) and wait for
+     its go. The go is your slot in the serial merge queue, not the consent.
+     Keep the session and its thread open meanwhile: an open pull request means
+     an open thread;
   2. no coordinator: go straight on;
   3. then Phase B by `autonomy.merge`:
      - `"pr"` (default): `git fetch origin <main>`, merge `origin/<main>` into the
