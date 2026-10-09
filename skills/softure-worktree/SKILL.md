@@ -53,7 +53,7 @@ below.
 
 **Project configuration.** Everything project-specific — the main branch, the
 gates, the integration suite, the migrations folder, the worktree setup, the
-report language, whether releases belong to the owner — comes from
+chat language for reports (`chatLanguage`), whether releases belong to the owner — comes from
 `context/workflow.json` (`WORKFLOW.md` §2). Read it at A0 with
 `python3 <S>/wt_config.py --json`. Below, `<main>` is `mainBranch`, "the gates"
 are every command in `gates`, and reports to the user are written in
@@ -839,7 +839,7 @@ python3 <S>/wt-roadmap.py ready <change-id>
 
 ### READY — report and stop
 
-Write it in the configured `language`, for someone who wasn't there:
+Write it in `chatLanguage` (default: `language`), for someone who wasn't there:
 
 ```
 <ID> `<change-id>` — ready to merge.

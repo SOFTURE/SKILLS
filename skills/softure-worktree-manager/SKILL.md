@@ -47,7 +47,7 @@ them, waits, and gives the merge signal itself — one change at a time.
 **Project configuration** comes from `context/workflow.json` (`WORKFLOW.md`
 §2): `<main>` is `mainBranch`, the default batch size is
 `worktree.maxParallel`, migration collisions are detected through
-`migrations`, and reports to the owner are written in `language`. Artifact
+`migrations`, and reports to the owner are written in `chatLanguage` (default: `language`). Artifact
 formats are those of `WORKFLOW.md` (§4 change.md, §5 roadmap, §6 plan).
 
 Scripts: `<S>` = `<MAIN>/.claude/skills/softure-worktree/scripts` (worker

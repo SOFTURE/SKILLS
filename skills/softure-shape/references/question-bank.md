@@ -2,7 +2,7 @@
 
 Read this before the interview. It holds what to ask in each phase (greenfield and brownfield
 variants), the option sets to offer, how to push back, and the two anti-pattern scripts. The
-questions are starting points: rephrase them in the user's domain and in `language`. Never
+questions are starting points: rephrase them in the user's domain and in `chatLanguage` (default: `language`). Never
 paste a whole phase at once; one question per message.
 
 ## The loop inside every phase

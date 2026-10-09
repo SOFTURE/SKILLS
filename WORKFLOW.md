@@ -44,9 +44,10 @@ or languages.
 {
   "mode": "manual",                 // "manual" (default when absent): the owner checks every step; "autonomous": the agent
                                     // decides, merges and coordinates on its own. Rules for both: §8 and rules/AGENTS.md
-  "language": "en",                 // ISO code (e.g. "pl"): language of artifacts and reports (skills themselves are English)
-  "chatLanguage": "pl",             // optional: language of every message to the owner (chat, reports, thread results)
-                                    // when it differs from the artifact language; default: `language`
+  "language": "en",                 // ISO code (e.g. "pl"): prose of the workflow artifacts under context/ only.
+                                    // Code, comments, commits and docs are always English (rules/AGENTS.md → Language)
+  "chatLanguage": "pl",             // language of every message to the owner: chat, questions, thread results, reports;
+                                    // default: `language`. softure-init always writes it
   "timezone": "Europe/Warsaw",      // optional IANA zone for every time shown in reports; default: the machine's zone
   "mainBranch": "master",
   "gates": {                        // run before every implementation commit; all must pass
@@ -88,7 +89,9 @@ or languages.
   },
   "install": {                      // optional: read by the installer on every `npm install`
     "gitignore": true,              // false: commit the installed skills (e.g. cloud sessions that never run npm install)
-    "rules": ["language", "workflow", "conventions"]   // sections of rules/AGENTS.md to inject; default: all
+    "rules": ["language", "workflow", "conventions"],  // sections of rules/AGENTS.md to inject; default: all.
+                                    // "language" ships even when omitted here
+    "allowNonEnglishCode": false    // true only on the owner's explicit word for a codebase that stays non-English
   }
 }
 ```

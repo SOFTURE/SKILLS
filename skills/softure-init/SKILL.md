@@ -61,7 +61,9 @@ start any work: no change, PRD or roadmap is created here.
    - `.env` present -> add `cp ../{repo}/.env .env` to `worktree.setup`, after the install command.
    - Knowledge sources: `docs/`, `adr/` or `docs/adr/`, an existing `context/foundation/prd.md`
      -> candidates for `research.sources`.
-3. **Pick the language.** Use `--language` when given. Otherwise use the language of the
+3. **Pick the languages.** Code is always English (rules block → Language); two settings remain.
+   `chatLanguage`: the language the user writes in (always written; it is what every message to the
+   owner uses). `language`, the prose of `context/` artifacts: use `--language` when given. Otherwise use the language of the
    existing docs/README; if mixed, use the language the user is writing in. In `--auto`
    without a signal, use `en`.
 4. **Pick the operating mode** (WORKFLOW §8). Use `--mode` when given, or what the user already
@@ -101,6 +103,7 @@ Required keys and the ones init writes by default:
 {
   "mode": "manual",
   "language": "en",
+  "chatLanguage": "pl",
   "mainBranch": "main",
   "gates": { "typecheck": null, "lint": null, "test": null },
   "integration": { "local": null, "remote": null },
@@ -122,13 +125,12 @@ only when it was detected or the user asked for it:
 | Key | Default when absent | Init writes it when |
 |---|---|---|
 | `timezone` | the machine's zone | the user names a zone |
-| `chatLanguage` | `language` | the owner talks in another language than the artifacts use (e.g. English repo, Polish owner) |
 | `integration.cadence` | `"change"` (every change runs the suite before archive) | the user wants one run per roadmap (`"roadmap"`) |
 | `integration.lookup` | every call starts a run | the project stores results per commit (e.g. a git note) and has a command that prints one |
 | `integration.coveredByRelease` | `false` | the release pipeline runs the same full suite on the released commit |
 | `worktree.cloudState` | `"main"` | the user runs cloud sessions that must keep state on the branch (`"branch"`) |
 | `research.sources` | none | step 2 found docs, ADRs or a PRD (interactive: listed in the plan; `--auto`: only paths that exist) |
-| `install` | gitignore the skills, inject all rule sections | the user wants committed skills or fewer rule sections |
+| `install` | gitignore the skills, inject all rule sections | the user wants committed skills or fewer rule sections (the language section always ships; `allowNonEnglishCode: true` only on the owner's explicit word) |
 | `autonomy` | roadmap as the work source, merge via pull request, reports every 30 min | `mode` is `autonomous` and the user names issues as the queue, merges by push, or another report cadence |
 
 Content of the README files, and a complete worked example (detection, plan, report) for a

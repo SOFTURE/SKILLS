@@ -11,7 +11,8 @@
 //   "gitignore": false              commit the installed skills instead of ignoring them
 //   "rules": ["workflow", ...]      rule sections to inject; default: every section in RULE_SECTIONS
 // The top-level "mode" ("manual" by default, or "autonomous") picks the one "## Operating mode: <mode>"
-// section that is always injected, whatever "rules" says.
+// section that is always injected, whatever "rules" says. The "language" section is mandatory too:
+// only "allowNonEnglishCode": true (an owner's explicit exception) leaves it out.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -82,13 +83,18 @@ function resolveMode(workflowConfig) {
 }
 
 function resolveRuleSections(installConfig) {
-  if (installConfig.rules === undefined) return Object.keys(RULE_SECTIONS);
+  const isLanguageOptional = installConfig.allowNonEnglishCode === true;
+  if (installConfig.rules === undefined) {
+    return Object.keys(RULE_SECTIONS).filter((key) => key !== "language" || !isLanguageOptional);
+  }
   if (!Array.isArray(installConfig.rules)) throw new Error(`${WORKFLOW_CONFIG_PATH}: install.rules must be an array`);
   const unknown = installConfig.rules.filter((key) => !(key in RULE_SECTIONS));
   if (unknown.length > 0) {
     throw new Error(`${WORKFLOW_CONFIG_PATH}: unknown install.rules ${unknown.join(", ")} (known: ${Object.keys(RULE_SECTIONS).join(", ")})`);
   }
-  return installConfig.rules;
+  if (isLanguageOptional || installConfig.rules.includes("language")) return installConfig.rules;
+  // English code is not opt-out by omission: the section ships unless the owner set the exception.
+  return ["language", ...installConfig.rules];
 }
 
 // Keeps the preamble, the "## " sections whose key is selected and the section of the active mode;

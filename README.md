@@ -49,7 +49,9 @@ owner's word: change `mode`, re-run the installer, commit both.
 Per-project choices go into `context/workflow.json` → `install` and are applied on every install,
 postinstall included: `"gitignore": false` commits the skills, and `"rules": ["workflow", "conventions"]`
 injects only those sections of the rules block (sections: `language`, `workflow`, `conventions`; default:
-all; the operating-mode section always ships). Put project-specific skills in folders without the `softure-` prefix: installed folders are
+all; the operating-mode section always ships, and so does `language` unless `"allowNonEnglishCode": true`
+records the owner's explicit exception). The repository is always English; `chatLanguage` is the language
+of every message to the owner, `language` only the prose of `context/` artifacts. Put project-specific skills in folders without the `softure-` prefix: installed folders are
 overwritten on every install. Uninstall:
 `node node_modules/@softure-ai/skills/scripts/uninstall.mjs`.
 
