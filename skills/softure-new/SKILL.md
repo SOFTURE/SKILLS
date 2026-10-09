@@ -171,6 +171,8 @@ Dates come from `date +%Y-%m-%d` (in `workflow.json` → `timezone` when set). I
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - Never ask. Derive the id from the roadmap item or the description.
 - If the id clashes, append the first free numeric suffix (`-2`, `-3`, …) and record the choice
   under `## Notes` as `- Decision (auto): id <x> taken → <y>`.

@@ -137,7 +137,8 @@ mandatory; stop with an error.
      without this option.
 
    When the user asked for several phases at once, skip the question between them. `--auto`:
-   continue until all phases are done or an escalation is hit.
+   continue until all phases are done or an escalation is hit. Manual mode: stop after the phase
+   (see "Manual mode" below).
 
 10. **Finish.** When every Automated item is ticked:
     - re-scan Progress and list any open item as `N.M text`, grouped Automated / Manual. An open
@@ -165,7 +166,27 @@ Use the format in `softure-plan/references/progress-format.md`:
 - `plan_reviewed` → `implementing` at the start of the first phase.
 - `implementing` → `implemented` once every Automated item is ticked.
 
+## Manual mode (`mode: "manual"` or no key, and no `--auto`)
+
+The owner checks every phase separately and commits by hand or on an explicit word. This narrows
+steps 7 to 9:
+
+- **One phase per run**, even when more remain, unless the owner names several phases in this
+  request.
+- **The gate always shows**, with or without open Manual items: what passed, what you verified and
+  how, what the owner should check, `git diff --stat` of the touched-file set, and the proposed commit
+  message. Options: "Commit" / "I'll commit it myself" / "Change something".
+- **Commit only on "Commit" for this phase.** An approval of an earlier phase or a general "go ahead"
+  does not cover this one. "I'll commit it myself": stage the touched-file set by path, so the owner sees
+  exactly what belongs to the phase, and stop; the next run's resume check (`references/phase-commit.md`) finds the commit
+  and writes its SHA into Progress.
+- **After the phase: stop.** Report the phase and name the next step (`softure-implement <change-id>
+  next` or `softure-impl-review <change-id> phase N`). Do not start it.
+- Never push, never open a pull request.
+
 ## `--auto`
+
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
 
 - Never ask. Run all remaining phases in order, with no manual gate and no question between phases.
 - Apply small drift and record it under `## Decisions (auto)` in plan.md.

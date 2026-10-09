@@ -7,7 +7,7 @@
 
 Always reads the config of the MAIN worktree (first entry of `git worktree list`), so every
 worktree and every script sees the same values. `mainBranch` falls back to origin's HEAD, then
-"main"; `worktree.maxParallel` to 4; `language` to "en".
+"main"; `worktree.maxParallel` to 4; `language` to "en"; `mode` to "manual".
 
 Importable: `from wt_config import load_config, main_root, main_branch`.
 """
@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 CONFIG_PATH = os.path.join("context", "workflow.json")
-DEFAULTS = {"language": "en", "worktree": {"maxParallel": 4, "setup": []}, "release": {"owner": True}}
+DEFAULTS = {"mode": "manual", "language": "en", "worktree": {"maxParallel": 4, "setup": []}, "release": {"owner": True}}
 
 
 def main_root() -> str:

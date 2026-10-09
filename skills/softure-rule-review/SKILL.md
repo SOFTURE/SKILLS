@@ -150,6 +150,8 @@ in a repo**.
 
 ## --auto
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 Apply only edits that cannot change behaviour:
 - fixing stale paths to their verified current location;
 - removing exact duplicates and leaving a pointer;

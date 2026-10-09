@@ -235,6 +235,8 @@ Allowed decisions: `Fix now (applied[, Fix A|B])`, `Accept risk`, `Defer`, `Dism
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - Do not ask; never save for later. Decide each finding yourself:
   - CRITICAL and WARNING findings with a clear fix → **Fix now**; with two fixes, the
     recommended one;

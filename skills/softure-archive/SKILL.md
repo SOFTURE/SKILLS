@@ -131,6 +131,8 @@ to every orchestrator and blocks closing the roadmap. When there is no `plan.md`
 
 ## --auto
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 Proceed on soft warnings. Record each one in the archive commit body and in the roadmap owner
 checks. Pick `done_code` whenever any Manual item is open or the change affects deployment
 (migrations, env vars, infrastructure). Hard stops stay stops: report them all and end.

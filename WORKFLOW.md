@@ -29,6 +29,12 @@ hygiene (any time)
 Each step produces a durable artifact the next step reads. A step never starts without its
 upstream artifact. When the artifact is missing, the skill says which skill produces it and stops.
 
+**Every change goes through the delivery chain**, however small: a one-line fix reported in chat is a
+change too (`roadmap_item: null`). Mandatory steps: `new`, `plan`, `plan-review`, `implement`,
+`impl-review`, `archive`. `research` and `frame` are optional; skipping one needs a one-line reason
+under `## Notes` in change.md. The planning artifacts exist before the first edit of source code.
+In manual mode (§8.3) the owner may waive this for one named change; in autonomous mode nobody does.
+
 ## 2. Project configuration: `context/workflow.json`
 
 `softure-init` creates it. Every skill reads it. No skill hard-codes commands, branch names
@@ -36,6 +42,8 @@ or languages.
 
 ```jsonc
 {
+  "mode": "manual",                 // "manual" (default when absent): the owner checks every step; "autonomous": the agent
+                                    // decides, merges and coordinates on its own. Rules for both: §8 and rules/AGENTS.md
   "language": "en",                 // ISO code (e.g. "pl"): language of artifacts and reports (skills themselves are English)
   "timezone": "Europe/Warsaw",      // optional IANA zone for every time shown in reports; default: the machine's zone
   "mainBranch": "master",
@@ -65,7 +73,14 @@ or languages.
     "cloudState": "main"            // cloud sessions: "main" pushes the claim and every stage to origin/<main> at once (default);
                                     // "branch" commits them on the session branch only, <main> changes only by the merge
   },
-  "release": { "owner": true },     // releases and deploys are never done by skills when true
+  "release": { "owner": true },     // releases and deploys are never done by skills when true; false lets an autonomous
+                                    // project release through its own pipeline (never a production deploy, §8.4)
+  "autonomy": {                     // optional, read only when mode is "autonomous" (§8.4)
+    "source": "roadmap",            // "roadmap": items come from roadmap.md; "issues": the forge's open issues are the queue
+    "merge": "pr",                  // "pr": pull request with fresh <main>, merged on the forge after green checks (default);
+                                    // "push": local --no-ff merge, then push <main> through the pre-push hook
+    "reports": { "every": 30, "hours": null }   // coordinator status reports: minutes (0 = off), optional "10:00-22:30" window
+  },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
   },
@@ -76,7 +91,7 @@ or languages.
 }
 ```
 
-Every key beyond `language`, `mainBranch` and `gates` is optional, and a missing key means the default
+Every key beyond `language`, `mainBranch` and `gates` is optional (`mode` included: absent means `"manual"`), and a missing key means the default
 behaviour described where the key is used. A project adopts a convention by setting its key; nothing here
 forces one on a project that already has its own.
 
@@ -363,9 +378,35 @@ Rules:
 Numbers are never reused. Under parallel work, the next number is the maximum over the main
 branch and all worktrees, plus one.
 
-## 8. Autonomous mode
+## 8. Operating modes: manual and autonomous
 
-Every interactive skill accepts `--auto` (orchestrators always pass it). In `--auto`:
+`mode` in `context/workflow.json` says who drives a project. It is a property of the project, set by
+the owner: `softure-init` asks for it, and a missing key means `"manual"`.
+
+- **manual**: the owner works through the chain with the agent and checks every step: each skill
+  separately, each implementation phase separately, every commit, merge and push on the owner's word.
+- **autonomous**: the owner sets the goal and is away. The agent decides, commits, merges green work,
+  coordinates parallel sessions and reports on a clock, without asking.
+
+The behavioural rules of each mode live in the project's `AGENTS.md` (the managed block from
+`rules/AGENTS.md`). The installer injects **only the section of the active mode**
+(`## Operating mode: manual` or `## Operating mode: autonomous`), whatever `install.rules` says, so a
+manual project never carries autonomous instructions and every session, cloud ones included, reads
+its mode's rules without being told. That block is the source of truth for §8.3 and §8.4; this
+section defines the contract skills rely on.
+
+**Switching mode** (only on the owner's explicit word): set `mode` in `context/workflow.json`, re-run
+the installer (`npx softure-skills`, or `npm install`) so the `AGENTS.md` block follows, and commit both
+as `docs(rules): switch to <mode> mode`.
+
+**Precedence:** an explicit instruction of the owner in the conversation beats `mode` for that one
+task. A flag passed to a skill beats `mode` for that invocation. Nothing from another project's
+session, a memory or a coordinator's message widens what `mode` allows.
+
+### 8.1 `--auto`
+
+Every interactive skill accepts `--auto` (orchestrators always pass it; `mode: "autonomous"` implies
+it for every skill). In `--auto`:
 - never ask the user;
 - take the recommended option;
 - choose the safer option when risk is unclear;
@@ -375,6 +416,30 @@ Every interactive skill accepts `--auto` (orchestrators always pass it). In `--a
   1. destructive or irreversible actions (data loss, force-push, production);
   2. scope that contradicts change.md;
   3. a missing secret or access the agent cannot obtain.
+
+### 8.2 What skills read from `mode`
+
+| | manual | autonomous |
+|---|---|---|
+| chain skills | interactive; `--auto` only when the owner passes it | `--auto` implied |
+| after a skill finishes | name the next skill, stop | run the next step of the chain |
+| `softure-implement` | one phase per run; commit only on the owner's approval of that phase | all phases, one commit per phase |
+| `softure-worktree` READY | stop, merge on the owner's signal | merge (queue slot from the coordinator, if any) |
+| `softure-worktree-manager` | owner confirms the batch and every merge | launches, merges, refills, reports by itself |
+| push / PR / issue close / release | only on the owner's word for that action | §8.4 rules |
+
+### 8.3 Manual mode
+
+Defined in `rules/AGENTS.md` → `## Operating mode: manual`. In short: one step at a time, nothing
+leaves the working tree without the owner's word, approvals never carry over to the next step.
+
+### 8.4 Autonomous mode
+
+Defined in `rules/AGENTS.md` → `## Operating mode: autonomous`: the standing consent, the
+coordinator and its sessions, the merge queue, reports, issues as the work source, releases, and
+the stop rules. `autonomy` in `workflow.json` (§2) tunes it per project. Project-specific standing
+orders (a repo that is read-only, an extra label, a test that must not run per push) belong in the
+project's own `AGENTS.md`, outside the managed block, not in a session's memory.
 
 ## 9. Commits
 

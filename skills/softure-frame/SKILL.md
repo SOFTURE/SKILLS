@@ -166,6 +166,8 @@ read `references/examples.md` **before writing your first frame.md in a repo**.
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - No questions at any step. Narrowing questions are answered from evidence; the decision
   question takes the recommendation. Record each under `## Decisions (auto)`.
 - Choose the smallest option that still meets change.md's `## Intent`.

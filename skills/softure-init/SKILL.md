@@ -8,7 +8,7 @@ description: >
   keys. Use once per repo before any other softure-* skill, or when a skill reports a missing
   `context/workflow.json`. Triggers: "init the workflow", "set up context", "softure init",
   "prepare the repo for the skills".
-argument-hint: "[--language pl|en] [--dry-run] [--auto]"
+argument-hint: "[--language pl|en] [--mode manual|autonomous] [--dry-run] [--auto]"
 allowed-tools:
   - Read
   - Glob
@@ -37,7 +37,7 @@ start any work: no change, PRD or roadmap is created here.
 
 1. **Inventory what exists.** List `context/` recursively, if present. Record each file that
    already exists. You will not touch these, apart from adding missing keys to
-   `workflow.json` (step 5). Unknown keys in an existing `workflow.json` are kept as they are.
+   `workflow.json` (step 6). Unknown keys in an existing `workflow.json` are kept as they are.
 2. **Detect the stack.** Read these, and only these, to fill the config:
    - `package.json` -> `scripts`. Map the gates:
      - typecheck: the script that runs `tsc`, otherwise `npx tsc --noEmit` when `tsconfig.json` exists.
@@ -64,12 +64,19 @@ start any work: no change, PRD or roadmap is created here.
 3. **Pick the language.** Use `--language` when given. Otherwise use the language of the
    existing docs/README; if mixed, use the language the user is writing in. In `--auto`
    without a signal, use `en`.
-4. **Show the plan.** Without `--auto`, print the proposed tree and the full `workflow.json`,
+4. **Pick the operating mode** (WORKFLOW §8). Use `--mode` when given, or what the user already
+   said ("this project is autonomous", "we run it by hand"). Otherwise, interactive: ask "How is
+   this project run?" with the options **manual** (recommended: the owner checks every step,
+   commits and merges by hand; client projects) and **autonomous** (the agent decides, merges green
+   work, coordinates parallel sessions and reports every 30 minutes). In `--auto` without a signal,
+   use `manual`. An existing `mode` is never changed here; switching is the owner's explicit call
+   (WORKFLOW §8, "Switching mode").
+5. **Show the plan.** Without `--auto`, print the proposed tree and the full `workflow.json`,
    marking each value as *read* (found literally) or *inferred* (derived), then ask one
    question: "Create this? (Recommended: yes)". Offer the options yes / edit a value / cancel.
    Name applicable optional keys (below) in one line, without asking about each. `--auto`
    skips the question; `--dry-run` stops here in both modes.
-5. **Write only what is missing:**
+6. **Write only what is missing:**
    - `context/workflow.json`: new file, or only the missing keys merged into an existing one.
      Never change an existing value.
    - `context/foundation/README.md` and an empty `context/foundation/lessons.md` (`# Lessons` +
@@ -78,11 +85,11 @@ start any work: no change, PRD or roadmap is created here.
      (templates in `references/templates.md`).
    - Do **not** create `shape-notes.md`, `prd.md`, `roadmap.md`, `roadmaps/`, change folders
      or empty directories. Their skills create them on first use.
-6. **Verify.** Re-read `workflow.json` and check that it parses as JSON. For every gate
+7. **Verify.** Re-read `workflow.json` and check that it parses as JSON. For every gate
    command, check that the referenced script exists in `package.json` (or that the binary is
    on PATH). Mark any gate you could not resolve as `null`, never as a guess. Re-running the
    detection must now produce no new writes.
-7. **Report** a status block, one line per artifact (`created`, `present` or `merged: <keys>`),
+8. **Report** a status block, one line per artifact (`created`, `present` or `merged: <keys>`),
    then the unresolved values the owner should fill in, every inferred value with its reason,
    and the next step. Then stop: do not chain into other skills.
 
@@ -92,6 +99,7 @@ Required keys and the ones init writes by default:
 
 ```json
 {
+  "mode": "manual",
   "language": "en",
   "mainBranch": "main",
   "gates": { "typecheck": null, "lint": null, "test": null },
@@ -102,6 +110,9 @@ Required keys and the ones init writes by default:
 }
 ```
 
+`mode` is `"manual"` or `"autonomous"` (step 4). After writing it, run the installer once
+(`npx softure-skills`, or `node node_modules/@softure-ai/skills/scripts/install.mjs` when the package
+is installed) so the `AGENTS.md` block carries that mode's rules, and list it in the report.
 `migrations` is either `null` or `{ "dir", "pattern", "regenerate" }`. Keep `release.owner: true`
 unless the user explicitly says otherwise. Skills never release or deploy on their own.
 
@@ -117,12 +128,15 @@ only when it was detected or the user asked for it:
 | `worktree.cloudState` | `"main"` | the user runs cloud sessions that must keep state on the branch (`"branch"`) |
 | `research.sources` | none | step 2 found docs, ADRs or a PRD (interactive: listed in the plan; `--auto`: only paths that exist) |
 | `install` | gitignore the skills, inject all rule sections | the user wants committed skills or fewer rule sections |
+| `autonomy` | roadmap as the work source, merge via pull request, reports every 30 min | `mode` is `autonomous` and the user names issues as the queue, merges by push, or another report cadence |
 
 Content of the README files, and a complete worked example (detection, plan, report) for a
 fictional repo: read `references/templates.md` **when writing the READMEs** and
 `references/example.md` **when unsure what a report should look like**.
 
 ## `--auto`
+
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
 
 Detect, write and report without asking. Record every value you inferred (rather than read
 directly) in the report, e.g. `- mainBranch -> master (origin/HEAD missing; local master exists)`.

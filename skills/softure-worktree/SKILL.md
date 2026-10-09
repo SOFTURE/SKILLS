@@ -104,6 +104,38 @@ coordinator); a push of `<main>` only as Phase B or the roadmap header says.
 > explicit signal in the conversation or the goal text itself saying "merge
 > without asking". Do not let a stop hook push you into phase B.
 
+## Operating mode — who gives the merge signal
+
+Read `mode` at A0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8, the project's
+`AGENTS.md` → `## Operating mode`). Phase A is the same in both modes. The gate is not:
+
+- **`manual`** (or no key): everything in this file as written. READY ends the
+  turn; Phase B only on the owner's explicit signal in this conversation; no
+  push of `<main>` unless the owner asks for it.
+- **`autonomous`**: the committed `mode` is the owner's **standing merge
+  signal**. It lives in the repository, so it is not consent relayed by another
+  session. At READY:
+  1. launched by a coordinator (the prompt or the brief names one): send the
+     READY report to the coordinator and wait for its go. The go is your slot in
+     the serial merge queue, not the consent. Keep the session alive meanwhile;
+  2. no coordinator: go straight on;
+  3. then Phase B by `autonomy.merge`:
+     - `"pr"` (default): `git fetch origin <main>`, merge `origin/<main>` into the
+       branch (A5 again if it moved), push the branch, open a pull request
+       (`Closes #N` when the change solves an issue), wait for green checks, merge
+       it on the forge (`gh pr merge <N> --merge`; the forge deletes the head
+       branch), confirm `origin/<main>` contains it, then the local cleanup of
+       step 5. A red check is fixed on the branch, never bypassed;
+     - `"push"`: Phase B as written, then push `<main>` through the pre-push hook
+       (step 6's "no push" does not apply). A rejected push → fetch, merge
+       `origin/<main>`, push again;
+  4. report the merge (SHA, PR) to the coordinator or the project chat, and
+     close the session's thread when the harness has one.
+
+  Still never, in this mode too: `--no-verify`, a force push, a tag or release
+  while `release.owner` is true, a production deploy, merging a branch that is
+  not this run's change.
+
 ## Cloud session (Claude Code on the web) — branch instead of worktree
 
 **Detect it first, in A0:** `[ "$CLAUDE_CODE_REMOTE" = true ]`. When it holds,
@@ -208,13 +240,16 @@ header or the item's Outcome would allow it elsewhere. Deploy-bound work ends
 as `done_code` (on `<main>`, waiting for the owner's release) with the owner's
 steps in the roadmap's `## Before the next release`.
 
-**The merge into `<main>` is the last thing this session does — and it waits
-for the owner's explicit approval.** READY ends the turn; a stop hook asking to
+**The merge into `<main>` is the last thing this session does — and, in manual
+mode, it waits for the owner's explicit approval** (autonomous mode: see
+*Operating mode* above). READY ends the turn; a stop hook asking to
 "commit and push" is not an approval, a finished test run is not an approval,
 and neither is an earlier "go ahead". After the merge: push `<main>`, report,
 and pick up nothing else.
 
-**7. Phase B in the cloud** — only on the owner's explicit approval:
+**7. Phase B in the cloud** — manual mode: only on the owner's explicit
+approval; autonomous mode: by *Operating mode* above (with `autonomy.merge:
+"pr"` the pull request replaces the commands below):
 
 ```bash
 git fetch origin <main>
@@ -821,10 +856,14 @@ Decisions worth knowing: <one line each, pointing to the artifact>
 On your signal ("merge") I'll merge into <main> and remove the worktree and the branch. No push of <main> and no deploy — the release is yours.
 ```
 
+In autonomous mode the last line reads instead: `Waiting for the
+coordinator's go to merge (autonomous mode, merge via <pr|push>).` — or, with no
+coordinator, the report is sent after the merge with its SHA and PR.
+
 Then end the turn. Don't poll, don't schedule wake-ups, and don't ask "shall I
 merge?". The report already says what happens next.
 
-## Phase B — merge (only on the owner's signal)
+## Phase B — merge (on the owner's signal; autonomous mode: see *Operating mode*)
 
 Signals (in any language the owner uses): "merge", "go into main", "main is free",
 `/softure-worktree merge`. "Wait", "I'll let you know" mean wait, even if earlier you were told to

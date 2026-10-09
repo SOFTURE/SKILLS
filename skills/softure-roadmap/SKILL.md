@@ -250,6 +250,8 @@ table header in English, because scripts parse them.
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 Never ask. In place of each question:
 - thin PRD → proceed as `status: draft`, thin items `blocked (PRD gap: …)`;
 - baseline → use the probes unconfirmed;

@@ -90,6 +90,21 @@ and **push of `<main>`** — except the one push at M7 when the roadmap header
 orders it. Refs the project's integration command pushes are not that push;
 they never move `<main>`.
 
+### Operating mode
+
+Read `mode` at M0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8):
+
+- **`autonomous`**: everything in this file as written. The project's
+  `AGENTS.md` → `## Operating mode: autonomous` adds the shared standard
+  (session hygiene, merge path `autonomy.merge`, report cadence and format,
+  issues). Reports follow `autonomy.reports` (below, M4).
+- **`manual`** (or no key): the invocation is **not** a blanket merge signal.
+  Show the M1 table and ask before launching the batch; at every `READY`
+  show the worker's READY report and ask before M5 ("merge <ID>?"); refill
+  (M6) only after the owner confirms the next batch. No status cron unless
+  the owner asks for one (`--status-every N`). Conflict resolution inside an
+  approved merge stays this skill's job.
+
 ## The coordinator does not fix — it commissions
 
 **Every code change goes to a worker.** A red test on `<main>`, a regression,
@@ -361,6 +376,11 @@ This prompt is also the run's **heartbeat**: a worker stuck on a usage limit
 or a machine that slept emits no stage event, so without it the run stalls
 silently.
 
+**Autonomous mode:** the clock follows `autonomy.reports` instead of the
+default: every `every` minutes (default 30) at the :00/:30 marks
+(`cron: "0,30 * * * *"`), inside `hours` when set; `every: 0` = off. An
+explicit `--status-every` still wins.
+
 `--status-every N` changes the period (build the minute list from an
 off-mark offset: N=20 → `7,27,47 * * * *`); `--status-every 0` skips it. Arm
 it **once** per run — M6 re-arms the Monitor, not the cron. Remember its id:
@@ -372,16 +392,20 @@ The report itself — the same shape every time, on the clock and on request
 (`status`): one table with **every** row of the roadmap, not only the ones in
 flight, so the owner never has to ask what happened to the rest:
 
-| ID | Title | Stage | Waits for |
+| ID | What it does | Stage | Link |
 | --- | --- | --- | --- |
-| FC-3 | <title> | in progress (implement 2/3), session alive | — |
-| FC-6 | <title> | waiting | FC-4, FC-5 |
-| FC-1 | <title> | on `<main>` @ `<merge sha>` | release |
+| **FC-3** | <outcome in a few words> | implement 2/3 | `<change-id>` (`claude attach <short-id>`) |
+| **FC-6** | <outcome in a few words> | waiting for FC-4, FC-5 | — |
+| **FC-1** | <outcome in a few words> | on `<main>` @ `<merge sha>` | — |
 
-Stage is one of: waiting · in progress (`<stage>`, session alive / stalled) ·
-ready to merge · on `<main>` @ `<sha>`. Below the table one line: `<N> of <M>
-on <main>`, then what moved since the last report (new commits, stage changes,
-merges). Every claim carries its evidence — a merge SHA, a commit, a run URL —
+This is the report standard of every SOFTURE project (`AGENTS.md` → Operating
+mode: autonomous → Reports): the same four columns, headers in `language`;
+Link is the session that carries the item (here the background session), never
+a forge URL. Stage is one of: `waiting for <IDs>` · a chain stage (`research`
+… `archive`, `implement N/M`; `stalled` when the session has not moved) ·
+`ready to merge` · `on <main> @ <sha>` · `blocked (<why>)`. Above the table a
+progress line `<N> of <M> on <main>`; below it what moved since the last report
+(new commits, stage changes, merges), next to merge and the next report time. Every claim carries its evidence — a merge SHA, a commit, a run URL —
 never "done" without one. Times are shown in `workflow.json` → `timezone`
 (default: the machine's zone), with the zone named once. Nothing moved since
 the last report → one line; don't pad it.

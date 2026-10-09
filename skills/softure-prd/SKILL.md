@@ -148,6 +148,8 @@ this ASCII form whatever the language.
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 Write only what the input supports, and never ask:
 - draft shape notes or a low input-check score: proceed, record it under
   `## Decisions (auto)`;

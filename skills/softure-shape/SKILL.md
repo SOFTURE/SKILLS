@@ -196,6 +196,8 @@ read `references/example-shape-notes.md` before drafting.
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 Without a user to ask, shape only from the inputs:
 - context type: the detected one; resume: always continue a draft;
 - every section the inputs do not support gets `UNKNOWN: <what would answer it>` instead of

@@ -148,6 +148,8 @@ Print the report in the chat. When a change-id is given, also write it to `revie
 
 ## --auto
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 Behave as with `--fix`: apply every violation (Critical or Warning) that has a local, mechanical
 fix, leave Suggestions unapplied, and record what was applied and what was left in `## Fixes
 applied`. Ask nothing. A NEEDS DISCUSSION question is answered with the safer option and recorded

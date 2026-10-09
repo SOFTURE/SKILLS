@@ -98,6 +98,8 @@ the Applies to is specific enough**.
 
 ## --auto
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - No questions and no confirmation: take the facts from the review finding or the caller's draft.
 - Skip writing when step "What qualifies" fails, and report the skip in one line.
 - On a number collision found later (merge with another worktree), renumber the newer lesson,

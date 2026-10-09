@@ -170,6 +170,8 @@ Files: planned and changed N · unplanned N (…) · planned, not changed N (…
 
 ## --auto
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - CRITICAL and WARNING findings that have a clear local fix: `fix now` (the recommended option).
 - Fixes that need a product decision: `defer` to the roadmap "Owner decisions and checks"
   list, with the finding ID.
@@ -178,7 +180,7 @@ Files: planned and changed N · unplanned N (…) · planned, not changed N (…
   also `record as lesson`.
 - No questions, no before/after confirmation. Each decision also goes under `## Decisions (auto)`.
 - If a CRITICAL cannot be fixed without leaving the change's scope, stop and escalate
-  (WORKFLOW §8.2).
+  (WORKFLOW §8.1).
 
 `--no-fix` (either mode): write the report with recommended decisions as
 `**Decision:** pending (recommended: …)`, apply nothing, leave the status unchanged. Resume with

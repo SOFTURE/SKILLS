@@ -246,6 +246,8 @@ them, never an extra `##` heading.
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - Skip every confirmation (complexity, approach, outline, final iteration). Take the
   recommended option for every probing question and record it under `## Decisions (auto)` as
   `- <question> → <choice> (<reason>)`.

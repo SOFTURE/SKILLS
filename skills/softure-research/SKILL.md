@@ -171,6 +171,8 @@ unsure how much detail a section needs.
 
 ## `--auto`
 
+`mode: "autonomous"` in `context/workflow.json` implies `--auto` for every run of this skill; `mode: "manual"` (or no key) never does (WORKFLOW §8).
+
 - No scope question (step 2). Choose the depth from the risk profile. Use `deep` whenever money,
   data migration, auth or deletion is involved.
 - Resolve questions by evidence first, then by the safer option. Record each choice under
