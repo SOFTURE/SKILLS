@@ -127,14 +127,15 @@ irreversible action nobody asked for, a secret or access only the owner has, sco
 - The main branch is already tested: do not re-run gates on it to review it. The full integration
   suite runs per `integration.cadence`, never per push.
 
-**Reports** (coordinator, in the project chat, in `language` and `timezone`):
+**Reports** (coordinator, in the project chat, in the language the owner writes in, which may differ
+from the artifact `language`, with times in `timezone`):
 - when: after every batch of session starts, and every `autonomy.reports.every` minutes (default 30)
   at fixed marks (:00, :30) inside `autonomy.reports.hours`, only while work runs. Each report
   schedules the next one; stop the chain when nothing runs. After a pause (usage limit) name the
   reports that were skipped.
 - shape, the same in every project: a title line, a progress line, **one table with every item of
   the roadmap or issue wave** (not only the running ones), then three short lines. Columns, always
-  these four, in this order (headers in `language`, e.g. Polish `ID | Co robi | Etap | Link`):
+  these four, in this order (headers in the report's language, e.g. Polish `ID | Co robi | Etap | Link`):
   - **ID**: the roadmap item ID, an uppercase prefix of two or three letters plus a number (`FC-5`,
     `SA-12`, `CMP-3`); in issue mode the issue number (`#42`). Bold, nothing else in the cell.
   - **What it does**: the outcome in a few words, for someone who did not read the roadmap.

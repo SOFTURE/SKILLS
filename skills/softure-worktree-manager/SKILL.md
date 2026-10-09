@@ -399,7 +399,7 @@ flight, so the owner never has to ask what happened to the rest:
 | **FC-1** | <outcome in a few words> | on `<main>` @ `<merge sha>` | — |
 
 This is the report standard of every SOFTURE project (`AGENTS.md` → Operating
-mode: autonomous → Reports): the same four columns, headers in `language`;
+mode: autonomous → Reports): the same four columns, headers in the report's language;
 Link is the session that carries the item (here the background session), never
 a forge URL. Stage is one of: `waiting for <IDs>` · a chain stage (`research`
 … `archive`, `implement N/M`; `stalled` when the session has not moved) ·
