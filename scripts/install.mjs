@@ -119,7 +119,8 @@ function replaceManagedBlock(content, begin, end, body) {
   const stop = content.indexOf(end);
   if (start !== -1 && stop > start) {
     const before = content.slice(0, start).trimEnd();
-    const after = content.slice(stop + end.length).trimStart();
+    // Trailing whitespace is dropped too, so a re-install never grows the file by a blank line.
+    const after = content.slice(stop + end.length).trim();
     return [before, block, after].filter(Boolean).join("\n\n") + "\n";
   }
   if (body === null) return content;
