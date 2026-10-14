@@ -105,6 +105,24 @@ Read `mode` at M0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8):
   the owner asks for one (`--status-every N`). Conflict resolution inside an
   approved merge stays this skill's job.
 
+### Hosted projects
+
+In a hosted multi-session project (WORKFLOW §8.5) the coordinator is the
+project's main-chat session: no shell over the workers, no `claude agents`, no
+`Monitor`. The loop below stays; its tools map like this:
+
+| step | here | hosted project |
+| --- | --- | --- |
+| M0.1 adopt | `wm-resume.sh` | roadmap rows on `origin/<main>`, the thread list, open pull requests |
+| M3 launch | `wm-launch.sh` | start a thread with the standard brief (`AGENTS.md` → Coordinator duties) |
+| M4 watch | `wm-watch.sh` | thread messages and the report routine |
+| M4 status | `CronCreate` | a recurring routine; no scheduling tool → setup thread with `references/report-routine.md` |
+| READY, go | `SendMessage` | cross-session messages, both ways |
+| M5 cleanup | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged |
+
+A fresh main-chat session starts the run by itself (`AGENTS.md` → Start of a
+run); it does not wait for this skill to be invoked.
+
 ## The coordinator does not fix — it commissions
 
 **Every code change goes to a worker.** A red test on `<main>`, a regression,
@@ -385,6 +403,14 @@ to a multiple of 60, because routines fire at most hourly: 60 → `0 * * * *`,
 the first launch and deleted at M7 or on the owner's "stop"/"pause"; reports
 never re-arm the next one. An explicit `--status-every` still wins.
 
+**No scheduling tool in this session** (a hosted project's main-chat
+session): start one setup thread with the brief in
+`references/report-routine.md`; it creates the routine (bound to this session
+when the harness allows, else a fresh session per firing), sends back its id
+and is closed. Record the id in memory; at M7 or on "stop"/"pause" have a
+thread delete the routine by that id. Never skip the reports, never chain
+one-off wake-ups instead.
+
 `--status-every N` changes the period (build the minute list from an
 off-mark offset: N=20 → `7,27,47 * * * *`); `--status-every 0` skips it. Arm
 it **once** per run — M6 re-arms the Monitor, not the cron. Remember its id:
@@ -621,8 +647,9 @@ Everything else is decided and written into the report.
   before its worktree is removed.
 - **The run ends only when the roadmap is realised** (M7) — never after one
   item, never after one batch.
-- **The owner hears from the run on a clock** — a status cron is armed while
-  anything is in flight (unless `--status-every 0`) and deleted at M7.
+- **The owner hears from the run on a clock** — a status cron (or, without a
+  scheduling tool, the routine from `references/report-routine.md`) is armed
+  while anything is in flight (unless `--status-every 0`) and deleted at M7.
 - **No tag, no release, no deploy, ever** (while `release.owner` is true).
   **No push of `<main>`** — except the single push at M7 that the roadmap
   header orders; the full integration suite on `<main>` follows it (or the

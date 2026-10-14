@@ -42,8 +42,11 @@ installer injects only that mode's section into the rules block:
 The autonomous standard (roles of the coordinator and its threads, results always sent to the main
 chat, condensed messages with the decision first, the coordinator's go on green PRs, threads closed only
 after the merge, the report table `ID | What it does | Stage | Link` with the `X of N` counter, issues
-for SOFTURE package bugs) lives in the rules block, so every session, cloud ones included, reads it from
-`AGENTS.md` without being told. Tune it with `autonomy` (WORKFLOW §2). Switch modes only on the
+for SOFTURE package bugs and for gaps in these skills) lives in the rules block, so every session that
+runs in a checkout, cloud ones included, reads it from `AGENTS.md` without being told. A hosted
+project's coordinator (for example a claude.ai project's main chat) is started outside the checkout:
+paste the one-paragraph pointer from WORKFLOW §8.5 (`softure-init` prints it) into the project
+instructions, and it starts the run by itself. Tune it with `autonomy` (WORKFLOW §2). Switch modes only on the
 owner's word: change `mode`, re-run the installer, commit both.
 
 Per-project choices go into `context/workflow.json` → `install` and are applied on every install,

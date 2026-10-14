@@ -150,6 +150,13 @@ branch, and the *other* sessions are other containers that see **only
 `origin`** — a stage written to a local `<main>` is invisible to them, so two
 cloud sessions could take the same item.
 
+**A thread of a hosted project** (a coordinator in the project's main chat
+starts one session per change; WORKFLOW §8.5) is such a cloud session: Phase A
+runs in its own checkout on the branch the harness assigned (no `git worktree
+add`), the change-id lives in `context/changes/`, the READY and merge reports
+go to the coordinator's session by cross-session message, the go comes back
+the same way, and the thread is resolved only after its pull request is merged.
+
 **`worktree.cloudState: "branch"`** changes points 1 and 6: the claim and every
 stage are committed **on the session branch only** (`wt-roadmap.py` does it by
 itself in that mode) and nothing goes to `origin/<main>` before the merge. Use

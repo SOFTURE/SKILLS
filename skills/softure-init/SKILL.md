@@ -93,7 +93,9 @@ start any work: no change, PRD or roadmap is created here.
    detection must now produce no new writes.
 8. **Report** a status block, one line per artifact (`created`, `present` or `merged: <keys>`),
    then the unresolved values the owner should fill in, every inferred value with its reason,
-   and the next step. Then stop: do not chain into other skills.
+   and the next step. With `mode: "autonomous"`, end it with the project-instructions snippet
+   for hosted projects (WORKFLOW §8.5), `<owner>/<repo>` filled in from `origin`, ready to paste.
+   Then stop: do not chain into other skills.
 
 ## `workflow.json`
 

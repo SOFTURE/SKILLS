@@ -406,9 +406,11 @@ the owner: `softure-init` asks for it, and a missing key means `"manual"`.
 The behavioural rules of each mode live in the project's `AGENTS.md` (the managed block from
 `rules/AGENTS.md`). The installer injects **only the section of the active mode**
 (`## Operating mode: manual` or `## Operating mode: autonomous`), whatever `install.rules` says, so a
-manual project never carries autonomous instructions and every session, cloud ones included, reads
-its mode's rules without being told. That block is the source of truth for §8.3 and §8.4; this
-section defines the contract skills rely on.
+manual project never carries autonomous instructions and every session that runs in a checkout,
+cloud ones included, reads its mode's rules without being told. A hosted project's coordinator,
+started by the harness outside the checkout, gets one pointer to them in the project instructions
+(§8.5). That block is the source of truth for §8.3 and §8.4; this section defines the contract
+skills rely on.
 
 **Switching mode** (only on the owner's explicit word): set `mode` in `context/workflow.json`, re-run
 the installer (`npx softure-skills`, or `npm install`) so the `AGENTS.md` block follows, and commit both
@@ -451,10 +453,51 @@ leaves the working tree without the owner's word, approvals never carry over to 
 ### 8.4 Autonomous mode
 
 Defined in `rules/AGENTS.md` → `## Operating mode: autonomous`: the standing consent, the
-coordinator and its sessions, the merge queue, reports, issues as the work source, releases, and
-the stop rules. `autonomy` in `workflow.json` (§2) tunes it per project. Project-specific standing
+coordinator and its sessions, the start of a run, the merge queue, reports, issues as the work
+source, filing gaps in SOFTURE packages, releases, and the stop rules. `autonomy` in `workflow.json` (§2) tunes it per project. Project-specific standing
 orders (a repo that is read-only, an extra label, a test that must not run per push) belong in the
 project's own `AGENTS.md`, outside the managed block, not in a session's memory.
+
+### 8.5 Hosted projects
+
+A hosted multi-session project (for example a claude.ai project) has a **main-chat session** that
+the owner talks to and that starts **thread sessions**. The main-chat session is the coordinator;
+each thread carries one change. They differ from a local run in three ways: the coordinator has no
+shell over the threads, each thread is a cloud session in its own container on a branch the harness
+assigns, and the coordinator is started by the harness, not inside a checkout.
+
+**Bootstrap.** The coordinator never loads the repository's `AGENTS.md` by itself, so the project
+instructions carry one pointer to it. `softure-init` prints it for autonomous projects; paste it
+into the hosted project's instructions:
+
+```text
+This project runs the SOFTURE workflow from <owner>/<repo>. Before anything else, read its
+AGENTS.md (the managed SOFTURE block) and context/workflow.json from the main branch. You are the
+coordinator described there: follow "Operating mode: autonomous", starting with "Start of a run".
+```
+
+Nothing else needs saying: the rules, the roadmap and the owner's standing orders live in the
+repository (§8.4). Thread briefs still name "follow AGENTS.md → Operating mode: autonomous"; a thread
+runs in a checkout and reads the block itself.
+
+**Mapping.** Each step of `softure-worktree-manager` and `softure-worktree` in a hosted project:
+
+| step | local | hosted project |
+| --- | --- | --- |
+| launch (M3) | `wm-launch.sh` | start a thread session with the standard brief (item ID, change-id, outcome, base, owned files, waits for, merge path, report-to, "follow AGENTS.md → Operating mode: autonomous") |
+| in-flight state (M0.1) | `wm-resume.sh` | roadmap rows on `origin/<main>` (with `cloudState: "branch"` they show only at merge, so also memory), the harness's thread list, open pull requests |
+| watch (M4) | `wm-watch.sh` Monitor | thread messages and the report routine; no polling |
+| READY / merged report | `SendMessage` | cross-session message to the coordinator's session, never a reply in the thread |
+| go | a signal in the conversation | coordinator-to-thread message |
+| branch | `<change-id>` in a worktree | the branch the harness assigns; the change-id lives in `context/changes/` and `change.md` → `branch:` |
+| Phase A | `wt-open.sh` + worktree | in the thread's own checkout, no `git worktree add` (`softure-worktree` → Cloud session) |
+| reports / heartbeat | `CronCreate` | a recurring routine; without a scheduling tool, a setup thread creates it from `softure-worktree-manager/references/report-routine.md` |
+| close | `claude stop` + worktree removal | resolve the thread after its pull request is merged |
+
+`worktree.cloudState` (§2) and `install.gitignore: false` (for containers that never run
+`npm install`) apply to the threads as to any cloud session. Forge access in a hosted session is often
+scoped to the project's own repository: attach a repository the run needs (for example SOFTURE/SKILLS
+to file a gap) before deciding it is out of reach.
 
 ## 9. Commits
 
