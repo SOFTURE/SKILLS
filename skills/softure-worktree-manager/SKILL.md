@@ -377,9 +377,13 @@ or a machine that slept emits no stage event, so without it the run stalls
 silently.
 
 **Autonomous mode:** the clock follows `autonomy.reports` instead of the
-default: every `every` minutes (default 30) at the :00/:30 marks
-(`cron: "0,30 * * * *"`), inside `hours` when set; `every: 0` = off. An
-explicit `--status-every` still wins.
+default: every `every` minutes (default 60) on full hours, inside `hours`
+when set; `every: 0` = off. Build the cron from `every`, never from fixed
+marks: `python3 <S>/wt_config.py --report-cron` prints it (`every` rounded up
+to a multiple of 60, because routines fire at most hourly: 60 → `0 * * * *`,
+120 → `0 */2 * * *`). It is one recurring job for the whole run, created at
+the first launch and deleted at M7 or on the owner's "stop"/"pause"; reports
+never re-arm the next one. An explicit `--status-every` still wins.
 
 `--status-every N` changes the period (build the minute list from an
 off-mark offset: N=20 → `7,27,47 * * * *`); `--status-every 0` skips it. Arm
@@ -550,19 +554,20 @@ could not start.
 **Covered by the release** — `integration.coveredByRelease: true` **and** the
 header orders "Release: at the end" (the owner's approval, quoted): the
 release pipeline runs the same full suite on the released commit, so a run
-here would test that commit twice. Skip the run and write in the report:
-`integration <main>: covered by the release pipeline on <sha>
-(coveredByRelease)`. The release itself is still the owner's (or follows the
-project's own rules) — this skill never starts it. Its red result is handled
-as above: each red becomes a row and a worker. Without that header order, run
-the suite here as usual.
+here would test that commit twice. The order is then: **skip the run → close
+the roadmap → hand the release to the owner.** Write in the report:
+`integration <main>: covered by the release on <sha> (coveredByRelease)`.
+The release itself is still the owner's (or follows the project's own rules)
+— this skill never starts it. Its result gates the deploy, not the close; a
+red result is handled as above: each red becomes a row and a worker. Without
+that header order, run the suite here as usual.
 
 **Then close the roadmap — only when the header orders it** ("Archive roadmap:
-at the end") and the run above is green (covered by the release → the gate
-reads the release's stored green result for the final `<main>` commit,
-WORKFLOW §5.2; no result yet → leave the close as the step after the release
-and say so): `/softure-roadmap --close --auto`
-(WORKFLOW §5.2). A failing gate (a leftover folder in `context/changes/`, a
+at the end") and the run above is green, or is covered by the release (the
+close never waits for the release; WORKFLOW §5.2): `/softure-roadmap --close
+--auto` (WORKFLOW §5.2). The archived file is what the release reads, so the
+close always comes before the release: tell the owner to release from
+`context/foundation/archive/<date>-roadmap.md`. A failing gate (a leftover folder in `context/changes/`, a
 row not settled) is fixed first — leftovers are archived, unsettled rows go to
 a worker — never forced. The close is a documents-only commit on `<main>`; if a
 push is ordered, push it too (a second, documents-only push, through the hook). No header order → leave the roadmap in

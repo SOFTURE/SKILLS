@@ -70,7 +70,7 @@ start any work: no change, PRD or roadmap is created here.
    said ("this project is autonomous", "we run it by hand"). Otherwise, interactive: ask "How is
    this project run?" with the options **manual** (recommended: the owner checks every step,
    commits and merges by hand; client projects) and **autonomous** (the agent decides, merges green
-   work, coordinates parallel sessions and reports every 30 minutes). In `--auto` without a signal,
+   work, coordinates parallel sessions and reports every hour). In `--auto` without a signal,
    use `manual`. An existing `mode` is never changed here; switching is the owner's explicit call
    (WORKFLOW §8, "Switching mode").
 5. **Show the plan.** Without `--auto`, print the proposed tree and the full `workflow.json`,
@@ -131,7 +131,7 @@ only when it was detected or the user asked for it:
 | `worktree.cloudState` | `"main"` | the user runs cloud sessions that must keep state on the branch (`"branch"`) |
 | `research.sources` | none | step 2 found docs, ADRs or a PRD (interactive: listed in the plan; `--auto`: only paths that exist) |
 | `install` | gitignore the skills, inject all rule sections | the user wants committed skills or fewer rule sections (the language section always ships; `allowNonEnglishCode: true` only on the owner's explicit word) |
-| `autonomy` | roadmap as the work source, merge via pull request, reports every 30 min | `mode` is `autonomous` and the user names issues as the queue, merges by push, or another report cadence |
+| `autonomy` | roadmap as the work source, merge via pull request, reports every 60 min (`reports.every`; routines fire at most hourly) | `mode` is `autonomous` and the user names issues as the queue, merges by push, or another report cadence |
 
 Content of the README files, and a complete worked example (detection, plan, report) for a
 fictional repo: read `references/templates.md` **when writing the READMEs** and

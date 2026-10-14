@@ -4,10 +4,12 @@
     wt_config.py <dotted.key>        # scalar -> one line; list -> one item per line; missing/null -> nothing
     wt_config.py --root              # absolute path of the main worktree
     wt_config.py --json              # the whole resolved config as JSON
+    wt_config.py --report-cron       # cron of the autonomous report routine (nothing when reports are off)
 
 Always reads the config of the MAIN worktree (first entry of `git worktree list`), so every
 worktree and every script sees the same values. `mainBranch` falls back to origin's HEAD, then
-"main"; `worktree.maxParallel` to 4; `language` to "en"; `mode` to "manual".
+"main"; `worktree.maxParallel` to 4; `language` to "en"; `mode` to "manual";
+`autonomy.reports.every` to 60.
 
 Importable: `from wt_config import load_config, main_root, main_branch`.
 """
@@ -19,7 +21,13 @@ import subprocess
 import sys
 
 CONFIG_PATH = os.path.join("context", "workflow.json")
-DEFAULTS = {"mode": "manual", "language": "en", "worktree": {"maxParallel": 4, "setup": []}, "release": {"owner": True}}
+DEFAULTS = {
+    "mode": "manual",
+    "language": "en",
+    "worktree": {"maxParallel": 4, "setup": []},
+    "release": {"owner": True},
+    "autonomy": {"reports": {"every": 60, "hours": None}},
+}
 
 
 def main_root() -> str:
@@ -78,6 +86,20 @@ def lookup(config: dict, dotted: str):
     return node
 
 
+def report_cron(config: dict) -> str | None:
+    """Cron for the report routine: `every` rounded up to whole hours (routines fire at most hourly)."""
+    every = lookup(config, "autonomy.reports.every")
+    if not every:
+        return None
+    if every < 60:
+        print(f"autonomy.reports.every={every} is below 60; routines run hourly at most, using 60",
+              file=sys.stderr)
+    hours = max(1, -(-int(every) // 60))
+    if hours >= 24:
+        return "0 0 * * *"
+    return "0 * * * *" if hours == 1 else f"0 */{hours} * * *"
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -86,6 +108,11 @@ def main() -> None:
         print(main_root())
         return
     config = load_config()
+    if arg == "--report-cron":
+        cron = report_cron(config)
+        if cron:
+            print(cron)
+        return
     if arg == "--json":
         print(json.dumps(config, indent=2, ensure_ascii=False))
         return

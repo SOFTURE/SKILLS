@@ -201,3 +201,7 @@ Waiting on you: the cancellation window (unblocks BK-3), the payment provider (B
 Carried over: BK-6 (owner: payment provider) → `roadmaps/roadmap-payments.md`.
 Integration: green 212/212 on e9f1c03.
 ```
+
+With `integration.coveredByRelease` and "Release: at the end" the close runs before the release, so the last
+line reads `Integration: covered by the release on e9f1c03 (coveredByRelease).` and the release that follows
+lists BK-1 to BK-7 from this archived file.

@@ -63,7 +63,8 @@ or languages.
     "lookup": null,                 // optional: command printing the stored result for INTEGRATION_SHA (exit 0 green, 1 red, 3 none);
                                     // wt-integration.sh reuses a green result for the same commit instead of starting a run
     "coveredByRelease": false       // true: the release pipeline runs the same full suite on the released commit, so a roadmap
-                                    // whose header orders "Release: at the end" gets no separate run at M7 (§5.2)
+                                    // whose header orders "Release: at the end" gets no separate run at M7 and closes
+                                    // without waiting for the release (§5.2)
   },
   "migrations": {                   // optional: lets orchestrators detect collisions between parallel changes
     "dir": "drizzle",
@@ -82,7 +83,8 @@ or languages.
     "source": "roadmap",            // "roadmap": items come from roadmap.md; "issues": the forge's open issues are the queue
     "merge": "pr",                  // "pr": pull request with fresh <main>, merged on the forge after green checks (default);
                                     // "push": local --no-ff merge, then push <main> through the pre-push hook
-    "reports": { "every": 30, "hours": null }   // coordinator status reports: minutes (0 = off), optional "10:00-22:30" window
+    "reports": { "every": 60, "hours": null }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
+                                    // window; one recurring routine on full hours, `every` rounded up to a multiple of 60
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -309,9 +311,17 @@ the end", otherwise by the owner). Gates, all checked on `<main>` and reported t
 2. `context/changes/` holds only its README, plus the folders of carried rows. Any other folder is archived first
    (`softure-archive`, including work done without a plan), never deleted and never left behind;
 3. when `integration` is configured: one green full run on the final `<main>` (its result line goes into the archive).
-   With `integration.coveredByRelease: true` and the order "Release: at the end", that run is the release's: the
-   gate reads the green result the release pipeline stored for the final `<main>` commit (`integration.lookup`).
-   Until the release has run, the close waits and the report names it as the step after the release.
+   With `integration.coveredByRelease: true` and the order "Release: at the end", that run is the release's, and
+   the close **does not wait for it**: a green `integration.lookup` result for the final `<main>` commit is used
+   when one exists; otherwise the summary records `integration: covered by the release on <sha>
+   (coveredByRelease)`. The release's integration result gates the deploy, not the archive; its reds become new
+   roadmap rows as usual.
+
+**Close before the release.** The release reads the roadmap to list what ships, so the archived file is the single
+stable input for every release of that roadmap: the first attempt, a retry after a failed release, a redeploy or a
+rollback re-run. A release that comes after the close passes it explicitly
+(`softure-deploy release-notes --roadmap context/foundation/archive/<YYYY-MM-DD>-roadmap.md`). Rows that wait for
+the release keep `done_code` in the archived `## At a glance`, so the release still lists them.
 
 Then, in one commit (`docs(roadmap): close <slug>`):
 

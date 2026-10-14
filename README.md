@@ -36,7 +36,7 @@ installer injects only that mode's section into the rules block:
 | who decides | the owner, step by step; skills ask | the agent takes the recommended option and records it |
 | implementation | one phase per run, commit on the owner's approval | all phases, one commit per phase |
 | merge into the main branch | on the owner's signal | standing consent: serial merge queue, via PR (`autonomy.merge`) |
-| parallel sessions, reports | only when the owner starts them | coordinator + one session per change, report every 30 min |
+| parallel sessions, reports | only when the owner starts them | coordinator + one session per change, report every 60 min |
 | release | the owner | the owner while `release.owner` is true; production deploy always the owner |
 
 The autonomous standard (roles of the coordinator and its threads, results always sent to the main

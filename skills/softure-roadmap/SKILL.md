@@ -77,8 +77,12 @@ Read the PRD in full, not in excerpts.
   Then write `## Summary` (`| ID | Item | What changed | Merge |`, the merge SHA from
   `git log --merges --grep "<change-id>"` on `<main>`, plus the integration line), move the file to
   `foundation/archive/<YYYY-MM-DD>-roadmap.md`, clean up the promoted roadmap's backlog folder and
-  index row, and commit. Do not promote the next roadmap in the same step: that is `--promote`, the
-  owner's call. In `--auto`, a failing gate stops the close and is reported; it is never forced.
+  index row, and commit. With `integration.coveredByRelease` and "Release: at the end" the close does not
+  wait for the release: the integration line reads `covered by the release on <sha> (coveredByRelease)`
+  unless a green stored result exists. The archived file is what the release notes read (every release
+  of this roadmap, retries and redeploys included); rows waiting for the release keep `done_code`, so
+  the release still lists them. Name the archived path in the report. Do not promote the next roadmap
+  in the same step: that is `--promote`, the owner's call. In `--auto`, a failing gate stops the close and is reported; it is never forced.
   A sample `## Summary` is at the end of [references/example-roadmap.md](references/example-roadmap.md).
 
 ## Existing roadmap
@@ -194,8 +198,8 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
     - frontmatter: `prd_version` = the PRD `version`;
     - run-wide orders in the quote block: push main or not; archive the roadmap at the end or not;
       release at the end or not (only with the owner's approval, quoted: it tells the coordinator a release
-      follows, and with `integration.coveredByRelease` the release's suite is the roadmap's run; skills
-      still never release); parallelism (default: `workflow.json` → `worktree.maxParallel`); which items need the owner
+      follows, and with `integration.coveredByRelease` the release's suite is the roadmap's run; the roadmap
+      is archived before the release, which reads the archived file; skills still never release); parallelism (default: `workflow.json` → `worktree.maxParallel`); which items need the owner
       at the keyboard (`Mode: owner`);
     - `## Order` opens with the framing (optimising for, first proof, main risk, depth), then the
       reasoning for the order, `### Starting point` (the confirmed baseline, one line per layer
