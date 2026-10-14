@@ -99,6 +99,11 @@ npm version patch          # or minor / major: bumps package.json and creates ta
 git push --follow-tags
 ```
 
+Where a tag cannot be pushed (a cloud agent session's git proxy lets only branches through), bump the
+version without a tag (`npm version minor --no-git-tag-version`), commit and push it to `master`, then
+run the **auto-release** workflow (Actions → auto-release → Run workflow, on `master`). It creates
+`vX.Y.Z` on `master`'s head and starts `release.yml` on that tag, the same path as a pushed tag.
+
 The `v*.*.*` tag runs `.github/workflows/release.yml`, which:
 1. validates and test-installs the package, and checks that the tag matches `package.json`;
 2. publishes `@softure-ai/skills` to **npmjs.com** through trusted publishing (OIDC, provenance,

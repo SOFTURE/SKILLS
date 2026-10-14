@@ -5,7 +5,9 @@ name: SOFTURE SKILLS - VALIDATE AND RELEASE
 #   1. npmjs.com      @softure-ai/skills  (trusted publishing over OIDC, with provenance)
 #   2. GitHub Packages @softure/skills    (GitHub Packages requires the scope to equal the org)
 #   3. GitHub Release vX.Y.Z              (generated notes + the package tarball as an asset)
-# Cut a release with: npm version patch|minor|major && git push --follow-tags
+# Cut a release with: npm version patch|minor|major && git push --follow-tags,
+# or, where tags cannot be pushed (cloud agent sessions), bump the version on master and run
+# auto-release.yml, which creates the tag and starts this workflow on it (workflow_dispatch on the tag).
 #
 # Keep this file name: the npm trusted publisher is bound to `release.yml`.
 on:

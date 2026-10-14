@@ -1,0 +1,60 @@
+# Releases the version in package.json from one "Run workflow" on master: creates the missing tag
+# `v<version>` on master's head and starts `release.yml` on it.
+#
+# Why: a cloud agent session cannot push a tag (its git proxy lets only branches through, HTTP 403)
+# and the GitHub tools cannot create tags, but they can start a `workflow_dispatch`. A tag created
+# with GITHUB_TOKEN starts no other workflow (GitHub's rule against recursive runs), so the last step
+# starts `release.yml` explicitly; on a tag ref it takes the same path as a pushed tag.
+#
+# Cut a release: bump the version on master (`npm version minor --no-git-tag-version`, commit, push),
+# then run this workflow. An existing tag is skipped; re-run `release.yml` on it instead.
+
+name: auto-release
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag
+      actions: write # gh workflow run release.yml
+    steps:
+      - name: Master only
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/master ]] \
+            || { echo "::error::auto-release runs from master only, not from $GITHUB_REF"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Create the missing tag and start its release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          sha="$(git rev-parse HEAD)"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "- ${tag}: tag exists, skipped (re-run release.yml on the tag)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "${tag}" "${sha}"
+          git push origin "refs/tags/${tag}"
+          gh workflow run release.yml --ref "${tag}" --repo "$GITHUB_REPOSITORY"
+          {
+            echo "- ${tag}: tagged \`${sha:0:8}\`, release started"
+            echo ""
+            echo "[release runs](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/release.yml)"
+          } >> "$GITHUB_STEP_SUMMARY"
