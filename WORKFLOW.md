@@ -492,7 +492,7 @@ runs in a checkout and reads the block itself.
 | branch | `<change-id>` in a worktree | the branch the harness assigns; the change-id lives in `context/changes/` and `change.md` → `branch:` |
 | Phase A | `wt-open.sh` + worktree | in the thread's own checkout, no `git worktree add` (`softure-worktree` → Cloud session) |
 | reports / heartbeat | `CronCreate` | a recurring routine; without a scheduling tool, a setup thread creates it from `softure-worktree-manager/references/report-routine.md` |
-| close | `claude stop` + worktree removal | resolve the thread after its pull request is merged |
+| close | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on the merge result the coordinator checks it and resolves it if still open |
 
 `worktree.cloudState` (§2) and `install.gitignore: false` (for containers that never run
 `npm install`) apply to the threads as to any cloud session. Forge access in a hosted session is often

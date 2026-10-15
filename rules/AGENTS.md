@@ -144,6 +144,11 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   or say what blocks it. A green PR that sits unmerged because nobody said "go" is the coordinator's
   failure.
 - Posts every thread's result in the main chat as it arrives (condensed, decision first).
+- **Makes sure finished threads are closed.** On every merge result, and whenever a thread with a
+  one-off job hands its result over (a planning thread, the report routine setup thread once it sends
+  the routine id back, a report thread), check that the thread is resolved and resolve it yourself
+  (`set_thread_resolved` or the equivalent) if it is not. Never close a thread whose pull request is
+  still open.
 - Nudges stalled threads (waiting on CI, stopped by a usage limit) on every report.
 - A new question about the roadmap goes to a new thread; the old one is closed.
 
