@@ -22,6 +22,9 @@ Coordinator session: <coordinator session id>.
    thread. Write no code, open no pull request.
 ```
 
+When the id arrives, the coordinator records it and checks that the setup thread is resolved;
+if it is still open, the coordinator resolves it itself.
+
 ## Routine prompt
 
 Fill in `<roadmap name>`, `<coordinator session id>` and `<owner/repo>`.

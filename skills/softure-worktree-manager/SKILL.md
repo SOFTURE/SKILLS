@@ -118,7 +118,7 @@ project's main-chat session: no shell over the workers, no `claude agents`, no
 | M4 watch | `wm-watch.sh` | thread messages and the report routine |
 | M4 status | `CronCreate` | a recurring routine; no scheduling tool → setup thread with `references/report-routine.md` |
 | READY, go | `SendMessage` | cross-session messages, both ways |
-| M5 cleanup | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged |
+| M5 cleanup | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on its merge result check it and resolve it if still open |
 
 A fresh main-chat session starts the run by itself (`AGENTS.md` → Start of a
 run); it does not wait for this skill to be invoked.
@@ -407,7 +407,8 @@ never re-arm the next one. An explicit `--status-every` still wins.
 session): start one setup thread with the brief in
 `references/report-routine.md`; it creates the routine (bound to this session
 when the harness allows, else a fresh session per firing), sends back its id
-and is closed. Record the id in memory; at M7 or on "stop"/"pause" have a
+and is closed (when it is still open after sending the id, resolve it
+yourself). Record the id in memory; at M7 or on "stop"/"pause" have a
 thread delete the routine by that id. Never skip the reports, never chain
 one-off wake-ups instead.
 
