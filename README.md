@@ -58,6 +58,12 @@ of every message to the owner, `language` only the prose of `context/` artifacts
 overwritten on every install. Uninstall:
 `node node_modules/@softure-ai/skills/scripts/uninstall.mjs`.
 
+## First thread in a project
+
+[INITIALIZE.md](INITIALIZE.md) holds two prompts to paste as the first message of a fresh Claude Code
+session, **AUTO** and **MANUAL**: the session installs the skills, reads the process, runs
+`softure-init` for that mode and restates the rules it will work by.
+
 ## The chain
 
 See [WORKFLOW.md](WORKFLOW.md) for the full contract: artifacts, statuses, formats and
