@@ -73,6 +73,11 @@ work?"
      event, a public route, a file format), is it flagged as breaking, with a migration path?
      Flag every place where the implementer would have to guess (which endpoint, which table,
      which time zone).
+   - **Release checks:** when the plan adds, removes or changes a route that the release's
+     verify configuration names (`deploy*.json`, the deploy workflows; research lists the
+     matches), a step must update that check and its test in the same change. Missing: a
+     WARNING at least, CRITICAL when the check would fail the first release after the merge.
+     Every gate stays green; only the release's verify notices, after the deploy.
    - **Progress mechanics:** one `## Progress`, last; titles identical to the phases; one item
      per Done-when bullet; no checkboxes elsewhere; gates item last in each phase
      (`softure-plan/references/progress-format.md`). A defect is CRITICAL: softure-implement

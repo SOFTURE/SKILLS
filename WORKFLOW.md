@@ -98,6 +98,10 @@ or languages.
 }
 ```
 
+Green gates do not cover a release's post-deploy verify (routes, statuses, headers and redirects a
+deploy config checks after the deploy). A change that adds or changes a route updates that check in the
+same change: `softure-research` lists the matches, `softure-plan-review` flags a plan that misses them.
+
 Every key beyond `language`, `mainBranch` and `gates` is optional (`mode` included: absent means `"manual"`), and a missing key means the default
 behaviour described where the key is used. A project adopts a convention by setting its key; nothing here
 forces one on a project that already has its own.

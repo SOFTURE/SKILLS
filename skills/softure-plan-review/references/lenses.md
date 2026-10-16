@@ -19,6 +19,8 @@ CRITICAL.
 ## Slicing
 
 - After each phase, do the gates pass and could it be deployed alone?
+- Would the release's post-deploy verify still pass? A route the plan adds or changes may be
+  named there with a fixed answer (status, header, redirect); the gates never run that check.
 - Do phases follow layers (all schema, then all logic, then all UI)?
 - Does a later phase quietly fix something an earlier phase leaves broken?
 

@@ -76,7 +76,12 @@ command output), so a planner can trust it without re-reading the code.
    path exists (a dev DB, fixtures). Never write to a database during research.
 
 6. **Map the tests.** Find which tests cover the affected code (unit, integration, e2e), how to
-   run them, and where coverage is missing. Note flaky or slow suites.
+   run them, and where coverage is missing. Note flaky or slow suites. **Post-deploy checks
+   too:** when the change adds, removes or changes a route (a page, an endpoint, a redirect, a
+   header it answers with), search the release's verify configuration (`deploy*.json`, the
+   release and deploy workflows, smoke-check scripts) for the path and each of its prefixes, and
+   list every match under `## Affected surface` with the answer it expects. The gates never run
+   these checks; a miss shows up only after the deploy.
 
 7. **Check SOFTURE modules first** (WORKFLOW.md §10). If the change needs a generic capability,
    check the `@softure-ai/*` catalog. Generic capabilities include auth, sessions, roles, feature
@@ -185,6 +190,7 @@ unsure how much detail a section needs.
 - [ ] Every factual claim has `path:line` or another concrete evidence pointer.
 - [ ] Every roadmap Unknown is answered, decided or escalated.
 - [ ] Tests that will prove the change are identified, with the command to run them.
+- [ ] A change to routes lists every release verify check that names the path or a prefix (or "none").
 - [ ] The SOFTURE module verdict is explicit.
 - [ ] Prior work was searched (`context/changes/`, `context/archive/`, git log), even if nothing was found.
 - [ ] Collisions with other in-flight changes have been checked.
