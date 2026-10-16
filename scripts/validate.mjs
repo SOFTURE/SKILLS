@@ -47,7 +47,7 @@ for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true }).filter((i
   }
 }
 
-for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(path.join(ROOT, "scripts")).filter((file) => !file.endsWith("validate.mjs")), path.join(ROOT, "README.md"), path.join(ROOT, "WORKFLOW.md"), path.join(ROOT, "INITIALIZE.md")]) {
+for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(path.join(ROOT, "scripts")).filter((file) => !file.endsWith("validate.mjs")), path.join(ROOT, "README.md"), path.join(ROOT, "WORKFLOW.md"), path.join(ROOT, "ONBOARD.md")]) {
   if (!/\.(md|sh|py|mjs|js|json|txt)$/.test(file)) continue;
   const content = fs.readFileSync(file, "utf8");
   for (const pattern of FORBIDDEN) {

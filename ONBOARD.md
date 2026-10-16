@@ -1,4 +1,4 @@
-# Initialize a session with SOFTURE SKILLS
+# Onboard a session to SOFTURE SKILLS
 
 Two prompts for the **first message of a fresh Claude Code session** in a code project. The session
 has no context and no memory of the project; the prompt tells it where everything lives and makes it

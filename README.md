@@ -58,9 +58,9 @@ of every message to the owner, `language` only the prose of `context/` artifacts
 overwritten on every install. Uninstall:
 `node node_modules/@softure-ai/skills/scripts/uninstall.mjs`.
 
-## First thread in a project
+## First message of a session
 
-[INITIALIZE.md](INITIALIZE.md) holds two prompts to paste as the first message of a fresh Claude Code
+[ONBOARD.md](ONBOARD.md) holds two prompts to paste as the first message of a fresh Claude Code
 session, **AUTO** and **MANUAL**. In a project that is already set up the session changes nothing: it
 reads the rules, the config, `context/` and the forge, reports where the work stands and restates the
 rules it will work by. In a project that is not, it installs the skills and runs `softure-init` first.
