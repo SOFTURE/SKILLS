@@ -61,8 +61,9 @@ overwritten on every install. Uninstall:
 ## First thread in a project
 
 [INITIALIZE.md](INITIALIZE.md) holds two prompts to paste as the first message of a fresh Claude Code
-session, **AUTO** and **MANUAL**: the session installs the skills, reads the process, runs
-`softure-init` for that mode and restates the rules it will work by.
+session, **AUTO** and **MANUAL**. In a project that is already set up the session changes nothing: it
+reads the rules, the config, `context/` and the forge, reports where the work stands and restates the
+rules it will work by. In a project that is not, it installs the skills and runs `softure-init` first.
 
 ## The chain
 
