@@ -132,6 +132,10 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - One thread = one change (one issue). Very similar tiny items may share a thread; items that touch
   the same files go to the same thread or wait. A planning thread hands its result over and is closed.
   Before starting a thread, check that the item has none yet.
+- **A new roadmap is two steps, never one thread.** When the owner hands over a new roadmap (or a
+  revision), brief one roadmap thread that only shapes, records, commits and merges `roadmap.md`,
+  then ends. Once it is merged, start one thread per ready item, as for any run. Never brief a single
+  thread to record a roadmap and implement its items, or to implement a whole roadmap.
 - Runs as many threads as are parallel-safe; `worktree.maxParallel` is a soft default.
 - **The roadmap keeps rolling:** the moment a merge unblocks an item, start its thread. Never wait for
   the rest of the wave. Take no new items beyond the roadmap or the issue queue without the owner.

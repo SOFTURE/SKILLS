@@ -480,6 +480,10 @@ AGENTS.md (the managed SOFTURE block) and context/workflow.json from the main br
 coordinator described there: follow "Operating mode: autonomous", starting with "Start of a run".
 ```
 
+**New roadmap.** When the owner hands over a new roadmap, the coordinator starts one roadmap thread
+that only runs `softure-roadmap`, merges `roadmap.md` and ends. Only then does it start one thread
+per ready item. A single thread never records a roadmap and implements its items.
+
 Nothing else needs saying: the rules, the roadmap and the owner's standing orders live in the
 repository (§8.4). Thread briefs still name "follow AGENTS.md → Operating mode: autonomous"; a thread
 runs in a checkout and reads the block itself.
