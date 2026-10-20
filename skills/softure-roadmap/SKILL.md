@@ -290,6 +290,9 @@ Record each choice under `## Decisions (auto)` at the end of the file:
   and `softure-archive`.
 - Do not estimate in hours, days, points or sizes. Order and slice size are the planning tools here.
 - Do not chain into the next skill on your own; the handoff is a recommendation.
+- Do not implement roadmap items in the session that wrote the roadmap. In a coordinated run
+  (autonomous mode, a hosted project), the roadmap thread commits and merges `roadmap.md`, reports to
+  the coordinator, and ends; the coordinator then starts one thread per item.
 
 ## Handoff
 
@@ -305,3 +308,7 @@ item, not a menu. Take the first rule that applies:
 Name the command (`softure-new <change-id>`, or `--open-changes` then `softure-worktree-manager`
 for parallel execution, `softure-worktree <ID>` for one item end to end), the next two items after
 it, and what waits for the owner.
+
+**In a coordinated run, this thread ends here.** Once `roadmap.md` is merged into the main branch,
+send the summary to the coordinator and close the thread. The coordinator starts one thread per
+ready item (`AGENTS.md` → Operating mode: autonomous); this thread never implements an item.
