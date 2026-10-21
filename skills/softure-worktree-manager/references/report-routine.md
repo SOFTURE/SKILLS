@@ -34,12 +34,18 @@ Roadmap report for <roadmap name> (SOFTURE workflow, AGENTS.md → Operating mod
 If several firings queued up while busy, do one.
 - Running as the coordinator: post the roadmap report in the main chat in the standard shape
   (title, "X of N on <main>", the four-column table of the items not done yet, Decision, times),
-  in chatLanguage, times in timezone. Then run the heartbeat: give the go to every READY thread,
-  nudge stalled ones, start every item a merge unblocked. Nothing moved: one line.
+  in chatLanguage, times in timezone. Before posting, run the heartbeat: recompute the startable set
+  from roadmap.md on origin/<main> (softure-worktree/scripts/wt-startable.py; never only the
+  successors of the last merge) and start a thread for every item that is not done, has no thread
+  and has all prerequisites on <main> or none; give the go to every READY thread; nudge every
+  thread whose go has produced no merge SHA for 30 minutes and every working thread silent for
+  45 minutes or more. Stage "waiting for <IDs>" names the prerequisite IDs not on <main> yet.
+  Nothing moved: one line.
 - Running in a session of its own: read <owner/repo> on the main branch (context/foundation/roadmap.md,
-  open pull requests and their checks), send the coordinator's session <coordinator session id> the
-  facts in one message ("Report due <HH:MM>: X of N on <main>; <ID> <stage> (PR #N, checks); ...")
-  and ask it to post the report and run its heartbeat. Then end this session. Change nothing in
+  open pull requests and their checks; the startable set from wt-startable.py), send the
+  coordinator's session <coordinator session id> the facts in one message ("Report due <HH:MM>: X of
+  N on <main>; startable: <IDs>; <ID> <stage> (PR #N, checks); ...") and ask it to post the report
+  and run its heartbeat. Then end this session. Change nothing in
   the repository.
 ```
 

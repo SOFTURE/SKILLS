@@ -873,6 +873,16 @@ coordinator, the report is sent after the merge with its SHA and PR.
 Then end the turn. Don't poll, don't schedule wake-ups, and don't ask "shall I
 merge?". The report already says what happens next.
 
+**Exception: PR events cannot reach this session.** In a cloud session with
+`autonomy.merge: "pr"`, check at session start whether pull request activity can
+reach you (subscribing to the pull request succeeds, the forge app has access
+to the repository). If it cannot, ending the turn after a push or after the go
+means sleeping until someone nudges you. Then, after every push of a branch
+with an open pull request (READY, and Phase B after the go), check its checks
+yourself until they finish: a scheduled wake-up every few minutes, for at most
+about 60 minutes, then report to the coordinator what is still pending. When
+the checks are green after the go, merge at once.
+
 ## Phase B — merge (on the owner's signal; autonomous mode: see *Operating mode*)
 
 Signals (in any language the owner uses): "merge", "go into main", "main is free",

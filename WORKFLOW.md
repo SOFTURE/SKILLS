@@ -84,7 +84,9 @@ or languages.
     "merge": "pr",                  // "pr": pull request with fresh <main>, merged on the forge after green checks (default);
                                     // "push": local --no-ff merge, then push <main> through the pre-push hook
     "reports": { "every": 60, "hours": null }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
-                                    // window; one recurring routine on full hours, `every` rounded up to a multiple of 60
+                                    // window; one recurring routine on full hours, `every` rounded up to a multiple of 60.
+                                    // `hours: null` = around the clock (24/7), recommended for autonomous runs: the routine
+                                    // is also the heartbeat that starts unblocked items and nudges stalled threads
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -494,13 +496,25 @@ runs in a checkout and reads the block itself.
 | --- | --- | --- |
 | launch (M3) | `wm-launch.sh` | start a thread session with the standard brief (item ID, change-id, outcome, base, owned files, waits for, merge path, report-to, "follow AGENTS.md → Operating mode: autonomous") |
 | in-flight state (M0.1) | `wm-resume.sh` | roadmap rows on `origin/<main>` (with `cloudState: "branch"` they show only at merge, so also memory), the harness's thread list, open pull requests |
-| watch (M4) | `wm-watch.sh` Monitor | thread messages and the report routine; no polling |
+| watch (M4) | `wm-watch.sh` Monitor | thread messages and the report routine; no polling when PR events reach the threads, otherwise each thread polls its own CI (below) |
 | READY / merged report | `SendMessage` | cross-session message to the coordinator's session, never a reply in the thread |
 | go | a signal in the conversation | coordinator-to-thread message |
 | branch | `<change-id>` in a worktree | the branch the harness assigns; the change-id lives in `context/changes/` and `change.md` → `branch:` |
 | Phase A | `wt-open.sh` + worktree | in the thread's own checkout, no `git worktree add` (`softure-worktree` → Cloud session) |
 | reports / heartbeat | `CronCreate` | a recurring routine; without a scheduling tool, a setup thread creates it from `softure-worktree-manager/references/report-routine.md` |
 | close | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on the merge result the coordinator checks it and resolves it if still open |
+
+**When PR events do not arrive.** A thread checks at session start whether pull request activity can
+reach it (the subscription succeeds, the forge app has access to the repository). If not, after every
+push it checks its pull request's checks itself until they finish (a scheduled wake-up every few
+minutes, at most about 60 minutes) instead of ending the turn waiting for an event. The coordinator
+records in memory which forge events do not arrive in this project, and nudges a thread whose go has
+produced no merge SHA within 30 minutes.
+
+**Startable set.** On every merge result and every report the coordinator recomputes, from
+`roadmap.md` on `origin/<main>`, every item that is not done, has no thread and has all prerequisites
+on `<main>` (or none), and starts a thread for each; `softure-worktree/scripts/wt-startable.py` prints
+the set. It never derives the next start only from the thread that just merged.
 
 `worktree.cloudState` (§2) and `install.gitignore: false` (for containers that never run
 `npm install`) apply to the threads as to any cloud session. Forge access in a hosted session is often
