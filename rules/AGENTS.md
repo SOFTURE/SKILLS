@@ -108,10 +108,14 @@ irreversible action nobody asked for, a secret or access only the owner has, sco
 hosted project's main-chat session on its first message) starts the run itself, without waiting for
 the owner's "go":
 1. read `context/workflow.json` and the roadmap (or the issue queue) on the main branch; outside a
-   checkout, read them, and this block, from the repository first;
+   checkout, read them, and this block, from the repository first. Then read the project's memory and
+   its own coordinator conventions (the project's `AGENTS.md` outside this block). When memory lacks
+   the run state (the serial merge queue holder, the report routine id, the lanes, which forge events
+   do not reach the threads), write it there before starting threads;
 2. adopt what is already in flight: roadmap rows `in_progress` or `ready_to_merge`, the harness's open
    threads, open pull requests (`softure-worktree-manager` M0.1); give the go to every READY thread;
-3. start a thread for every ready, parallel-safe item;
+3. start a thread for every startable item (below), items with no prerequisites included, whatever
+   lane they sit in;
 4. create the report routine and post the first roadmap report.
 Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 
@@ -137,8 +141,14 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   then ends. Once it is merged, start one thread per ready item, as for any run. Never brief a single
   thread to record a roadmap and implement its items, or to implement a whole roadmap.
 - Runs as many threads as are parallel-safe; `worktree.maxParallel` is a soft default.
-- **The roadmap keeps rolling:** the moment a merge unblocks an item, start its thread. Never wait for
-  the rest of the wave. Take no new items beyond the roadmap or the issue queue without the owner.
+- **The roadmap keeps rolling: recompute the startable set on every merge result and every report.**
+  Read `roadmap.md` on `origin/<main>`; every item that is not done, has no thread, and whose
+  prerequisites are all `done` or `done_code` on `<main>` (or has none) gets a thread now, within the
+  parallel-safe limit. Never derive it only from the thread that just merged or from its lane
+  successor: an item with no prerequisites is never "unblocked by a merge", and an item a sloppy
+  merge round missed must still be picked up. `softure-worktree/scripts/wt-startable.py` prints the
+  set (`START` rows; `WAIT` rows name the missing prerequisites). Never wait for the rest of the wave.
+  Take no new items beyond the roadmap or the issue queue without the owner.
 - A brief names the item ID and change-id, the outcome, the base branch, the files it owns, what it
   waits for, the merge path, how to report back (condensed, to the coordinator's session), and "follow
   AGENTS.md → Operating mode: autonomous". Project-specific standing orders are appended.
@@ -147,13 +157,16 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   the owner. **Check every thread waiting for your go on every report and every wake-up**: give the go
   or say what blocks it. A green PR that sits unmerged because nobody said "go" is the coordinator's
   failure.
+- **Stale go:** a thread that got its go and has sent no merge SHA within 30 minutes is nudged at once
+  (what is it waiting for, CI or a conflict?), not at the next report.
 - Posts every thread's result in the main chat as it arrives (condensed, decision first).
 - **Makes sure finished threads are closed.** On every merge result, and whenever a thread with a
   one-off job hands its result over (a planning thread, the report routine setup thread once it sends
   the routine id back, a report thread), check that the thread is resolved and resolve it yourself
   (`set_thread_resolved` or the equivalent) if it is not. Never close a thread whose pull request is
   still open.
-- Nudges stalled threads (waiting on CI, stopped by a usage limit) on every report.
+- Nudges stalled threads (waiting on CI, stopped by a usage limit) on every report: every working
+  thread silent for 45 minutes or more gets a nudge in that firing.
 - A new question about the roadmap goes to a new thread; the old one is closed.
 
 **Thread duties:**
@@ -161,6 +174,11 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - At READY (green PR, fresh main branch merged in): send the condensed result to the coordinator and
   wait for its go. Never write that it waits for the owner. Without a coordinator, merge at READY.
 - After the go: merge (below), then send the merge result to the coordinator.
+- **Watch your own CI when PR events cannot reach you.** At session start, check whether pull request
+  activity can reach the thread (the subscription succeeds, the forge app has access to the
+  repository). If not, after every push check the pull request's checks yourself until they finish:
+  a scheduled wake-up every few minutes, for at most about 60 minutes, then report what is still
+  pending. Never end the turn waiting for an event that cannot arrive.
 - **Close the thread only when the work is really done: its pull request is merged into the main
   branch** (`set_thread_resolved` or the equivalent). A thread with an open pull request stays open,
   READY included. It stays open also while an owner action gates its result.
@@ -169,6 +187,9 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - Merges are serial, first ready first merged. A ready merge never waits for the owner.
 - Right before merging, merge the fresh main branch into the branch and resolve conflicts yourself.
   The main branch is the source of truth: what it has and the branch lacks is pulled in and wired.
+- Merging the fresh main branch in does not re-run the full local suite when the incoming changes
+  touch no file the branch changes and add no migration: the pull request's CI on the merged branch is
+  the gate. Overlapping files or a migration: run the full gates again before pushing.
 - `autonomy.merge: "pr"` (default): open a pull request (`Closes #N` when it solves an issue), wait for
   green checks, merge it on the forge; the forge deletes the head branch. `"push"`: `git merge --no-ff`
   locally, then push the main branch through the pre-push hook.
@@ -182,7 +203,11 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 
 **Roadmap reports** (coordinator, pasted into the main chat, times in `timezone`):
 - When: after every batch of thread starts (an ad-hoc post), and every `autonomy.reports.every`
-  minutes (default 60) on full hours inside `autonomy.reports.hours`, only while work runs. Routines
+  minutes (default 60) on full hours inside `autonomy.reports.hours`, only while work runs.
+  `hours: null` (the default) means around the clock, and that is the recommended setting for an
+  autonomous run: the report routine is also the run's heartbeat (it recomputes the startable set,
+  gives the go, nudges stalled threads), so a window that sleeps at night leaves the night
+  unsupervised. Routines
   fire at most once an hour, on the full hour, so the schedule is `every` rounded up to a multiple of
   60 (60 → `0 * * * *`, 120 → `0 */2 * * *`; `wt_config.py --report-cron` prints it); a value below 60
   runs hourly. **One recurring routine** drives the reports: the coordinator creates it when work
@@ -202,10 +227,12 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
      - **ID**: the roadmap item ID, an uppercase prefix of two or three letters plus a number (`FC-5`,
        `SA-12`, `CMP-3`); in issue mode the issue number (`#42`). Bold, nothing else in the cell.
      - **What it does**: the outcome in a few words.
-     - **Stage**: `waiting for <IDs>`, `research`, `frame`, `plan`, `plan-review`, `implement N/M`,
+     - **Stage**: `waiting for <IDs>` (the prerequisite IDs not yet on `<main>`; `waiting for
+       predecessors` without IDs is invalid), `research`, `frame`, `plan`, `plan-review`, `implement N/M`,
        `impl-review`, `integration`, `archive`, `ready to merge (PR #N)`, `merging (PR #N)`,
        `blocked (<why>)`, `waits for the owner (<what>)`; add `stalled` when the thread has not moved
-       since the last report.
+       since the last report. An item whose prerequisites are all on `<main>` but has no thread is a
+       coordinator failure: start its thread in the same firing, before posting the report.
      - **Link**: a markdown link to the thread that carries the item, `[thread](<url>)`; `—` when it has
        none. Never a forge URL: the PR number lives in Stage;
   4. `Decision: …` when the owner has something to decide;
@@ -268,12 +295,14 @@ pull requests, CI, releases, issues), then nudge the interrupted threads. If the
 push, merge or publish this section covers, cite this section and `mode` once; if it still refuses,
 ask the owner for a word in that session and keep the other work going.
 
-**Memory** holds only project state (queue, IDs, counters, the owner's specific orders and decisions).
-The rules above are not memory material. **When the owner has to explain or correct how the process
-runs** (a step that should have happened by itself, a rule that is missing or wrong), that is a gap in
+**Memory** holds only project state (queue, IDs, counters, the owner's specific orders and decisions)
+and the run state a fresh coordinator needs (the merge queue holder, the report routine id, the lanes,
+which forge events do not reach the threads). The rules above are not memory material. **When the
+owner has to explain or correct how the process runs** (a step that should have happened by itself, a rule that is missing or wrong), that is a gap in
 these skills: the session that received it checks SOFTURE/SKILLS for a duplicate, files an issue right
 away (neutral text, "an adopting app") and posts the link in the main chat. Memory keeps only the
-project-specific order itself.
+project-specific order itself. The same holds when an audit finds a coordinator miss: record the
+project-specific consequence in memory, file the generic gap.
 
 ## Conventions
 
