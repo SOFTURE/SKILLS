@@ -157,6 +157,18 @@ add`), the change-id lives in `context/changes/`, the READY and merge reports
 go to the coordinator's session by cross-session message, the go comes back
 the same way, and the thread is resolved only after its pull request is merged.
 
+**Bootstrap check (hosted thread, autonomous mode), in A0.** The coordinator
+follows the managed block only if the project instructions point it there
+(WORKFLOW §8.5, Bootstrap); without the pointer it runs on the harness defaults
+and holds ready merges for the owner. So, at session start, look for the
+pointer in the project instructions this session was given (the snippet, or
+any reference to this repository's `AGENTS.md`). When it is missing, or there
+are no project instructions at all, the first message to the coordinator says
+so, carries the snippet from WORKFLOW §8.5 with `<owner>/<repo>` filled in from
+`git remote get-url origin`, and asks the coordinator to read `AGENTS.md` and
+`context/workflow.json` from the main branch now and to tell the owner where to
+paste the snippet. Then carry on with the change; the check never blocks it.
+
 **`worktree.cloudState: "branch"`** changes points 1 and 6: the claim and every
 stage are committed **on the session branch only** (`wt-roadmap.py` does it by
 itself in that mode) and nothing goes to `origin/<main>` before the merge. Use

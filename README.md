@@ -46,7 +46,9 @@ for SOFTURE package bugs and for gaps in these skills) lives in the rules block,
 runs in a checkout, cloud ones included, reads it from `AGENTS.md` without being told. A hosted
 project's coordinator (for example a claude.ai project's main chat) is started outside the checkout:
 paste the one-paragraph pointer from WORKFLOW §8.5 (`softure-init` prints it) into the project
-instructions, and it starts the run by itself. Tune it with `autonomy` (WORKFLOW §2). Switch modes only on the
+instructions, and it starts the run by itself. The paste is checked, not assumed: the first thread
+that finds it missing tells the coordinator, which then reads the rules from the main branch at once
+and asks the owner to paste it. Tune it with `autonomy` (WORKFLOW §2). Switch modes only on the
 owner's word: change `mode`, re-run the installer, commit both.
 
 Per-project choices go into `context/workflow.json` → `install` and are applied on every install,

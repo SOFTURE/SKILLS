@@ -120,6 +120,15 @@ project's main-chat session: no shell over the workers, no `claude agents`, no
 | READY, go | `SendMessage` | cross-session messages, both ways |
 | M5 cleanup | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on its merge result check it and resolve it if still open |
 
+The coordinator reaches these rules only through the pointer in the project
+instructions (WORKFLOW §8.5, Bootstrap). When a thread reports that the pointer
+is missing, or the coordinator notices it has not loaded the managed block, it
+reads `AGENTS.md` and `context/workflow.json` from the main branch at once and
+follows them for the rest of the run, without waiting for the paste: it gives
+the go and runs the merge queue itself from then on. It posts the snippet to
+the owner with where to paste it, records the missing pointer in memory, and
+repeats it as an owner step in every report until the owner confirms it.
+
 A fresh main-chat session starts the run by itself (`AGENTS.md` → Start of a
 run); it does not wait for this skill to be invoked. It loads the project's
 memory and coordinator conventions first, and records the run state there
