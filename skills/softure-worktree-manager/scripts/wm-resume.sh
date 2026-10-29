@@ -14,7 +14,7 @@
 #   ADOPT     worker process alive and working → take over its merge
 #   NUDGE     worker process alive but blocked (usage limit, sleep, network) → SendMessage "continue"
 #   RELAUNCH  no live worker process, worktree/branch still there → claude stop <id>; wm-launch.sh
-#   FIX-ROW   the main branch already has the merge commit, row not updated → fix the row
+#   FIX-ROW   the main branch already has the merge commit, row not updated → wt-roadmap.py done
 #   REPORT    in flight on the roadmap but no branch and no worktree → tell the owner
 #
 # Why: the owner clears the coordinator session and runs the skill again; workers keep running
@@ -114,10 +114,11 @@ for rid, cid, stage in rows:
     coord_alive = "?" if coord == "?" else ("yes" if coord in live_names else "no")
 
     stuck = re.search(r"session limit|went to sleep|API Error|Can't reach|rate limit", last, re.I)
-    if stage == "ready_to_merge":
-        action = "MERGE"
-    elif merged:
+    # Merged first: the row stays `ready_to_merge` until `wt-roadmap.py done` runs after the merge.
+    if merged:
         action = "FIX-ROW"
+    elif stage == "ready_to_merge":
+        action = "MERGE"
     elif not has_branch and wt == "no":
         action = "REPORT"
     elif a and a.get("pid") and (a.get("state") in ("working",) or a.get("status") == "busy") and not stuck:

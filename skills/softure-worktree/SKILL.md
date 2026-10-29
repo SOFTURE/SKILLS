@@ -123,15 +123,23 @@ Read `mode` at A0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8, the project's
      an open thread;
   2. no coordinator: go straight on;
   3. then Phase B by `autonomy.merge`:
-     - `"pr"` (default): `git fetch origin <main>`, merge `origin/<main>` into the
-       branch (A5 again if it moved), push the branch, open a pull request
-       (`Closes #N` when the change solves an issue), wait for green checks, merge
-       it on the forge (`gh pr merge <N> --merge`; the forge deletes the head
-       branch), confirm `origin/<main>` contains it, then the local cleanup of
-       step 5. A red check is fixed on the branch, never bypassed;
-     - `"push"`: Phase B as written, then push `<main>` through the pre-push hook
-       (step 6's "no push" does not apply). A rejected push → fetch, merge
-       `origin/<main>`, push again;
+     - `"pr"` (default): the pull request was opened at READY (`Closes #N` when
+       the change solves an issue). After the go, run
+       `python3 <S>/wt-merge-check.py`. `VERDICT merge-as-is` and the forge
+       reports the pull request mergeable → merge it as it is (its checks were
+       green at READY). `VERDICT remerge` (or `autonomy.remergeMain: "always"`)
+       → merge `origin/<main>` into the branch (A5), run the `RUN` lines it
+       printed, push, and enable the forge's auto-merge for the pull request
+       (`gh pr merge <N> --auto --merge` or the forge tool) so it merges on
+       green without polling; where auto-merge is not available, wait for
+       green checks and merge (`gh pr merge <N> --merge`). The forge deletes
+       the head branch. Confirm `origin/<main>` contains the merge, run
+       `python3 <S>/wt-roadmap.py done <change-id>` (it pushes the roadmap
+       state to `origin/<main>`), then the local cleanup of step 5. A red check
+       is fixed on the branch, never bypassed;
+     - `"push"`: Phase B as written (its `wt-roadmap.py done` included), then
+       push `<main>` through the pre-push hook (step 6's "no push" does not
+       apply). A rejected push → fetch, merge `origin/<main>`, push again;
   4. report the merge (SHA, PR) to the coordinator or the project chat, and
      close the session's thread when the harness has one.
 
@@ -169,15 +177,18 @@ so, carries the snippet from WORKFLOW §8.5 with `<owner>/<repo>` filled in from
 `context/workflow.json` from the main branch now and to tell the owner where to
 paste the snippet. Then carry on with the change; the check never blocks it.
 
-**`worktree.cloudState: "branch"`** changes points 1 and 6: the claim and every
-stage are committed **on the session branch only** (`wt-roadmap.py` does it by
-itself in that mode) and nothing goes to `origin/<main>` before the merge. Use
-it when a coordinator assigns the items — then the assignment, not a claim on
-`<main>`, keeps two sessions off one item, so A1 takes the item it was given
-and does not need `origin/<main>` to show it free. The branch carries the
-state: push it at READY (point 5), and earlier only if the project wants the
-board live (each first push of a ref may run the pre-push hook). Default
-`"main"` is the flow below.
+**`worktree.cloudState: "branch"`** changes points 1, 6 and 7: the claim and
+every stage are committed **on the session branch only** (`wt-roadmap.py` does
+it by itself in that mode), A4 archives without `--handoff` (the branch writes
+its own `done` row), and nothing goes to `origin/<main>` before the merge. The
+price: every merge of `<main>` into the branch conflicts on `roadmap.md`, so a
+merge can never skip the back-merge. Use it only when a push to `<main>` is
+expensive (a pre-push hook without a cheap path for `context/`-only pushes,
+WORKFLOW §2 → CI minutes) and a coordinator assigns the items — then the
+assignment, not a claim on `<main>`, keeps two sessions off one item, so A1
+takes the item it was given and does not need `origin/<main>` to show it free.
+Default `"main"` is the flow below: the roadmap state lives on `origin/<main>`,
+live for every stage, and the branch never edits `roadmap.md`.
 
 **1. Claim first, on origin, before anything else.** Right after A1 picks the
 item — before installing dependencies, before research — mark it taken **on
@@ -202,8 +213,8 @@ SHA before you start research.
 The row says `cloud session, branch <session-branch> — do not take in another
 session`. If `open` refuses because the row is already `in_progress`, another
 session owns it: pick again (A1), never take it over. Every `stage` call later
-in the chain goes to origin the same way, so the owner and every other session
-see live state. A1's "not already taken" check reads **`origin/<main>`**
+in the chain, `ready`, and `done` after the merge go to origin the same way, so
+the owner and every other session see live state. A1's "not already taken" check reads **`origin/<main>`**
 (`git fetch origin <main> && git show origin/<main>:context/foundation/roadmap.md`),
 not the local file.
 
@@ -251,9 +262,12 @@ project's CI on origin: push at READY and to sync before the merge, **never per
 phase or per commit** (WORKFLOW §2, CI minutes).
 
 **6. READY.** A3.8 runs before A4, as locally (unless the cadence defers it).
-A5 merges `origin/<main>` (after `git fetch origin <main>`), not the local one.
-Then `wt-roadmap.py ready <change-id>` (pushed to origin; with `cloudState:
-"branch"` committed on the branch), push the session branch, report, stop.
+A5 works on `origin/<main>` (after `git fetch origin <main>`), not the local
+one, and with `autonomy.merge: "pr"` merges it in only when
+`wt-merge-check.py` says `remerge` (A5). Then `wt-roadmap.py ready
+<change-id>` (pushed to origin; with `cloudState: "branch"` committed on the
+branch), push the session branch, open the pull request (with `autonomy.merge:
+"pr"`), report, stop.
 
 **No deploy from a cloud session, ever** — and, while `release.owner` is true,
 from any session: no ssh to servers, no tags, no `gh release`, no edit of
@@ -285,9 +299,11 @@ git push origin <main>                        # the pre-push hook is the classic
 Let the pre-push hook run — it *is* the full gate on `<main>` that A5 defers
 to. If it fails, fix on the session branch, merge again, push again; never
 `--no-verify`. A rejected push (`<main>` moved) → fetch, merge `origin/<main>`
-into `<main>`, push again. The roadmap row reaches `done` / `done_code` through
-the merge itself (the branch carries it). No worktree to remove; don't delete
-the session branch (the harness owns it).
+into `<main>`, push again. Then `python3 <S>/wt-roadmap.py done <change-id>`
+records `done` / `done_code` on `origin/<main>` from the archived change's
+`## Roadmap handoff` (with `cloudState: "branch"` the row arrived with the
+merge itself). No worktree to remove; don't delete the session branch (the
+harness owns it).
 
 ## The Prime Directive
 
@@ -464,8 +480,9 @@ folder"), use exactly that source. Moving an entry from `context/backlog/` into
 > **Cloud session:** replaced by *Cloud session* points 1–3.
 
 Order matters: **mark the roadmap on `<main>` first, then branch from it**, so
-the branch already carries its own `in_progress` row and the first back-merge
-has one conflict less.
+the claim is on `<main>` before any work starts. From here on the branch never
+edits `roadmap.md` (A4); every later stage is a `wt-roadmap.py` commit on
+`<main>`.
 
 ```bash
 python3 <S>/wt-roadmap.py open <change-id> [--note "prerequisite X on branch Y — merge after X"]
@@ -802,23 +819,37 @@ owner. This rule may be the only thing between a session and production.
 
 ### A4 — Archive on the branch
 
-Stage `archive`, then `/softure-archive <change-id> --auto` — **no push of
-`<main>`** (the change branch may go to origin, `<main>` never). It stamps
-`change.md`, moves the folder to `context/archive/<created>-<id>/` and commits
-`chore(archive): close <change-id>`. Commit uncommitted files of the change
-folder first (they are yours). Then, on the branch:
+Stage `archive`, then `/softure-archive <change-id> --auto --handoff` — **no
+push of `<main>`** (the change branch may go to origin, `<main>` never). It
+stamps `change.md`, moves the folder to `context/archive/<created>-<id>/` and
+commits `chore(archive): close <change-id>`. Commit uncommitted files of the
+change folder first (they are yours). Then, on the branch:
 
-- The roadmap row (table **and** item block) must read `done` — or
-  `done_code (<date>; waiting: <what waits for the release>)` when the change
-  awaits a deploy. Pure document changes stay `done`. Add the `## Done` line
-  (`WORKFLOW.md` §5) if the archive step did not.
+- **`roadmap.md` is not touched on the branch.** The archived `change.md`
+  carries `## Roadmap handoff` instead: `Status: done`, or `done_code
+  (waiting: <what waits for the release>)` when the change awaits a deploy
+  (pure document changes stay `done`), the `## Done` outcome, the owner checks
+  and the steps for `## Before the next release`. `wt-roadmap.py done
+  <change-id>` writes all of it on `<main>` right after the merge (Phase B).
+  With `cloudState: "branch"` archive without `--handoff`: the branch's row and
+  item block must read `done` / `done_code`, and the `## Done` line is there.
 - Re-point links: documents that referenced `context/changes/<id>/` must now
   point to `context/archive/<date>-<id>/` (`grep -rn "changes/<id>"`).
 - Commit on the branch.
 
 ### A5 — Sync with `<main>` and prove it
 
-`<main>` moved while you worked. It always does.
+`<main>` moved while you worked. It usually does.
+
+**Autonomous mode with `autonomy.merge: "pr"`: merge it in only when needed.** Run
+`python3 <S>/wt-merge-check.py` (it fetches `origin/<main>`). `VERDICT
+merge-as-is` → skip the merge; READY says `<main> not merged in
+(wt-merge-check: merge-as-is)` and the pull request is merged as it is after
+the go. `VERDICT remerge` → merge as below, then run the `RUN` lines it printed
+(the gates the merge can break: `GATES related` or `full`) before pushing.
+`autonomy.remergeMain: "always"` → always merge. The same check runs again
+after the go (*Operating mode*), because `<main>` keeps moving. Otherwise
+(manual mode, or `autonomy.merge: "push"`) the branch is always made current:
 
 ```bash
 cd <WT> && git merge <main>      # merge, NOT rebase: ## Progress holds the branch's SHAs
@@ -829,15 +860,15 @@ check them:
 
 | File | Resolution |
 | --- | --- |
-| `roadmap.md`, your row and block | **branch** (`done` / `done_code`) |
-| `roadmap.md`, every other row and section | **`<main>`** |
+| `roadmap.md` | **`<main>`**: the branch never edits it (A4 hands off). Only with `cloudState: "branch"`: your row and block from the **branch** (`done` / `done_code`), every other row and section from `<main>` |
 | `lessons.md` | `<main>`'s entries first, yours after, **renumbered** to the next free number (`wt-status.sh`). Update every reference to your old numbers (plan, reviews, archive docs, code comments): `grep -rn "L-<old>"`. |
 | migration number collision (`migrations.dir`) | `<main>`'s migration keeps its number. Save your migration body (it may hold hand edits). Remove your migration and whatever metadata the generator keeps for it, take `<main>`'s metadata, run `migrations.regenerate`, then diff the new file against the saved body and restore any hand edits. Update prose that names the number. |
 | `change.md` / archive docs of other changes | union: keep `<main>`'s links and add yours |
 | code | resolve on the merits; this is the only row that needs thought |
 
-Then commit the merge. **No full gates after a back-merge.** The pre-commit
-hook is enough; don't run the test gate or integration on the merged tree, and
+Then commit the merge. **No full gates after a back-merge** (with
+`autonomy.merge: "pr"`, the `RUN` lines of `wt-merge-check.py` instead). The
+pre-commit hook is enough; don't run the test gate or integration on the merged tree, and
 don't repeat A3.8 — the item's integration run was on the pre-merge branch,
 and that is the one READY reports. Full gates run twice anyway: in the
 worktree before the back-merge, and the classic way on `<main>` after Phase B
@@ -863,7 +894,7 @@ Write it in `chatLanguage` (default: `language`), for someone who wasn't there:
 ```
 <ID> `<change-id>` — ready to merge.
 
-Branch <change-id> (worktree ../<repo>-<change-id>), <N> commits, <main> merged in @ <sha>.
+Branch <change-id> (worktree ../<repo>-<change-id>), <N> commits, <main> merged in @ <sha> | <main> not merged in (wt-merge-check: merge-as-is).
 Gates on the branch before merging <main>: <each gate> ✓ (tests <count>)
 integration: <green|red|n/a|not configured> <passed>/<total> on <sha> — <url>; new reds: <list or "none">
   (reds already on <main>: <list or "none">; flaky: <list or "none">)
@@ -893,7 +924,9 @@ means sleeping until someone nudges you. Then, after every push of a branch
 with an open pull request (READY, and Phase B after the go), check its checks
 yourself until they finish: a scheduled wake-up every few minutes, for at most
 about 60 minutes, then report to the coordinator what is still pending. When
-the checks are green after the go, merge at once.
+the checks are green after the go, merge at once. After the go, prefer the
+forge's auto-merge (*Operating mode*, step 3): it merges on green by itself,
+so there is nothing to poll for.
 
 ## Phase B — merge (on the owner's signal; autonomous mode: see *Operating mode*)
 
@@ -936,6 +969,11 @@ merge at the end.
    proof that `<main>` holds exactly the branch's tree. The full gates on that
    tree run the classic way on `<main>` afterwards; say that in the report.
    With `--no-tests`, the owner has also waived that later run; say so.
+   Then record the roadmap state on `<main>`: `python3 <S>/wt-roadmap.py done
+   <change-id>` (a documents-only commit of the row, the item block, `## Done`,
+   the owner checks and the release steps from the archived change's
+   `## Roadmap handoff`; with `cloudState: "branch"` the merge already brought
+   them).
 5. **Cleanup — only your own:**
    ```bash
    git -C <WT> status --short            # must be empty (ignored files are fine)
@@ -973,13 +1011,14 @@ merge at the end.
 - **See the test fail before you believe the fix**; an arithmetic fix gets an
   oracle of a different kind.
 - **`<main>` is written by exactly two things:** `wt-roadmap.py` (one row per
-  commit) and the final `--no-ff` merge. Nothing else from this skill lands on
+  commit, `done` included) and the final merge. **The branch never edits
+  `roadmap.md`** (unless `cloudState: "branch"`). Nothing else from this skill lands on
   `<main>`, and nothing lands there before the owner's signal. Refs this skill
   may push: the change branch and whatever the project's integration command
   pushes — nothing else.
 - **The roadmap on `<main>` always shows where the change is:** `in_progress`
   from A2 with the current stage, `ready_to_merge` at READY,
-  `done` / `done_code` after the merge.
+  `done` / `done_code` right after the merge (`wt-roadmap.py done`).
 - **Every file edit from A2 to B1 lands under `<WT>`**, never in the main tree.
 - **Integration: the full suite, once per item** (cadence `change`; once per
   roadmap at the coordinator's M7 with cadence `roadmap`) — A3.8, after impl-review and

@@ -74,15 +74,23 @@ or languages.
   "worktree": {
     "setup": ["npm ci", "cp ../{repo}/.env .env"],   // run inside a fresh worktree
     "maxParallel": 4,
-    "cloudState": "main"            // cloud sessions: "main" pushes the claim and every stage to origin/<main> at once (default);
-                                    // "branch" commits them on the session branch only, <main> changes only by the merge
+    "cloudState": "main"            // cloud sessions: "main" pushes the claim, every stage and the final done to origin/<main>
+                                    // at once (default; branches never edit roadmap.md, so merging <main> in never conflicts
+                                    // on it); "branch" commits them on the session branch only, <main> changes only by the merge
   },
   "release": { "owner": true },     // releases and deploys are never done by skills when true; false lets an autonomous
                                     // project release through its own pipeline (never a production deploy, §8.4)
   "autonomy": {                     // optional, read only when mode is "autonomous" (§8.4)
     "source": "roadmap",            // "roadmap": items come from roadmap.md; "issues": the forge's open issues are the queue
-    "merge": "pr",                  // "pr": pull request with fresh <main>, merged on the forge after green checks (default);
+    "merge": "pr",                  // "pr": pull request, merged on the forge after green checks (default);
                                     // "push": local --no-ff merge, then push <main> through the pre-push hook
+    "remergeMain": "when-needed",   // "when-needed" (default): merge <main> into the branch before the merge only when
+                                    // wt-merge-check.py finds an overlapping file, a migration or a dependency change;
+                                    // "always": before every merge
+    "relatedTests": null,           // e.g. "npx vitest related --run {files}": the test gate after a merge of <main>, for the
+                                    // files the branch changes; null = the full test gate
+    "fullGatePaths": [],            // extra globs that force the full gates after a merge of <main> (built in: lockfiles,
+                                    // package manifests, test runner and TypeScript config, test setup, hook config, CI)
     "reports": { "every": 60, "hours": null }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
                                     // window; one recurring routine on full hours, `every` rounded up to a multiple of 60.
                                     // `hours: null` = around the clock (24/7), recommended for autonomous runs: the routine
@@ -117,10 +125,14 @@ Parallel sessions push often, and every push can start the project's CI. The ski
 - the full integration suite runs once per item (`cadence: "change"`) or once per roadmap (`"roadmap"`), never
   twice on the same commit: `integration.lookup` lets `wt-integration.sh` reuse a stored green result, and
   `integration.coveredByRelease` hands the roadmap's run to the release pipeline when a release follows anyway;
-- a "finish" item does not start a run of its own under `cadence: "roadmap"`.
+- a "finish" item does not start a run of its own under `cadence: "roadmap"`;
+- before a merge, `<main>` is merged into the branch only when needed (`autonomy.remergeMain`), and such a merge
+  re-runs only what it can break (`autonomy.relatedTests`), so a merge without overlap costs no push and no hook.
 
 The project's side: when the git hooks already run the gates (`pre-commit`, `pre-push`), CI does not need to
-repeat them on every pushed branch. Run CI on pull requests, on the main branch or on demand, skip changes
+repeat them on every pushed branch. A pre-push hook needs a cheap path for a push whose changed files are all
+under `context/` (the roadmap commits of `wt-roadmap.py`): skip typecheck, lint and tests, keep the language
+check. Without it every stage costs a full suite, which is what `cloudState: "branch"` works around. Run CI on pull requests, on the main branch or on demand, skip changes
 that touch only documents, and cancel superseded runs (`concurrency`).
 
 ## 3. Artifacts
@@ -185,7 +197,16 @@ Files this change owns exclusively, things it must not touch, deadlines.
 
 ## Notes
 Free-form. Orchestrators append signals here.
+
+## Roadmap handoff            (only on a change branch, written by softure-archive --handoff)
+- **Status:** done | done_code (waiting: <what>)
+- **Done:** <the `## Done` outcome, one line>
+- **Owner check:** <item text> (Manual N.M)          (one line per check)
+- **Before the next release:** <step>                  (one line per step)
 ```
+
+`## Roadmap handoff` carries the roadmap transition of a change archived on its branch: the branch never edits
+`roadmap.md`, and `wt-roadmap.py done <change-id>` applies these lines on `<main>` right after the merge (§5).
 
 **Status values (exact strings, in this order):**
 
@@ -262,9 +283,13 @@ Why this order; which items may run in parallel and which files each one owns.
 
 `Mode` is `autonomous` (an orchestrator may run it end to end) or `owner` (needs the owner at the keyboard).
 In `--auto`, decisions go to a `## Decisions (auto)` section at the end of roadmap.md.
-`softure-archive` owns the transition to `done` / `done_code`: it rewrites the row and the item block and appends to
-`## Done`. Orchestrators only write `in_progress` and `ready_to_merge`. They fall back to writing `done` themselves
-only when the archive step did not.
+`softure-archive` decides the transition to `done` / `done_code`. On the main branch it rewrites the row and the
+item block and appends to `## Done` itself. On a change branch (`softure-worktree`, unless `worktree.cloudState` is
+`"branch"`) it writes the same decision into the archived `change.md` → `## Roadmap handoff`, and
+`wt-roadmap.py done <change-id>` applies it on `<main>` right after the merge. **A change branch never edits
+`roadmap.md`**: every stage, from `in_progress` to `done`, is one script commit on `<main>`, so merging `<main>` into a
+branch never conflicts on the roadmap. Orchestrators fall back to `wt-roadmap.py done` themselves when a thread did not
+run it.
 Each item block may carry `- **Input:** <path>` (e.g. the change folder), which tells research where its brief lives.
 `change.md` is defined **only** in §4. softure-roadmap `--open-changes` and softure-new write the same format.
 
@@ -509,7 +534,7 @@ runs in a checkout and reads the block itself.
 | step | local | hosted project |
 | --- | --- | --- |
 | launch (M3) | `wm-launch.sh` | start a thread session with the standard brief (item ID, change-id, outcome, base, owned files, waits for, merge path, report-to, "follow AGENTS.md → Operating mode: autonomous") |
-| in-flight state (M0.1) | `wm-resume.sh` | roadmap rows on `origin/<main>` (with `cloudState: "branch"` they show only at merge, so also memory), the harness's thread list, open pull requests |
+| in-flight state (M0.1) | `wm-resume.sh` | roadmap rows on `origin/<main>`, live for every stage (with `cloudState: "branch"` they show only at merge, so also memory), the harness's thread list, open pull requests |
 | watch (M4) | `wm-watch.sh` Monitor | thread messages and the report routine; no polling when PR events reach the threads, otherwise each thread polls its own CI (below) |
 | READY / merged report | `SendMessage` | cross-session message to the coordinator's session, never a reply in the thread |
 | go | a signal in the conversation | coordinator-to-thread message |
