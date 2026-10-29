@@ -179,9 +179,11 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   session was given. When it is missing, the first message to the coordinator says so, carries the
   snippet with `<owner>/<repo>` filled in, and asks the coordinator to tell the owner where to paste
   it. Then carry on with the change.
-- At READY (green PR, fresh main branch merged in): send the condensed result to the coordinator and
-  wait for its go. Never write that it waits for the owner. Without a coordinator, merge at READY.
-- After the go: merge (below), then send the merge result to the coordinator.
+- At READY (green PR, the main branch merged in when Merging below says it is needed): send the
+  condensed result to the coordinator and wait for its go. Never write that it waits for the owner.
+  Without a coordinator, merge at READY.
+- After the go: merge (below), then record the roadmap state on the main branch
+  (`wt-roadmap.py done <change-id>`) and send the merge result to the coordinator.
 - **Watch your own CI when PR events cannot reach you.** At session start, check whether pull request
   activity can reach the thread (the subscription succeeds, the forge app has access to the
   repository). If not, after every push check the pull request's checks yourself until they finish:
@@ -193,11 +195,24 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 
 **Merging.**
 - Merges are serial, first ready first merged. A ready merge never waits for the owner.
-- Right before merging, merge the fresh main branch into the branch and resolve conflicts yourself.
-  The main branch is the source of truth: what it has and the branch lacks is pulled in and wired.
-- Merging the fresh main branch in does not re-run the full local suite when the incoming changes
-  touch no file the branch changes and add no migration: the pull request's CI on the merged branch is
-  the gate. Overlapping files or a migration: run the full gates again before pushing.
+- **The roadmap state lives on the main branch, never on a change branch.** Branches do not edit
+  `roadmap.md`: `wt-roadmap.py` writes every stage on the main branch (`open`, `stage`, `ready`), and
+  the thread runs `wt-roadmap.py done <change-id>` right after its merge; it takes the `## Done`,
+  owner-check and release lines from the archived `change.md` (`softure-archive --handoff`). Only
+  `worktree.cloudState: "branch"` keeps the old flow, where the branch carries its own row.
+- **Merge the main branch in only when needed** (`autonomy.remergeMain: "when-needed"`, the default).
+  After the go, run `softure-worktree/scripts/wt-merge-check.py`. `merge-as-is` (the forge reports the
+  pull request mergeable, and since the branch last merged it the main branch brought no migration, no
+  dependency change and no file the branch also changes): merge the pull request as it is; its checks
+  were green at READY. `remerge`: merge the fresh main branch in, resolve conflicts yourself, run the
+  `RUN` lines it prints, push. The main branch is the source of truth: what it has and the branch lacks
+  is pulled in and wired. `"always"`: merge the main branch in before every merge.
+- **A merge of the main branch re-runs only what it can break:** every gate except the test gate, plus
+  `autonomy.relatedTests` for the files the branch changes. The full suite runs again only when the
+  incoming changes add a migration or touch dependencies, test setup or config (`wt-merge-check.py`
+  prints `GATES full`), and once per roadmap in the release gate.
+- **Merge on green without polling.** When a merge has to wait for checks, enable the forge's auto-merge
+  for the pull request at go time where it is available; poll the checks only where it is not.
 - `autonomy.merge: "pr"` (default): open a pull request (`Closes #N` when it solves an issue), wait for
   green checks, merge it on the forge; the forge deletes the head branch. `"push"`: `git merge --no-ff`
   locally, then push the main branch through the pre-push hook.

@@ -215,7 +215,7 @@ exactly like one it launched. Act on each line:
 | `ADOPT` | worker process alive and working | nothing to wake — add it to the Monitor. When `coord` is not this session, also `SendMessage <change-id>`: "the coordinator is now <this session> — I do the merge; send questions here; keep working, no reply needed" |
 | `NUDGE` | worker alive but its last message is a usage limit, a machine sleep or an API/network error | usage limit with a reset time still ahead → wait for it (one-shot `CronCreate` at that time); otherwise `SendMessage` "you were interrupted by <cause> — continue from <last commit/step>". If the send fails ("not reachable"), treat as `RELAUNCH` |
 | `RELAUNCH` | no live worker process; worktree and branch still there | `claude stop <session>` (clears the dead entry — `wm-launch.sh` refuses a name whose state is not `done`), then `wm-launch.sh <ID> <change-id> <this session>`; the worker resumes from its branch (`/softure-worktree` A0, resume ladder). Check `git -C <WT> status` first — uncommitted files stay, the worker picks them up |
-| `FIX-ROW` | `<main>` already has the merge commit, the row was never flipped | set the row (table and block) to `done` / `done_code` from the archived `change.md` and commit (documents only); remove a leftover worktree/branch if the merge is on `<main>` (`git branch -d` refuses otherwise — good) |
+| `FIX-ROW` | `<main>` already has the merge commit, the row was never flipped | `python3 <S>/wt-roadmap.py done <change-id>` (row, block, `## Done`, owner checks and release steps from the archived `change.md`; documents only); remove a leftover worktree/branch if the merge is on `<main>` (`git branch -d` refuses otherwise — good) |
 | `REPORT` | row in flight, no branch and no worktree | tell the owner; don't guess — the change may live on another machine or in a cloud session |
 
 `coord` is the coordinator named in the worker's launch prompt (`wm-launch.sh`
@@ -479,13 +479,15 @@ points of this skill:
   then behind — B2 back-merges it inside its worktree (`git -C <WT> merge
   <main>`) with the A5 conflict table, commits with the hook only, and comes
   back. That is this session's job now, not the worker's.
-- **Conflicts and collisions — resolve, don't stop:** roadmap row → branch,
-  other rows → `<main>`; `lessons.md` → renumber to the next free
+- **Conflicts and collisions — resolve, don't stop:** `roadmap.md` →
+  `<main>` (branches never edit it; only with `cloudState: "branch"`: the
+  merged change's row → branch, other rows → `<main>`); `lessons.md` → renumber to the next free
   (`wt-status.sh`) and fix references; migration number clash → `<main>`
   keeps its number, regenerate yours (`migrations.regenerate`) and restore
   hand edits (A5); code → on the merits, then run the tests of the touched
   files.
-  **Resolve the roadmap row by row, never hunk by hunk.** One conflict hunk
+  **With `cloudState: "branch"`, resolve the roadmap row by row, never hunk by
+  hunk.** One conflict hunk
   often spans several adjacent table rows: yours plus a neighbour whose stage
   moved on `<main>` meanwhile. Taking the whole hunk from the branch puts that
   neighbour back to a stale stage. Inside each hunk, pair the lines by row ID:
@@ -519,7 +521,8 @@ points of this skill:
 
   One signal, one place: if a check gates the deploy, it goes to the release
   section and the decisions section only points at it. Don't duplicate what
-  the worker already wrote there. **Nothing to report → write nothing** — an
+  the worker already wrote there, nor what `wt-roadmap.py done` took from the
+  archived change's `## Roadmap handoff`. **Nothing to report → write nothing** — an
   empty entry is noise in the lists the owner reads before a deploy. Commit
   together with the merge's roadmap fix-up (documents only, own paths).
 
@@ -531,9 +534,10 @@ points of this skill:
   `<main>`** are a signal of their own: unless a roadmap row already carries
   them, queue them as a new row and a worker ("does not fix"), with the test
   names and the run URL in its `change.md`.
-- **Roadmap:** after the merge the row must read `done` / `done_code` (the
-  branch wrote it at archive). Check it on `<main>`; if it still says
-  `ready_to_merge`, fix that row (table and block) alone and commit.
+- **Roadmap:** after the merge the row must read `done` / `done_code` (Phase B
+  ran `wt-roadmap.py done`; with `cloudState: "branch"` the branch wrote it at
+  archive). Check it on `<main>`; if it still says `ready_to_merge`, run
+  `python3 <S>/wt-roadmap.py done <change-id>` yourself.
 - **Report** per merge, three lines: merge SHA, conflicts and how resolved,
   what waits for the release.
 

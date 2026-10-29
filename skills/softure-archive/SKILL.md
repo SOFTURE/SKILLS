@@ -8,7 +8,7 @@ description: >
   checks for the owner, fix links, and commit. Handles changes without a plan, a roadmap with
   someone else's uncommitted edits, and a half-finished earlier run. Use when the user says
   "archive the change", "close this change", "we're done with X", or after softure-impl-review.
-argument-hint: "<change-id | path> [--auto] [--done-code \"<what waits>\"]"
+argument-hint: "<change-id | path> [--auto] [--done-code \"<what waits>\"] [--handoff]"
 allowed-tools:
   - Read
   - Glob
@@ -77,7 +77,9 @@ hard stops. Sample reports: [references/example-archive.md](references/example-a
    is the `created` date from change.md, not today. `git mv` stages the rename with the
    committed content only, so run `git add context/archive/<created>-<id>` afterwards or the
    stamp stays out of the commit.
-3. **Update the roadmap** (when change.md has `roadmap_item`, or a row with `` `<id>` `` exists):
+3. **Update the roadmap** (when change.md has `roadmap_item`, or a row with `` `<id>` `` exists).
+   With `--handoff` (a change branch, see *Inside a worktree*), do not touch `roadmap.md`: write
+   the same decisions into `change.md` → `## Roadmap handoff` instead (below), then go on with step 5.
    - Match exactly: the row whose second cell is `` `<id>` ``. One item can spawn several
      changes, so a near miss is never closed. If `roadmap_item` names an ID whose row carries a
      different change-id, report it and leave the row alone.
@@ -139,15 +141,37 @@ checks. Pick `done_code` whenever any Manual item is open or the change affects 
 
 ## Inside a worktree
 
-Archive **on the change branch**, before the merge. The roadmap edits will then conflict
-textually with other merged changes; that is expected. `softure-worktree` resolves them row by
-row during the merge. Do not touch rows of other items.
+Archive **on the change branch**, before the merge. `softure-worktree` passes `--handoff` (unless
+`worktree.cloudState` is `"branch"`): the branch never edits `roadmap.md`, because the roadmap
+state lives on the main branch and is written only by `wt-roadmap.py`. Steps 3 and 4 then write
+one section at the end of the archived `change.md` (WORKFLOW §4), in this exact form:
+
+```markdown
+## Roadmap handoff
+- **Status:** done_code (waiting: <what waits>)
+- **Done:** <outcome, one line>
+- **Owner check:** <item text> (Manual N.M)
+- **Before the next release:** <what must happen before the next deploy>
+```
+
+`Status` is `done` or `done_code (waiting: <what>)`, chosen as in step 3 (no date: the script
+stamps the merge day). One `Owner check` line per open Manual item or owner-targeted deferred
+finding, one `Before the next release` line per deploy prerequisite; leave out lines that have
+nothing to say. Right after the merge, `wt-roadmap.py done <change-id>` reads the section from
+the main branch and writes the row, the item block, `## Done`, `## Owner decisions and checks`
+and `## Before the next release`. The report says `roadmap: handed off (wt-roadmap.py done after
+the merge)`.
+
+Without `--handoff` (`cloudState: "branch"`), the roadmap edits are made on the branch and
+conflict textually with other merged changes; that is expected. `softure-worktree` resolves them
+row by row during the merge. Do not touch rows of other items.
 
 ## Checklist
 
 - [ ] No uncommitted files of the change before and after; nobody else's WIP or staged work in the commit.
 - [ ] `status: archived` and `archived_at` set, the stamp inside the commit; folder named by `created`.
-- [ ] Roadmap row last cell, item block status, `## Done` and `updated` all changed (or the skip is reported).
+- [ ] Roadmap row last cell, item block status, `## Done` and `updated` all changed (or the skip is reported);
+      with `--handoff`, `roadmap.md` untouched and `## Roadmap handoff` written instead.
 - [ ] Open Manual items listed for the owner; deploy prerequisites under `## Before the next release`.
 - [ ] No dangling links; one commit, conventional message, not pushed.
 
