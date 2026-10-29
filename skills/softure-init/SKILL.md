@@ -94,7 +94,12 @@ start any work: no change, PRD or roadmap is created here.
 8. **Report** a status block, one line per artifact (`created`, `present` or `merged: <keys>`),
    then the unresolved values the owner should fill in, every inferred value with its reason,
    and the next step. With `mode: "autonomous"`, end it with the project-instructions snippet
-   for hosted projects (WORKFLOW §8.5), `<owner>/<repo>` filled in from `origin`, ready to paste.
+   for hosted projects (WORKFLOW §8.5), `<owner>/<repo>` filled in from `origin`, ready to paste,
+   and list the paste among the unresolved values as an open owner step
+   (`[ ] paste the WORKFLOW §8.5 pointer into the hosted project's instructions`). It stays open
+   until a session confirms the pointer is present: a re-run of init in an autonomous project lists
+   it again unless the owner confirmed it, and every hosted thread checks it at session start
+   (`softure-worktree` → Cloud session), so nothing later assumes the paste happened.
    Then stop: do not chain into other skills.
 
 ## `workflow.json`
@@ -154,6 +159,7 @@ Optional keys other than `research.sources` are never written in `--auto`.
 - [ ] Every gate in `workflow.json` points at something that exists, or is `null`.
 - [ ] Gate commands use the repo's package manager.
 - [ ] The report lists the unresolved values the owner should fill in, and every inferred value.
+- [ ] With `mode: "autonomous"`: the §8.5 snippet is printed and the paste is an open owner step.
 
 ## Do not
 

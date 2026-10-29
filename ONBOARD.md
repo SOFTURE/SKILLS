@@ -143,4 +143,5 @@ result, and wait for my word before anything leaves the working tree. Talk to me
 - Switching mode is the owner's explicit word: change `mode` in `context/workflow.json`, re-run the
   installer, commit both as `docs(rules): switch to <mode> mode` (WORKFLOW §8).
 - A hosted project's main chat (for example a claude.ai project) needs the one-paragraph pointer from
-  WORKFLOW §8.5 in its project instructions; the AUTO prompt prints it when it is missing.
+  WORKFLOW §8.5 in its project instructions; the AUTO prompt prints it when it is missing, and every
+  thread checks it at session start and tells the coordinator, which then reads `AGENTS.md` itself.

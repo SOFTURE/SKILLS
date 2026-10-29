@@ -482,6 +482,20 @@ AGENTS.md (the managed SOFTURE block) and context/workflow.json from the main br
 coordinator described there: follow "Operating mode: autonomous", starting with "Start of a run".
 ```
 
+A coordinator without the pointer runs on the harness defaults (ask the owner before every merge),
+so the paste is verified, never assumed:
+- **Thread check.** Every thread of a hosted autonomous project checks, at session start, whether
+  the project instructions it was given contain this pointer (or any reference to this repository's
+  `AGENTS.md`). If not, its first message to the coordinator says so, carries the snippet with
+  `<owner>/<repo>` filled in from `origin`, and asks the coordinator to tell the owner where to paste
+  it. The thread then carries on with its change (`softure-worktree` → Cloud session).
+- **Coordinator self-check.** A coordinator told by a thread (or noticing itself) that it has not
+  loaded the managed block reads `AGENTS.md` and `context/workflow.json` from the main branch at once
+  and follows them for the rest of the run, without waiting for the paste: from then on it gives the
+  go and runs the merge queue itself. It posts the snippet to the owner in the main chat, with where
+  to paste it (the hosted project's instructions), records in memory that the pointer is missing, and
+  repeats it as an owner step in every report until the owner confirms the paste.
+
 **New roadmap.** When the owner hands over a new roadmap, the coordinator starts one roadmap thread
 that only runs `softure-roadmap`, merges `roadmap.md` and ends. Only then does it start one thread
 per ready item. A single thread never records a roadmap and implements its items.

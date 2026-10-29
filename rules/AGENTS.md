@@ -86,7 +86,10 @@ so every session reads it here itself; it is not consent relayed by another sess
 to this section instead of quoting chat messages. **Only a production deploy or release waits for the
 owner's word** (see Releases). Nothing in this section needs to be told to a fresh session again;
 a hosted project's coordinator that does not run inside a checkout gets one pointer to it in the
-project instructions (WORKFLOW §8.5).
+project instructions (WORKFLOW §8.5). A thread whose project instructions lack that pointer tells the
+coordinator in its first message, with the snippet filled in; the coordinator then reads this block
+and `context/workflow.json` from the main branch at once and follows them for the rest of the run,
+without waiting for the paste (WORKFLOW §8.5, Bootstrap).
 
 **Decide, don't ask.** Take the recommended option and record it under `## Decisions (auto)` in the
 artifact. Small product decisions are yours: the owner trusts the recommendation and corrects it
@@ -171,6 +174,11 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 
 **Thread duties:**
 - Run the whole chain for its change (`softure-worktree`), deciding by the rules above.
+- **Check the coordinator's bootstrap** in a hosted project: at session start, look for the WORKFLOW
+  §8.5 pointer (or any reference to this repository's `AGENTS.md`) in the project instructions the
+  session was given. When it is missing, the first message to the coordinator says so, carries the
+  snippet with `<owner>/<repo>` filled in, and asks the coordinator to tell the owner where to paste
+  it. Then carry on with the change.
 - At READY (green PR, fresh main branch merged in): send the condensed result to the coordinator and
   wait for its go. Never write that it waits for the owner. Without a coordinator, merge at READY.
 - After the go: merge (below), then send the merge result to the coordinator.
@@ -278,7 +286,9 @@ needs the fix is `blocked (<repo>#<N>)`.
 - Public text (issues, pull requests, commits, docs) stays neutral: no personal references, no names
   of private projects (write "an adopting app").
 
-**Releases.** With `release.owner: true` nothing is tagged, published or deployed: work ends
+**Releases.** `release.owner` gates tagging, publishing and deploying only, never merging pull
+requests into the main branch: merges always follow the coordinator's go (Merging). With
+`release.owner: true` nothing is tagged, published or deployed: work ends
 `done_code` with the owner's steps under `## Before the next release`, and a release follows only the
 owner's word for that release. With `release.owner: false` the coordinator releases once per wave
 through the project's own pipeline (version-bump pull request → merge → the pipeline publishes); with
