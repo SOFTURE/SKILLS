@@ -206,7 +206,11 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   dependency change and no file the branch also changes): merge the pull request as it is; its checks
   were green at READY. `remerge`: merge the fresh main branch in, resolve conflicts yourself, run the
   `RUN` lines it prints, push. The main branch is the source of truth: what it has and the branch lacks
-  is pulled in and wired. `"always"`: merge the main branch in before every merge.
+  is pulled in and wired. `"on-conflict"`: `merge-as-is` unless the merge would conflict (the forge
+  reports the pull request not mergeable: pass `--not-mergeable`; or the script's trial merge
+  conflicts); overlap, migrations and dependency changes alone do not force a merge of the main
+  branch, so the merged result is first tested on the main branch and in the release gate.
+  `"always"`: merge the main branch in before every merge.
 - **A merge of the main branch re-runs only what it can break:** every gate except the test gate, plus
   `autonomy.relatedTests` for the files the branch changes. The full suite runs again only when the
   incoming changes add a migration or touch dependencies, test setup or config (`wt-merge-check.py`
@@ -217,7 +221,8 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   green checks, merge it on the forge; the forge deletes the head branch. `"push"`: `git merge --no-ff`
   locally, then push the main branch through the pre-push hook.
 - When one thread has had to chase the main branch several times, the coordinator tells the others
-  to hold their merges until it lands.
+  to hold their merges until it lands. Under `remergeMain: "on-conflict"` the go never asks for
+  "Update branch" or a merge of the main branch: the thread merges on `wt-merge-check.py`'s verdict.
 - Hooks stay on: never `--no-verify`, never force-push, never disable or loosen a test to get green.
   Long hooks run in the background with the longest timeout; a hung one is killed by its PID and
   re-run.

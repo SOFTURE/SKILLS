@@ -2,7 +2,7 @@
 """Decide whether a change branch must merge the main branch in again before its merge, and which gates
 that merge has to re-run.
 
-    wt-merge-check.py [--base <ref>] [--no-fetch]
+    wt-merge-check.py [--base <ref>] [--no-fetch] [--not-mergeable]
 
 Run in the change branch's checkout (worktree or cloud session), after the go and before merging the
 pull request. Compares what `<main>` brought since the branch last merged it (merge-base..origin/<main>)
@@ -10,12 +10,23 @@ with what the branch changes (merge-base..HEAD) and prints:
 
     VERDICT  merge-as-is | remerge
     GATES    none | related | full
-    <one line per finding: incoming, overlap, migrations, dependencies, test setup/config>
+    <one line per finding: incoming, conflict, overlap, migrations, dependencies, test setup/config>
     RUN      <command>        (only with `remerge`: the gates to run on the merged tree, in order)
 
-`merge-as-is` — `<main>` has not moved, or (with `autonomy.remergeMain: "when-needed"`, the default) it
-brought no migration, no dependency change and no file the branch also changes. Merge the pull request
-as it is, provided the forge reports it mergeable and its checks were green at READY. No push, no hook.
+`conflict` is a local trial merge (`git merge-tree --write-tree`, nothing is written to the branch or the
+working tree): `none`, `yes` with the conflicting files, or `unknown` when this git cannot run it (2.38+
+needed). Pass `--not-mergeable` when the forge reports the pull request not mergeable; it counts as a
+conflict under every policy.
+
+`merge-as-is` — `<main>` has not moved, or `autonomy.remergeMain` finds no reason to merge it in:
+- `"when-needed"` (the default): `<main>` brought no migration, no dependency change and no file the
+  branch also changes (a conflict always comes with such a file);
+- `"on-conflict"`: the merge does not conflict. Overlap, migrations and dependency changes are still
+  printed (and still decide GATES when a remerge does happen), but they do not force a remerge. The
+  merged result is then not tested before the merge: a change that is incompatible without conflicting
+  surfaces on `<main>` or in the release gate instead of on the branch.
+Merge the pull request as it is, provided the forge reports it mergeable and its checks were green at
+READY. No push, no hook.
 
 `remerge` — merge `origin/<main>` into the branch, resolve, run the RUN lines, push. GATES says what the
 merge can break:
@@ -40,6 +51,7 @@ sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/s
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wt_config import load_config  # noqa: E402
 
+POLICIES = ("when-needed", "on-conflict", "always")
 DEPENDENCY_FILES = {
     "package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
     "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".nvmrc", ".node-version",
@@ -75,10 +87,27 @@ def listing(files: list[str], limit: int = 8) -> str:
     return ", ".join(files[:limit]) + more
 
 
+def trial_merge(merge_base: str, head: str, base_sha: str) -> tuple[str, list[str]]:
+    """Merge `base_sha` into `head` in memory. Returns ("none" | "yes" | "unknown", conflicting files)."""
+    result = subprocess.run(
+        ["git", "merge-tree", "--write-tree", "--name-only", "--no-messages",
+         f"--merge-base={merge_base}", head, base_sha],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        return "none", []
+    if result.returncode == 1:
+        lines = [line for line in result.stdout.splitlines()[1:] if line]
+        return "yes", sorted(set(lines))
+    return "unknown", []
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(add_help=True, description=__doc__.split("\n\n")[0])
     parser.add_argument("--base", help="ref of the main branch to compare with (default: origin/<main>)")
     parser.add_argument("--no-fetch", action="store_true")
+    parser.add_argument("--not-mergeable", action="store_true",
+                        help="the forge reports the pull request not mergeable (a conflict with the main branch)")
     opts = parser.parse_args()
 
     config = load_config()
@@ -101,8 +130,18 @@ def main() -> None:
     setup = [f for f in incoming if matches(f, FULL_GATE_PATTERNS + list(autonomy.get("fullGatePaths") or []))]
 
     policy = autonomy.get("remergeMain") or "when-needed"
+    if policy not in POLICIES:
+        sys.exit(f"autonomy.remergeMain={policy!r} is not one of: {', '.join(POLICIES)}")
     moved = merge_base != base_sha
-    needed = moved and (policy == "always" or bool(overlap or migrations or dependencies))
+    conflict, conflicting = trial_merge(merge_base, head, base_sha) if moved else ("none", [])
+    conflicts = opts.not_mergeable or conflict != "none"  # unknown counts as a conflict: never guess clean
+    if policy == "always":
+        needed = moved or opts.not_mergeable
+    elif policy == "on-conflict":
+        needed = conflicts
+    else:
+        # a textual conflict always shows up as an overlapping file
+        needed = opts.not_mergeable or (moved and bool(overlap or migrations or dependencies))
     related_cmd = autonomy.get("relatedTests")
     full = bool(migrations or dependencies or setup) or not related_cmd
 
@@ -113,6 +152,14 @@ def main() -> None:
     else:
         count = int(git("rev-list", "--count", f"{merge_base}..{base_sha}").strip())
         print(f"incoming: {len(incoming)} files in {count} commits since {merge_base[:8]} ({base} {base_sha[:8]})")
+    if conflict == "yes":
+        print(f"conflict: yes — {listing(conflicting)}")
+    elif conflict == "unknown":
+        print("conflict: unknown — `git merge-tree --write-tree` failed (git 2.38+ needed); treated as a conflict")
+    else:
+        print("conflict: none")
+    if opts.not_mergeable:
+        print("forge: the pull request is not mergeable (--not-mergeable)")
     print(f"overlap: {listing(overlap)}")
     print(f"migrations: {listing(migrations)}")
     print(f"dependencies: {listing(dependencies)}")
