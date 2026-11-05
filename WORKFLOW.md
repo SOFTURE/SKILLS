@@ -208,7 +208,8 @@ Free-form. Orchestrators append signals here.
 ## Roadmap handoff            (only on a change branch, written by softure-archive --handoff)
 - **Status:** done | done_code (waiting: <what>)
 - **Done:** <the `## Done` outcome, one line>
-- **Owner check:** <item text> (Manual N.M)          (one line per check)
+- **Owner check:** <item text> (Manual N.M)          (one line per check; manual mode only)
+- **Owner step:** <exact step> (<reason>)             (one line per thing only the owner can do)
 - **Before the next release:** <step>                  (one line per step)
 ```
 
@@ -282,7 +283,8 @@ Why this order; which items may run in parallel and which files each one owns.
 - [ ] what must happen before the next release/deploy (env var, manual migration step, …) (**FC-1**)
 
 ## Owner decisions and checks
-- [ ] **FC-1**: what waits for the owner (Manual 2.4). <evidence path>
+- [ ] **FC-1**: what waits for the owner (Manual 2.4). <evidence path>       (manual mode)
+- [ ] **FC-2**: owner step: <exact step> (<why only the owner>). <path>       (autonomous mode: decisions and owner steps only)
 
 ## Done
 - **FC-0** `some-change`: one line; archived in `archive/2026-09-30-some-change/`
@@ -310,7 +312,9 @@ Parsing rules (scripts depend on them):
   - `in_progress (<stage>, since <YYYY-MM-DD>; <where>)`
   - `ready_to_merge (since <YYYY-MM-DD>; <where>)`
   - `done`
-  - `done_code (<YYYY-MM-DD>; waiting: <what>)`: merged, waits for a release or an owner check.
+  - `done_code (<YYYY-MM-DD>; waiting: <what>)`: merged, waits for a release or an owner check
+    (manual mode). In autonomous mode it never waits for an owner check: `waiting: release` or
+    `waiting: owner step: <what>` (§8).
 - **Stages** (first token inside the parentheses of `in_progress`): `research`, `frame`, `plan`,
   `plan-review`, `implement N/M`, `impl-review`, `integration`, `archive`.
 - The item block mirrors the row status in `- **Status:** …` directly under `- **Change ID:**`.
@@ -407,7 +411,10 @@ Rules:
 - It is the last section of the file, with one `### Phase N:` per `## Phase N:`.
 - Only `softure-implement` ticks boxes.
 - **The resume point is the first `- [ ]` under an `#### Automated` heading.** Open Manual items never block resuming.
-  They are carried to the roadmap's `## Owner decisions and checks` at archive time.
+  They are carried to the roadmap's `## Owner decisions and checks` at archive time (manual mode).
+- **Autonomous mode:** every Manual item ends `(evidence: <how the run checks it>)` or `(owner only: <reason>)`. The run
+  verifies the evidence items itself and ticks them with it; only `owner only` items stay open, and they become tracked
+  `Owner step:` lines, never owner checks (AGENTS.md → Operating mode: autonomous).
 - Notation:
   - done: `- [x] N.M text — <sha>`;
   - a Manual item the agent verified itself: `- [x] N.M text — <sha> (verified by agent: <how>)`;
@@ -482,6 +489,7 @@ it for every skill). In `--auto`:
 | `softure-worktree` READY | stop, merge on the owner's signal | merge (queue slot from the coordinator, if any) |
 | `softure-worktree-manager` | owner confirms the batch and every merge | launches, merges, refills, reports by itself |
 | push / PR / issue close / release | only on the owner's word for that action | §8.4 rules |
+| Manual criteria | open ones go to the owner as checks | the run verifies them (`(evidence: …)`); only `(owner only: <reason>)` items become tracked owner steps |
 
 ### 8.3 Manual mode
 
@@ -492,7 +500,8 @@ leaves the working tree without the owner's word, approvals never carry over to 
 
 Defined in `rules/AGENTS.md` → `## Operating mode: autonomous`: the standing consent, the
 coordinator and its sessions, the start of a run, the merge queue, reports, issues as the work
-source, filing gaps in SOFTURE packages, releases, and the stop rules. `autonomy` in `workflow.json` (§2) tunes it per project. Project-specific standing
+source, filing gaps in SOFTURE packages, releases, the stop rules, and the rule that no item is
+left for the owner's manual verification (the run verifies, closes, archives and releases). `autonomy` in `workflow.json` (§2) tunes it per project. Project-specific standing
 orders (a repo that is read-only, an extra label, a test that must not run per push) belong in the
 project's own `AGENTS.md`, outside the managed block, not in a session's memory.
 

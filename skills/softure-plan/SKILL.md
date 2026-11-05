@@ -143,7 +143,10 @@ alone.
    - **Tests:** the named cases, including empty, boundary and failure paths.
    - **Done when:** criteria phrased so that someone else could check them, as plain bullets
      (checkboxes live only in `## Progress`). Split them into *Automated* (a command, a test,
-     a query) and *Manual* (only a human can judge it, such as visual quality or tone).
+     a query) and *Manual* (only a human can judge it, such as visual quality or tone). In
+     `--auto`, a criterion is *Manual* only when no agent-runnable evidence can settle it, and
+     every Manual criterion carries either `(evidence: <what the run produces and inspects>)` or
+     `(owner only: <reason>)`; see `## --auto` below.
    - The last automated criterion of every phase is "Gates green (typecheck, lint, test)", using
      the gates from `workflow.json`. Never write the commands themselves into the plan from
      memory: take them from `workflow.json`.
@@ -255,6 +258,15 @@ them, never an extra `##` heading.
 - Never stop to ask for an id: without one, stop and report.
 - Stop and escalate when the only viable approach contradicts change.md Constraints, requires a
   destructive data operation, or needs an owner-only decision.
+- **No hidden owner checks.** The run verifies its own Manual criteria (AGENTS.md → Operating mode:
+  autonomous). Each Manual criterion names the evidence the run produces itself, as
+  `(evidence: <how>)`: a test, a script or local check (e.g. a free local render), a screenshot or
+  frame grab the agent inspects, the deploy pipeline's run and health check, CI logs, an
+  `ffprobe` or schema check. Only when no such evidence exists does it carry
+  `(owner only: <reason>)`, and the reason is one of: a paid provider call that needs the owner's
+  yes, a secret, account or connector only the owner has, a release or production deploy, or a
+  taste judgement the owner reserved in `change.md` or the PRD (name where). A Manual criterion with
+  neither is not a valid plan.
 
 ## Quality checklist
 
@@ -269,6 +281,7 @@ them, never an extra `##` heading.
       out of scope appears in a phase.
 - [ ] The Key decisions table names a source for every decision.
 - [ ] The plan contains no open questions.
+- [ ] `--auto`: every Manual criterion carries `(evidence: …)` or `(owner only: <reason>)`.
 - [ ] Phase blocks have no checkboxes; `## Progress` matches the phases one-to-one and follows
       the reference format.
 

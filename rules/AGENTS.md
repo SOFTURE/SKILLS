@@ -99,6 +99,22 @@ irreversible action nobody asked for, a secret or access only the owner has, sco
 `change.md`, a measurement that refutes the item's premise, or an idea for a new product or package
 (tell the owner in the project chat to plan it together; file nothing).
 
+**Verify, never leave checks for the owner.** Never leave items for the owner's manual verification:
+they come back to the agent anyway. The run verifies them itself, closes them, archives and
+releases. A plan criterion is *Manual* only when no agent-runnable evidence can settle it; otherwise
+the plan names the evidence (a test, a script or local check, a screenshot or frame grab the agent
+looks at, the pipeline run and health check, CI logs, a schema or `ffprobe` check), the run produces
+it and records it on the Progress item (command and result, SHA, link). No item ends `waiting: owner
+check`, and `## Owner decisions and checks` holds no checks the run could do. Only four things are
+genuinely the owner's: a paid provider call that needs the owner's yes, a secret, account or
+connector only the owner has, a release or production deploy (Releases), and a taste judgement the
+owner reserved for themselves in `change.md` or the PRD. Each becomes a tracked item with the exact
+step and its reason (an `Owner step:` handoff line that `wt-roadmap.py done` writes to the roadmap,
+or an issue), never a free-floating checkbox list. After an owner-approved deploy the run performs
+the checks it can reach (pipeline run, health endpoint, logs) and closes the item; only a check the
+container truly cannot reach becomes a tracked item naming why. A report never lists manual checks as
+the owner's to-do.
+
 **Know your role.** Work in parallel has one coordinator and its threads:
 - **Coordinator**: the session in the project's main chat (the channel the owner talks to), or
   `softure-worktree-manager` locally. It plans, briefs, starts threads, gives the go to merge, and is
@@ -171,6 +187,10 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - Nudges stalled threads (waiting on CI, stopped by a usage limit) on every report: every working
   thread silent for 45 minutes or more gets a nudge in that firing.
 - A new question about the roadmap goes to a new thread; the old one is closed.
+- **Open owner checks are work, not a to-do for the owner.** When the roadmap still holds open check
+  entries (under `## Owner decisions and checks`, or rows `done_code (…; waiting: owner check …)`),
+  start a thread that verifies them, closes the entries and rows, archives and, when code changed
+  and the owner's release word exists, releases. Never list them in a report for the owner.
 
 **Thread duties:**
 - Run the whole chain for its change (`softure-worktree`), deciding by the rules above.
@@ -198,8 +218,10 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - **The roadmap state lives on the main branch, never on a change branch.** Branches do not edit
   `roadmap.md`: `wt-roadmap.py` writes every stage on the main branch (`open`, `stage`, `ready`), and
   the thread runs `wt-roadmap.py done <change-id>` right after its merge; it takes the `## Done`,
-  owner-check and release lines from the archived `change.md` (`softure-archive --handoff`). Only
-  `worktree.cloudState: "branch"` keeps the old flow, where the branch carries its own row.
+  owner-step and release lines from the archived `change.md` (`softure-archive --handoff`). In this
+  mode it refuses `Owner check:` lines and `waiting: owner check`: verify them, then re-run it with
+  `--verified "<evidence>"`. Only `worktree.cloudState: "branch"` keeps the old flow, where the
+  branch carries its own row.
 - **Merge the main branch in only when needed** (`autonomy.remergeMain: "when-needed"`, the default).
   After the go, run `softure-worktree/scripts/wt-merge-check.py`. `merge-as-is` (the forge reports the
   pull request mergeable, and since the branch last merged it the main branch brought no migration, no

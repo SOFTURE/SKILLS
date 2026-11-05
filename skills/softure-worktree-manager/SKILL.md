@@ -519,6 +519,14 @@ points of this skill:
   | a pre-release step: migration to watch, production secret, build-time variable, scheduled job, one-off command, production check | **`## Before the next release`** (the owner's checklist before publishing; create it above `## Owner decisions and checks` if missing) | numbered step with the exact command/file |
   | anything else for the owner: visual/tone check, open question, product decision, suggestion, deferred finding | **`## Owner decisions and checks`** | `- [ ] **<ID>**: <what to decide/check> (<Manual N.M / finding>). <evidence path>` |
 
+  **Autonomous mode:** a Manual item the worker left open without `(owner only:
+  <reason>)`, or a READY report that hands checks to the owner, is not
+  merge-ready: send it back (`SendMessage`) to verify them and record the
+  evidence. Only genuine owner steps (a paid call that needs the owner's yes, a
+  secret or account only the owner has, a release or production deploy, a taste
+  call the owner reserved) reach `## Owner decisions and checks`, each with its
+  exact step and reason; checks the run could perform never do.
+
   One signal, one place: if a check gates the deploy, it goes to the release
   section and the decisions section only points at it. Don't duplicate what
   the worker already wrote there, nor what `wt-roadmap.py done` took from the
@@ -568,7 +576,12 @@ then, with nothing in flight → `TaskStop` the monitor, `CronDelete` the status
 job (M4), and report: what merged (SHAs), what waits for the release
 (`## Before the next release`), the result of the full integration suite on
 `<main>` (below), every open entry in `## Owner decisions and checks` (the
-owner answers these before the release and before the roadmap is archived),
+owner answers these before the release and before the roadmap is archived; in
+autonomous mode these are decisions and owner steps only: an open check entry
+or a `waiting: owner check` row is work, so queue a worker that verifies it,
+closes it with `wt-roadmap.py done <change-id> --verified "<evidence>"`,
+archives and releases where the owner's release word exists, instead of
+listing it),
 what is left and why (`blocked`, `owner`, `proposed`, a collision), and
 whether `<main>` was pushed.
 
