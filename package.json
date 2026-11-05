@@ -1,6 +1,6 @@
 {
   "name": "@softure-ai/skills",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "SOFTURE agent skills: a spec-driven delivery workflow (shape → prd → roadmap → plan → implement → review) plus parallel worktree orchestration",
   "license": "MIT",
   "repository": {
@@ -22,7 +22,8 @@
   },
   "scripts": {
     "postinstall": "node scripts/install.mjs --postinstall",
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs",
+    "test": "python3 -m unittest discover -s tests"
   },
   "engines": {
     "node": ">=20"

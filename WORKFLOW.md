@@ -86,7 +86,10 @@ or languages.
                                     // "push": local --no-ff merge, then push <main> through the pre-push hook
     "remergeMain": "when-needed",   // "when-needed" (default): merge <main> into the branch before the merge only when
                                     // wt-merge-check.py finds an overlapping file, a migration or a dependency change;
-                                    // "always": before every merge
+                                    // "on-conflict": only when the merge would conflict (the forge reports the PR not
+                                    // mergeable, or a local trial merge conflicts); the merged result is then not tested
+                                    // before the merge, so an incompatible but non-conflicting change surfaces on <main>
+                                    // or in the release gate; "always": before every merge
     "relatedTests": null,           // e.g. "npx vitest related --run {files}": the test gate after a merge of <main>, for the
                                     // files the branch changes; null = the full test gate
     "fullGatePaths": [],            // extra globs that force the full gates after a merge of <main> (built in: lockfiles,
@@ -128,6 +131,10 @@ Parallel sessions push often, and every push can start the project's CI. The ski
 - a "finish" item does not start a run of its own under `cadence: "roadmap"`;
 - before a merge, `<main>` is merged into the branch only when needed (`autonomy.remergeMain`), and such a merge
   re-runs only what it can break (`autonomy.relatedTests`), so a merge without overlap costs no push and no hook.
+  In a busy repository nearly every merge sees a migration or a dependency change from the one before it, and
+  `"when-needed"` then re-merges almost every time; `"on-conflict"` merges a pull request on its green-at-READY
+  checks unless the merge would conflict. It trades a CI run per merge for testing the merged result only on
+  `<main>` and in the release gate.
 
 The project's side: when the git hooks already run the gates (`pre-commit`, `pre-push`), CI does not need to
 repeat them on every pushed branch. A pre-push hook needs a cheap path for a push whose changed files are all

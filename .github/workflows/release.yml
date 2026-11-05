@@ -32,6 +32,8 @@ jobs:
           node-version: 22
       - name: ✅ Validate skills
         run: node scripts/validate.mjs
+      - name: 🧪 Test scripts
+        run: python3 -m unittest discover -s tests
       - name: 🧪 Install into a scratch project
         run: |
           mkdir -p /tmp/consumer && echo '{}' > /tmp/consumer/package.json

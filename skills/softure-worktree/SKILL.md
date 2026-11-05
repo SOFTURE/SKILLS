@@ -125,9 +125,10 @@ Read `mode` at A0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8, the project's
   3. then Phase B by `autonomy.merge`:
      - `"pr"` (default): the pull request was opened at READY (`Closes #N` when
        the change solves an issue). After the go, run
-       `python3 <S>/wt-merge-check.py`. `VERDICT merge-as-is` and the forge
-       reports the pull request mergeable → merge it as it is (its checks were
-       green at READY). `VERDICT remerge` (or `autonomy.remergeMain: "always"`)
+       `python3 <S>/wt-merge-check.py` (add `--not-mergeable` when the forge
+       reports the pull request not mergeable). `VERDICT merge-as-is` and the
+       forge reports the pull request mergeable → merge it as it is (its checks
+       were green at READY). `VERDICT remerge` (or `autonomy.remergeMain: "always"`)
        → merge `origin/<main>` into the branch (A5), run the `RUN` lines it
        printed, push, and enable the forge's auto-merge for the pull request
        (`gh pr merge <N> --auto --merge` or the forge tool) so it merges on
@@ -847,6 +848,10 @@ merge-as-is` → skip the merge; READY says `<main> not merged in
 (wt-merge-check: merge-as-is)` and the pull request is merged as it is after
 the go. `VERDICT remerge` → merge as below, then run the `RUN` lines it printed
 (the gates the merge can break: `GATES related` or `full`) before pushing.
+`autonomy.remergeMain: "on-conflict"` → `remerge` only when the merge would
+conflict (its trial merge, or `--not-mergeable` when the forge says so);
+overlap, migrations and dependency changes are printed but do not force it, and
+a go under this policy never asks for "Update branch".
 `autonomy.remergeMain: "always"` → always merge. The same check runs again
 after the go (*Operating mode*), because `<main>` keeps moving. Otherwise
 (manual mode, or `autonomy.merge: "push"`) the branch is always made current:
