@@ -72,7 +72,9 @@ Read when needed:
    command output, a screenshot. Re-run the gates (`gates.*`) and every Automated criterion that
    names a command; do not trust earlier runs. A ticked box without evidence is **CRITICAL**.
    `(verified by agent: …)` must point at something that exists. Open Manual items are pending,
-   not findings.
+   not findings, except in `--auto`: there an open Manual item without `(owner only: <reason>)` is
+   a WARNING (the run could verify it), decided `fix now` by running its evidence and ticking it
+   through `softure-implement`'s notation.
 3. **Check drift.** Everything the code does that the plan did not ask for, everything the plan
    asked for that the code does not do. Intentional drift must be explained in plan.md
    (`## Decisions (auto)` or a phase note). Unexplained drift is a finding. A flaw in the plan
@@ -174,7 +176,9 @@ Files: planned and changed N · unplanned N (…) · planned, not changed N (…
 
 - CRITICAL and WARNING findings that have a clear local fix: `fix now` (the recommended option).
 - Fixes that need a product decision: `defer` to the roadmap "Owner decisions and checks"
-  list, with the finding ID.
+  list, with the finding ID. A check the run can perform is never deferred to the owner: verify it
+  and record the evidence (`fix now`).
+- Open Manual items without `(owner only: <reason>)`: `fix now` by running their evidence (above).
 - SUGGESTIONs: `accept`, unless the fix is under about 10 lines and risk-free.
 - A finding that matches a pattern already seen in lessons.md, or that repeats across changes:
   also `record as lesson`.

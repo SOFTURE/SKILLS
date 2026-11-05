@@ -4,8 +4,8 @@
     wt-roadmap.py open  <change-id> [--note "…"] [--dry-run]
     wt-roadmap.py stage <change-id> "<stage>"      [--dry-run]
     wt-roadmap.py ready <change-id>                [--dry-run]
-    wt-roadmap.py done  <change-id>                [--dry-run]
-    wt-roadmap.py done_code <change-id> --waiting "<what>" [--dry-run]
+    wt-roadmap.py done  <change-id> [--verified "<evidence>"] [--dry-run]
+    wt-roadmap.py done_code <change-id> --waiting "<what>" [--verified "<evidence>"] [--dry-run]
     (cloud sessions additionally: [--cloud] [--branch <branch>] — see below)
 
 `open`  — status -> **in_progress** (research, since <today>; worktree `../<repo>-<id>`, branch `<id>`[; note])
@@ -18,7 +18,19 @@
           section that `softure-archive --handoff` wrote into the archived change.md
           (`context/archive/<created>-<id>/change.md` on the main branch). `done` follows the
           handoff's status; `done_code --waiting "…"` forces `done_code` with that text. Lines
-          already present are not added twice, so a re-run is safe.
+          already present are not added twice, so a re-run is safe. `Owner step:` lines (what only the
+          owner can do, with the reason) go to `## Owner decisions and checks` as tracked items.
+
+Autonomous mode (`mode: "autonomous"` in context/workflow.json): the run verifies its own checks, so
+`done` refuses a handoff that still carries `Owner check:` lines or a `waiting: owner check …`
+status, and `done_code --waiting` refuses an owner-check text. Verify the checks, then re-run with
+`--verified "<evidence>"`: the owner checks are dropped, the owner-check part of the waiting text is
+removed (nothing left -> `done`), and the evidence is appended to the `## Done` line.
+`--verified` also closes an item that is already `done_code` (e.g. after the owner-approved deploy,
+once the run checked the pipeline, health endpoint and logs): `done --verified "…"` sets `done`,
+`done_code --waiting "…" --verified "…"` sets the new waiting text, the `## Done` line gets the
+evidence, and this item's open `(Manual N.M)` entries under `## Owner decisions and checks` are
+ticked with it.
 
 Branches never edit roadmap.md (unless `worktree.cloudState` is "branch"): the roadmap state lives
 on the main branch, written only by this script, so merging the main branch into a change branch
@@ -74,6 +86,7 @@ READY_RE = re.compile(r"(\*{0,2})in_progress(\*{0,2}) \([^,;)]*, since [0-9-]+; 
 HANDOFF_RE = re.compile(r"^- \*\*(?P<key>[^*]+):\*\* ?(?P<value>.*)$")
 ARCHIVED_RE = re.compile(r"^Archived [0-9-]+: (?P<outcome>.+?)\.?$")
 DONE_CODE_RE = re.compile(r"^done_code \((?:[0-9-]+; )?waiting: (?P<waiting>.+)\)$")
+OWNER_CHECK_RE = re.compile(r"owner[ -]check", re.IGNORECASE)
 
 
 def git(repo: str, *args: str, env: dict[str, str] | None = None) -> str:
@@ -110,7 +123,8 @@ def item_id(line: str, change_id: str) -> str:
 def read_handoff(repo: str, rev: str, change_id: str) -> dict:
     """Read the archived change folder of `change_id` at `rev` and its `## Roadmap handoff` section.
 
-    Returns {"archive", "status", "waiting", "outcome", "owner": [...], "release": [...]}. Without a
+    Returns {"archive", "status", "waiting", "outcome", "owner": [...], "steps": [...], "release": [...]}.
+    Without a
     handoff section (an archive written before it existed) the outcome falls back to the
     `Archived <date>: <outcome>.` line under `## Notes`, the status to `done`.
     """
@@ -122,7 +136,7 @@ def read_handoff(repo: str, rev: str, change_id: str) -> dict:
                  f"(run `done` only after the change's merge, which carries its archive commit)")
     text = git(repo, "show", f"{rev}:{hits[0]}/change.md")
     handoff = {"archive": hits[0][len("context/"):] + "/", "status": "done", "waiting": None,
-               "outcome": None, "owner": [], "release": [], "found": False}
+               "outcome": None, "owner": [], "steps": [], "release": [], "verified": None, "found": False}
     section = None
     for line in text.splitlines():
         if line.startswith("## "):
@@ -147,6 +161,8 @@ def read_handoff(repo: str, rev: str, change_id: str) -> dict:
             handoff["outcome"] = value
         elif key == "owner check":
             handoff["owner"].append(value)
+        elif key == "owner step":
+            handoff["steps"].append(value)
         elif key == "before the next release":
             handoff["release"].append(value)
     return handoff
@@ -176,6 +192,62 @@ def append_to_section(lines: list[str], heading: str, entry: str, before: tuple[
     if end == len(lines) and lines and not lines[-1].endswith("\n"):
         lines[-1] += "\n"
     lines.insert(end, f"{entry}\n")
+
+
+def strip_owner_checks(waiting: str | None) -> str | None:
+    """Remove the owner-check parts of a `waiting:` text ("release; owner check 2.4" -> "release")."""
+    if not waiting:
+        return None
+    parts = [part.strip() for part in re.split(r"[;,]", waiting)]
+    kept = [part for part in parts if part and not OWNER_CHECK_RE.search(part)]
+    return "; ".join(kept) or None
+
+
+def apply_autonomy(handoff: dict, mode: str, arg: str | None, autonomous: bool,
+                   verified: str | None) -> tuple[dict, str, str | None]:
+    """In autonomous mode no item waits for an owner check: refuse them, or drop them once verified.
+
+    Returns the (possibly adjusted) handoff, mode and `--waiting` text. Manual mode passes through.
+    """
+    if not autonomous:
+        if verified:
+            handoff = {**handoff, "verified": verified}
+        return handoff, mode, arg
+    pending = list(handoff["owner"])
+    if handoff["status"] == "done_code" and OWNER_CHECK_RE.search(handoff["waiting"] or ""):
+        pending.append(f"status: waiting: {handoff['waiting']}")
+    if mode == "done_code" and OWNER_CHECK_RE.search(arg or ""):
+        pending.append(f"--waiting: {arg}")
+    if not pending:
+        if verified:
+            handoff = {**handoff, "verified": verified}
+        return handoff, mode, arg
+    if not verified:
+        listed = "\n".join(f"  - {item}" for item in pending)
+        sys.exit("autonomous mode: no item waits for an owner check, and this handoff still has:\n"
+                 f"{listed}\nVerify each one yourself (test, script, screenshot, pipeline run, health check, logs), "
+                 "then re-run with --verified \"<evidence>\". What only the owner can do (a paid call, a secret, "
+                 "a release, a reserved taste call) is an `Owner step:` line with its reason, not an owner check.")
+    waiting = strip_owner_checks(handoff["waiting"])
+    handoff = {**handoff, "owner": [], "verified": verified, "waiting": waiting,
+               "status": "done_code" if waiting else "done"}
+    if mode == "done_code":
+        arg = strip_owner_checks(arg)
+        if not arg:
+            mode, arg = ("done_code", waiting) if waiting else ("done", None)
+    return handoff, mode, arg
+
+
+def tick_verified_checks(lines: list[str], rid: str, evidence: str) -> None:
+    """Close this item's open owner-check entries (`(Manual N.M)`) once the run has verified them."""
+    section = None
+    for k, line in enumerate(lines):
+        if line.startswith("## "):
+            section = line[3:].strip()
+            continue
+        if (section == "Owner decisions and checks" and line.startswith(f"- [ ] **{rid}**: ")
+                and "(Manual " in line and "owner step:" not in line):
+            lines[k] = f"- [x] {line[6:].rstrip()} — verified: {evidence}\n"
 
 
 def done_status(handoff: dict, mode: str, arg: str | None, today: str) -> str:
@@ -214,7 +286,10 @@ def edit(text: str, mode: str, change_id: str, arg: str | None, repo_name: str,
         status = done_status(handoff, mode, arg, today)
         current = row_status(lines[i]).strip()
         if current.startswith(("done", "**done")):
-            status = current.replace("**", "")  # a re-run keeps the recorded date and text
+            if not handoff.get("verified"):
+                status = current.replace("**", "")  # a re-run keeps the recorded date and text
+            elif mode == "done":
+                status = "done"  # verified after the merge (e.g. post-deploy checks): the item is closed
         lines[i] = set_row_status(lines[i], status)
         body_status = f"- **Status:** {status}\n"
     elif mode == "stage":
@@ -252,6 +327,18 @@ def edit(text: str, mode: str, change_id: str, arg: str | None, repo_name: str,
         for check in handoff["owner"]:
             append_to_section(lines, "Owner decisions and checks",
                               f"- [ ] **{rid}**: {check}. {handoff['archive']}plan.md", ("Done", "Decisions (auto)"))
+        for step in handoff.get("steps", []):
+            append_to_section(lines, "Owner decisions and checks",
+                              f"- [ ] **{rid}**: owner step: {step}. {handoff['archive']}change.md",
+                              ("Done", "Decisions (auto)"))
+        if handoff.get("verified"):
+            outcome = f"{outcome}; verified: {handoff['verified']}"
+            tick_verified_checks(lines, rid, handoff["verified"])
+            prefix = f"- **{rid}** `{change_id}`: "
+            done_line = f"{prefix}{outcome}; archived in `{handoff['archive']}`"
+            hit = next((k for k, line in enumerate(lines) if line.startswith(prefix)), None)
+            if hit is not None:
+                lines[hit] = f"{done_line}\n"
         for step in handoff["release"]:
             append_to_section(lines, "Before the next release", f"- [ ] {step} (**{rid}**)",
                               ("Owner decisions and checks", "Done", "Decisions (auto)"))
@@ -274,14 +361,17 @@ def commit_message(text: str, mode: str, change_id: str, arg: str | None, where:
     return f"docs(roadmap): {rid} {label}\n\n{COAUTHOR}"
 
 
-def load_handoff(repo: str, rev: str, mode: str, change_id: str) -> dict | None:
+def load_handoff(repo: str, rev: str, mode: str, change_id: str, arg: str | None = None,
+                 verified: str | None = None) -> tuple[dict | None, str, str | None]:
+    """Read the handoff (for `done` / `done_code`) and apply the autonomous-mode rule to it."""
     if mode not in ("done", "done_code"):
-        return None
+        return None, mode, arg
     handoff = read_handoff(repo, rev, change_id)
     if not handoff["found"]:
         print(f"note: {handoff['archive']}change.md has no `## Roadmap handoff` — status `done` unless forced, "
               f"no owner-check or release lines", file=sys.stderr)
-    return handoff
+    autonomous = load_config(repo).get("mode") == "autonomous"
+    return apply_autonomy(handoff, mode, arg, autonomous, verified)
 
 
 def push_roadmap_commit(repo: str, sha: str, main: str, env: dict[str, str]) -> subprocess.CompletedProcess:
@@ -308,7 +398,8 @@ def push_roadmap_commit(repo: str, sha: str, main: str, env: dict[str, str]) -> 
         subprocess.run(["git", "-C", repo, "branch", "-D", branch], capture_output=True)
 
 
-def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dry: bool) -> None:
+def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dry: bool,
+              verified: str | None = None) -> None:
     """Commit one roadmap edit directly on `origin/<main>` and push it — no working tree involved."""
     repo = git(".", "rev-parse", "--show-toplevel").strip()
     repo_name = os.path.basename(repo)
@@ -321,15 +412,15 @@ def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dr
         git(repo, "fetch", "-q", "origin", main)
         base = git(repo, "rev-parse", f"origin/{main}").strip()
         old = git(repo, "show", f"{base}:{ROADMAP}")
-        handoff = load_handoff(repo, base, mode, change_id)
-        new = edit(old, mode, change_id, arg, repo_name, cloud_branch=branch if mode == "open" else None,
+        handoff, run_mode, run_arg = load_handoff(repo, base, mode, change_id, arg, verified)
+        new = edit(old, run_mode, change_id, run_arg, repo_name, cloud_branch=branch if mode == "open" else None,
                    handoff=handoff)
         if dry:
             sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True), f"origin/{main}", "commit"))
             return
         if unchanged(old, new, f"origin/{main}"):
             return
-        msg = commit_message(old, mode, change_id, arg, f"cloud session, branch {branch}", new)
+        msg = commit_message(old, run_mode, change_id, run_arg, f"cloud session, branch {branch}", new)
         session = os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID", "")
         if session.startswith("cse_"):
             msg += f"\nClaude-Session: https://claude.ai/code/session_{session[4:]}"
@@ -355,7 +446,8 @@ def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dr
     sys.exit(f"push to origin/{main} failed after 6 attempts: {push.stderr.strip()[:300] if push else ''}")
 
 
-def run_cloud_branch(mode: str, change_id: str, arg: str | None, branch: str | None, dry: bool) -> None:
+def run_cloud_branch(mode: str, change_id: str, arg: str | None, branch: str | None, dry: bool,
+                     verified: str | None = None) -> None:
     """Commit one roadmap edit on the session's own branch (the checkout); push nothing."""
     repo = git(".", "rev-parse", "--show-toplevel").strip()
     repo_name = os.path.basename(repo)
@@ -367,7 +459,7 @@ def run_cloud_branch(mode: str, change_id: str, arg: str | None, branch: str | N
     work_path = os.path.join(repo, ROADMAP)
     with open(work_path, encoding="utf-8") as fh:
         old = fh.read()
-    handoff = load_handoff(repo, "HEAD", mode, change_id)
+    handoff, mode, arg = load_handoff(repo, "HEAD", mode, change_id, arg, verified)
     new = edit(old, mode, change_id, arg, repo_name, cloud_branch=branch if mode == "open" else None,
                handoff=handoff)
     if dry:
@@ -386,7 +478,7 @@ def run_cloud_branch(mode: str, change_id: str, arg: str | None, branch: str | N
     print(f"{sha} {msg.splitlines()[0]} -> {current} (not pushed; the branch carries the state)")
 
 
-def run_local(mode: str, change_id: str, arg: str | None, dry: bool) -> None:
+def run_local(mode: str, change_id: str, arg: str | None, dry: bool, verified: str | None = None) -> None:
     main_wt = main_root()
     repo_name = os.path.basename(main_wt)
     main = main_branch(main_wt)
@@ -397,7 +489,8 @@ def run_local(mode: str, change_id: str, arg: str | None, dry: bool) -> None:
     work_path = os.path.join(main_wt, ROADMAP)
     if dry:
         head_text = git(main_wt, "show", f"HEAD:{ROADMAP}")
-        new_head = edit(head_text, mode, change_id, arg, repo_name, handoff=load_handoff(main_wt, "HEAD", mode, change_id))
+        handoff, mode, arg = load_handoff(main_wt, "HEAD", mode, change_id, arg, verified)
+        new_head = edit(head_text, mode, change_id, arg, repo_name, handoff=handoff)
         sys.stdout.writelines(difflib.unified_diff(head_text.splitlines(True), new_head.splitlines(True), "HEAD", "commit"))
         return
 
@@ -415,14 +508,14 @@ def run_local(mode: str, change_id: str, arg: str | None, dry: bool) -> None:
 
         head_sha = git(main_wt, "rev-parse", "HEAD").strip()
         head_text = git(main_wt, "show", f"{head_sha}:{ROADMAP}")
-        handoff = load_handoff(main_wt, head_sha, mode, change_id)
-        new_head = edit(head_text, mode, change_id, arg, repo_name, handoff=handoff)
+        handoff, run_mode, run_arg = load_handoff(main_wt, head_sha, mode, change_id, arg, verified)
+        new_head = edit(head_text, run_mode, change_id, run_arg, repo_name, handoff=handoff)
         if unchanged(head_text, new_head, main):
             return
-        msg = commit_message(head_text, mode, change_id, arg, "separate worktree", new_head)
+        msg = commit_message(head_text, run_mode, change_id, run_arg, "separate worktree", new_head)
         with open(work_path, encoding="utf-8") as fh:
             work_text = fh.read()
-        new_work = new_head if work_text == head_text else edit(work_text, mode, change_id, arg, repo_name,
+        new_work = new_head if work_text == head_text else edit(work_text, run_mode, change_id, run_arg, repo_name,
                                                                 handoff=handoff)
 
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
@@ -455,7 +548,11 @@ def main() -> None:
     dry = "--dry-run" in argv
     cloud = "--cloud" in argv or os.environ.get("CLAUDE_CODE_REMOTE") == "true"
     args = [a for a in argv if a not in ("--dry-run", "--cloud")]
-    note = branch = waiting = None
+    note = branch = waiting = verified = None
+    if "--verified" in args:
+        k = args.index("--verified")
+        verified = args[k + 1]
+        del args[k:k + 2]
     if "--waiting" in args:
         k = args.index("--waiting")
         waiting = args[k + 1]
@@ -479,11 +576,11 @@ def main() -> None:
     mode, change_id = args[0], args[1]
     arg = {"open": note, "stage": args[2] if mode == "stage" else None, "done_code": waiting}.get(mode)
     if cloud and (load_config().get("worktree") or {}).get("cloudState") == "branch":
-        run_cloud_branch(mode, change_id, arg, branch, dry)
+        run_cloud_branch(mode, change_id, arg, branch, dry, verified)
     elif cloud:
-        run_cloud(mode, change_id, arg, branch, dry)
+        run_cloud(mode, change_id, arg, branch, dry, verified)
     else:
-        run_local(mode, change_id, arg, dry)
+        run_local(mode, change_id, arg, dry, verified)
 
 
 if __name__ == "__main__":

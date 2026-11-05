@@ -111,7 +111,8 @@ mandatory; stop with an error.
    - Manual items: first try to verify them yourself where a machine can stand in for the eye:
      screenshots at the stated widths and themes, a recorded request/response, a DB read. Tick
      such an item with `(verified by agent: <how>)`. Anything that needs the owner's judgement
-     stays `- [ ]`.
+     stays `- [ ]`. `--auto`: every `(evidence: …)` Manual item is verified by running that
+     evidence; only `(owner only: <reason>)` items stay open (see `## --auto`).
 
 7. **Manual gate** (interactive only). When manual items remain open, pause before committing
    and show the gate message (format and options in `references/phase-commit.md`): what passed
@@ -194,6 +195,14 @@ steps 7 to 9:
   (generated types, a lockfile, a snapshot) joins the touched-file set; any other unknown path is
   an escalation.
 - Use the proposed commit message as is.
+- **Verify the Manual items yourself.** Run the evidence each Manual item names (test, script,
+  local render, screenshot or frame grab you look at, pipeline run and health check, CI logs,
+  `ffprobe` or schema check) and tick it with
+  ` — <sha> (verified by agent: <command> → <result>[, <link>])`. Never leave an `(evidence: …)`
+  item open for the owner: a check that fails is a defect to fix in the phase; evidence that cannot
+  be produced in this environment is an escalation naming why, not an owner check. Only
+  `(owner only: <reason>)` items stay `- [ ]`. A Manual item with neither annotation (an older
+  plan) is verified like an `(evidence: …)` one when a machine can settle it.
 - Escalate (stop with a report) when:
   - the approach is invalid (re-plan needed);
   - a gate stays red after a reasonable fix attempt and you cannot prove the failure pre-exists;
@@ -210,7 +219,8 @@ steps 7 to 9:
 - [ ] Every ticked item carries its phase SHA, and no Progress edit was amended into its own commit.
 - [ ] TDD phases show a red test before the implementation.
 - [ ] Drift is recorded. No silent design changes.
-- [ ] Open Manual items are listed for the owner, not ticked on the user's behalf.
+- [ ] Open Manual items are listed for the owner, not ticked on the user's behalf; in `--auto`
+      only `(owner only: …)` items are left open, every other Manual item carries its evidence.
 - [ ] Nothing was pushed, tagged, released or deployed.
 
 ## Anti-patterns
@@ -228,4 +238,5 @@ steps 7 to 9:
 ## Handoff
 
 Next: `softure-impl-review <change-id>`. Open manual items go to the owner. In a roadmap, they
-are listed under "Owner decisions and checks" at archive time.
+are listed under "Owner decisions and checks" at archive time. In `--auto` only
+`(owner only: <reason>)` items remain, and they become `Owner step:` lines at archive time.

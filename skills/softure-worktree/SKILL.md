@@ -242,8 +242,11 @@ often no outbound access to production hosts or ssh. So:
 - Integration: exactly as locally — A3.8 — when the project's integration
   command can run from the container (a remote CI command needs only git and
   network). If it cannot, say so verbatim in READY.
-- Anything that needs production (a request to the live site, ssh) goes to
-  **Pending owner checks**, with the exact command.
+- Anything that needs production (a request to the live site, ssh): first try
+  what the container can reach (the deploy pipeline's run, a public health
+  endpoint, CI or platform logs) and record that evidence. Only a check the
+  container truly cannot reach becomes a tracked owner step (`Owner step:` in
+  the handoff) naming the exact command and why it cannot run here.
 - Browsers: use the preinstalled ones; never download browser binaries.
 - Long commands (the full test gate, a push whose hook runs it): start them in
   the background with the longest timeout the tool allows — the default limit
@@ -623,8 +626,11 @@ Two hard requirements before you leave this step:
 does.** A3.5 verifies most "manual" checks itself (browser automation, the
 database, HTTP, the product's own tools). A check you can drive belongs under
 `#### Automated` with the command that drives it. Reserve `#### Manual` for
-what genuinely needs the owner's eyes — visual taste, copy tone, a third-party
-console.
+what genuinely needs the owner and no agent-runnable evidence can settle,
+and annotate every Manual item: `(evidence: <what the run produces and
+inspects>)` or `(owner only: <reason>)` (`softure-plan` → `--auto`). Taste is
+`owner only` only when the owner reserved it in `change.md` or the PRD;
+otherwise the run judges it against the brief and a screenshot it looks at.
 
 ##### Choose the implementation discipline here
 
@@ -712,9 +718,17 @@ verification back. Work through each `#### Manual` item and drive it:
 Tick the box **only on evidence you actually looked at**;
 `/softure-implement` is the sole writer of `## Progress`.
 
-What you genuinely cannot verify — visual taste, production DNS, a third-party
-dashboard, real email delivery — stays `- [ ]` and goes into a **Pending owner
-checks** list in the READY report. It does not block archiving.
+- **Pipelines and logs** — the deploy pipeline's run, a health endpoint, CI
+  logs, `ffprobe` or a schema check on a produced file.
+
+Never leave an item for the owner's manual verification: verify, close,
+archive, release (AGENTS.md → Operating mode: autonomous). What the run
+genuinely cannot do — a paid provider call that needs the owner's yes, a
+secret, account or connector only the owner has, a release or production
+deploy, a taste judgement the owner reserved — stays `- [ ]` with its
+`(owner only: <reason>)` and becomes an `Owner step:` line in the handoff
+(A4), a tracked item with the exact step. There is no "Pending owner checks"
+list; the READY report names owner steps, if any.
 
 ##### When the plan and the code disagree
 
@@ -807,11 +821,17 @@ this at the start of the next change, do not write it.
 
 Code that needs a release, a new production secret or a production check ends
 as **`done_code (<date>; waiting: <what>)`** — on `<main>`, waiting for the
-owner's release. Put the owner's steps in the roadmap section
+owner's release (`waiting: release`, never `waiting: owner check`). Put the owner's steps in the roadmap section
 `## Before the next release` (create it above `## Owner decisions and checks`
 if missing): a new secret (where it must be set, under which name), a new
 build-time value, a migration to watch, a one-off command, a production check
 (an exact `curl`). It is the owner's checklist before they publish.
+
+**After the owner-approved deploy**, the run performs the post-deploy checks
+it can reach itself — the pipeline run, the health endpoint, the logs — and
+closes the item (`wt-roadmap.py done <change-id> --verified "<evidence>"`
+moves a `done_code` row to `done`). Only a check the container truly cannot
+reach becomes a tracked owner step that names why.
 
 While `release.owner` is true: never create a tag, never publish a release,
 never trigger a release workflow, never edit release/deploy workflows or add a
@@ -829,8 +849,9 @@ change folder first (they are yours). Then, on the branch:
 - **`roadmap.md` is not touched on the branch.** The archived `change.md`
   carries `## Roadmap handoff` instead: `Status: done`, or `done_code
   (waiting: <what waits for the release>)` when the change awaits a deploy
-  (pure document changes stay `done`), the `## Done` outcome, the owner checks
-  and the steps for `## Before the next release`. `wt-roadmap.py done
+  (pure document changes stay `done`), the `## Done` outcome, the owner steps
+  (no owner checks in autonomous mode) and the steps for `## Before the next
+  release`. `wt-roadmap.py done
   <change-id>` writes all of it on `<main>` right after the merge (Phase B).
   With `cloudState: "branch"` archive without `--handoff`: the branch's row and
   item block must read `done` / `done_code`, and the `## Done` line is there.
@@ -976,7 +997,7 @@ merge at the end.
    With `--no-tests`, the owner has also waived that later run; say so.
    Then record the roadmap state on `<main>`: `python3 <S>/wt-roadmap.py done
    <change-id>` (a documents-only commit of the row, the item block, `## Done`,
-   the owner checks and the release steps from the archived change's
+   the owner steps and the release steps from the archived change's
    `## Roadmap handoff`; with `cloudState: "branch"` the merge already brought
    them).
 5. **Cleanup — only your own:**

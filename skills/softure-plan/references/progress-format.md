@@ -18,7 +18,7 @@ to report progress. It must stay machine-friendly.
 - [ ] 1.2 Gates green (typecheck, lint, test)
 
 #### Manual
-- [ ] 1.3 <criterion only a human can judge>
+- [ ] 1.3 <criterion only a human can judge> (evidence: <what the run produces and inspects>)
 
 ### Phase 2: <exact title of "## Phase 2:">
 
@@ -34,6 +34,9 @@ to report progress. It must stay machine-friendly.
 3. Each phase has `#### Automated`, and `#### Manual` only when it has manual criteria. Automated
    comes first.
 4. Items are numbered `N.M`, continuously within a phase across both groups (1.1, 1.2, 1.3…).
+   In autonomous mode every Manual item ends with `(evidence: <how the run checks it>)` or, when no
+   agent-runnable evidence can settle it, `(owner only: <reason>)` (`softure-plan` → `--auto`).
+   Manual mode may use the same annotations; it does not require them.
 5. One item is one checkable criterion. Write it as a statement of the end state, not as an
    activity ("Unsubscribe link returns 303 to /unsubscribe", not "Implement unsubscribe link").
 6. The last automated item of every phase is `Gates green (typecheck, lint, test)`.
@@ -42,7 +45,9 @@ to report progress. It must stay machine-friendly.
    - after the phase commit, append ` — <short sha>` to every item ticked in that phase;
    - a manual item verified by the agent itself (screenshot, DB read) gets
      ` — <sha> (verified by agent: <how>)`;
-   - a manual item that only the owner can check stays `- [ ]`.
+   - a manual item that only the owner can check stays `- [ ]`. In autonomous mode that is only an
+     `(owner only: <reason>)` item; an `(evidence: …)` item is verified by the run and ticked with
+     its evidence (command and result, SHA, link), like an Automated one.
 8. The resume point is the **first `- [ ]` in an Automated group**. Manual items still open do
    not block the next phase. They are listed for the owner at the end.
 9. Never delete or rename an item after implementation starts. When the plan changes
@@ -68,8 +73,12 @@ to report progress. It must stay machine-friendly.
 - **Resume point:** the first `- [ ]` under an `#### Automated` heading.
 - **Current phase:** the phase that holds the resume point, or the last phase when there is none.
 - **Completion:** ticked items divided by all items, dropped items counted as ticked.
-- **Open owner checks:** every `- [ ]` under `#### Manual`. They go to the roadmap's
+- **Open owner checks** (manual mode): every `- [ ]` under `#### Manual`. They go to the roadmap's
   `## Owner decisions and checks` at archive time.
+- **Autonomous mode:** an open `(evidence: …)` Manual item is unfinished work, not an owner check:
+  the run verifies it before archiving. Only open `(owner only: <reason>)` items survive, as
+  `Owner step:` lines in the roadmap handoff (tracked items with the exact step), never as owner
+  checks.
 
 Drift between change.md and Progress, worth reporting wherever it is noticed:
 
