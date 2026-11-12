@@ -156,9 +156,12 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   the same files go to the same thread or wait. A planning thread hands its result over and is closed.
   Before starting a thread, check that the item has none yet.
 - **A new roadmap is two steps, never one thread.** When the owner hands over a new roadmap (or a
-  revision), brief one roadmap thread that only shapes, records, commits and merges `roadmap.md`,
-  then ends. Once it is merged, start one thread per ready item, as for any run. Never brief a single
-  thread to record a roadmap and implement its items, or to implement a whole roadmap.
+  revision), brief one roadmap thread that only shapes, records, commits and merges `roadmap.md`
+  **and** opens the change of every new item (`context/changes/<change-id>/change.md`, with the item
+  block and the findings gathered for it) in the same pull request, then ends. Once it is merged,
+  start one thread per ready item, as for any run; each item thread starts from its change, not
+  from the roadmap row. Never brief a single thread to record a roadmap and implement its items, or
+  to implement a whole roadmap.
 - Runs as many threads as are parallel-safe; `worktree.maxParallel` is a soft default.
 - **The roadmap keeps rolling: recompute the startable set on every merge result and every report.**
   Read `roadmap.md` on `origin/<main>`; every item that is not done, has no thread, and whose

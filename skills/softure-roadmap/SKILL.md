@@ -7,11 +7,11 @@ description: >
   thin vertical slices with stable IDs, dependencies, ownership of hot files for parallel work,
   unknowns, baselines, and an at-a-glance table that orchestrators parse. Self-reviews before
   writing and ends with one recommended next item. Also queues thematic roadmaps, promotes
-  them and closes a finished roadmap. Optionally opens a change folder for every ready item.
+  them and closes a finished roadmap. Opens a change folder for every item it records, by default.
   Use after softure-prd, when feedback must be turned into work, or to revise the order.
   Triggers: "make a roadmap", "slice the PRD", "what do we build first", "order the work",
   "turn feedback into roadmap items", "close the roadmap".
-argument-hint: "[--revise] [--open-changes] [--queue <slug> | --promote <slug> | --close] [--from-feedback <path>] [--auto]"
+argument-hint: "[--revise] [--no-open-changes] [--queue <slug> | --promote <slug> | --close] [--from-feedback <path>] [--auto]"
 allowed-tools:
   - Read
   - Glob
@@ -57,7 +57,8 @@ Read the PRD in full, not in excerpts.
 ## Modes
 
 - **main** (default): writes `context/foundation/roadmap.md`, the one roadmap that is executed.
-- **`--revise`**: edits the existing main roadmap in place (see "Existing roadmap").
+- **`--revise`**: edits the existing main roadmap in place (see "Existing roadmap"). Adding items
+  to an open roadmap is a revision too, and step 14 opens a change for each new item.
 - **`--queue <slug>`**: writes a queued thematic roadmap per WORKFLOW §5.1:
   `context/foundation/roadmaps/roadmap-<slug>.md` (`status: waiting`, `backlog:`, `trigger:`), plus
   `context/backlog/roadmap-<slug>/README.md` (table `| ID | Entry | Title | Condition | Kind |`, where Kind
@@ -95,7 +96,8 @@ Read the PRD in full, not in excerpts.
 
 Revise mode rules: never renumber an ID; new items take the next free number of the prefix; never
 drop or re-status an `in_progress`, `ready_to_merge`, `done` or `done_code` row; remove a row only
-when it is `proposed` or `ready` with no folder in `changes/` and no branch; bump `version`; set
+when it is `proposed` or `ready` with no branch and no work in `changes/` (a folder that holds only
+the `change.md` step 14 opened, still `status: new`, is removed with the row); bump `version`; set
 `prd_version` to the PRD's; name every item whose `PRD refs` cite an FR the new PRD version changed.
 Overwriting a roadmap without archiving it is never an option. In `--auto`: revise in place.
 
@@ -218,13 +220,26 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
     "Accept the order? (Recommended: accept)". Apply edits, re-run the self-review, and set
     `status: ready` (or keep `draft` after a thin-PRD proceed).
 
-14. **`--open-changes`.** For every `ready` item without a folder, create
-    `context/changes/<change-id>/change.md` in the `softure-new` format (WORKFLOW §4):
+14. **Open a change for every new item (default).** Every item this run records (a new roadmap,
+    or the items a revision adds) gets its change in the same commit as `roadmap.md`, whatever its
+    status (`ready`, `blocked` or `proposed`): the context gathered while recording it travels with the
+    change instead of living only in the roadmap. For every new item without a folder in
+    `context/changes/`, create `context/changes/<change-id>/change.md` in the `softure-new` format
+    (WORKFLOW §4):
     - `status: new` and `roadmap_item: <ID>`;
     - `## Intent` = the item outcome;
-    - `## Context` quotes the item block verbatim;
+    - `## Context` quotes the item block verbatim, then adds the findings this run gathered for that
+      item: the owner's input that shaped it, the baseline probes and code survey for the layers it
+      touches (with the files cited), and production or feedback evidence. Quote or cite; never
+      paraphrase a source away;
     - `## Constraints` lists the exclusively owned files;
     - add `- **Input:** context/changes/<change-id>/change.md` to the item block.
+
+    An item that already has a folder (in `changes/`, or an entry in `context/backlog/`, which
+    `softure-new` takes over) keeps it; add the `Input` line only. `softure-new` later takes over a
+    prepared `change.md` as it is. Skip this step only on the owner's explicit word
+    (`--no-open-changes`, recorded in the handoff); never skip it on your own, not even in `--auto`.
+    `--open-changes` is still accepted and changes nothing.
 
 A complete, realistic roadmap in this format, with a bad version and why it fails:
 [references/example-roadmap.md](references/example-roadmap.md) (read before the first roadmap in a
@@ -291,8 +306,8 @@ Record each choice under `## Decisions (auto)` at the end of the file:
 - Do not estimate in hours, days, points or sizes. Order and slice size are the planning tools here.
 - Do not chain into the next skill on your own; the handoff is a recommendation.
 - Do not implement roadmap items in the session that wrote the roadmap. In a coordinated run
-  (autonomous mode, a hosted project), the roadmap thread commits and merges `roadmap.md`, reports to
-  the coordinator, and ends; the coordinator then starts one thread per item.
+  (autonomous mode, a hosted project), the roadmap thread commits and merges `roadmap.md` together
+  with the new items' change folders (step 14), reports to the coordinator, and ends; the coordinator then starts one thread per item.
 
 ## Handoff
 
@@ -305,10 +320,11 @@ item, not a menu. Take the first rule that applies:
 3. nothing is `ready` → the owner decision that unblocks the most items, with what it unblocks;
 4. otherwise → the `ready` item that unblocks the most others; ties by the goal.
 
-Name the command (`softure-new <change-id>`, or `--open-changes` then `softure-worktree-manager`
+Name the command (`softure-new <change-id>` to continue the opened change, `softure-worktree-manager`
 for parallel execution, `softure-worktree <ID>` for one item end to end), the next two items after
-it, and what waits for the owner.
+it, and what waits for the owner. List the change folders this run opened.
 
-**In a coordinated run, this thread ends here.** Once `roadmap.md` is merged into the main branch,
+**In a coordinated run, this thread ends here.** Once `roadmap.md` and the opened change folders are
+merged into the main branch,
 send the summary to the coordinator and close the thread. The coordinator starts one thread per
 ready item (`AGENTS.md` → Operating mode: autonomous); this thread never implements an item.
