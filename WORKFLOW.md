@@ -300,7 +300,8 @@ item block and appends to `## Done` itself. On a change branch (`softure-worktre
 branch never conflicts on the roadmap. Orchestrators fall back to `wt-roadmap.py done` themselves when a thread did not
 run it.
 Each item block may carry `- **Input:** <path>` (e.g. the change folder), which tells research where its brief lives.
-`change.md` is defined **only** in §4. softure-roadmap `--open-changes` and softure-new write the same format.
+`change.md` is defined **only** in §4. softure-roadmap (step 14, for every item it records) and softure-new write the same
+format; softure-new takes over a `change.md` the roadmap opened.
 
 Parsing rules (scripts depend on them):
 - Item IDs match `[A-Z]+-\d+`. A table row starts with `| **<ID>** | \`<change-id>\` |`, and the
@@ -538,7 +539,9 @@ so the paste is verified, never assumed:
   repeats it as an owner step in every report until the owner confirms the paste.
 
 **New roadmap.** When the owner hands over a new roadmap, the coordinator starts one roadmap thread
-that only runs `softure-roadmap`, merges `roadmap.md` and ends. Only then does it start one thread
+that only runs `softure-roadmap`, merges `roadmap.md` together with a change folder for every new item
+(`context/changes/<change-id>/change.md`, its `## Context` carrying the item block and the findings
+gathered for it) in the same pull request, and ends. Only then does it start one thread
 per ready item. A single thread never records a roadmap and implements its items.
 
 Nothing else needs saying: the rules, the roadmap and the owner's standing orders live in the
