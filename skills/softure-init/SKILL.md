@@ -37,7 +37,7 @@ start any work: no change, PRD or roadmap is created here.
 
 1. **Inventory what exists.** List `context/` recursively, if present. Record each file that
    already exists. You will not touch these, apart from adding missing keys to
-   `workflow.json` (step 6). Unknown keys in an existing `workflow.json` are kept as they are.
+   `workflow.json` (step 7). Unknown keys in an existing `workflow.json` are kept as they are.
 2. **Detect the stack.** Read these, and only these, to fill the config:
    - `package.json` -> `scripts`. Map the gates:
      - typecheck: the script that runs `tsc`, otherwise `npx tsc --noEmit` when `tsconfig.json` exists.
@@ -78,7 +78,19 @@ start any work: no change, PRD or roadmap is created here.
    question: "Create this? (Recommended: yes)". Offer the options yes / edit a value / cancel.
    Name applicable optional keys (below) in one line, without asking about each. `--auto`
    skips the question; `--dry-run` stops here in both modes.
-6. **Write only what is missing:**
+6. **Pick the evidence store** (WORKFLOW §11). Use an existing `evidence` key as is. Otherwise
+   propose one, recommended by where sessions run: a hosted cloud project with an artifact tool →
+   `artifact` (create one private evidence page, `"Evidence: <repo>"`, with
+   `softure-evidence/scripts/evidence.py render --out <page.html>`, publish it and write its url);
+   a session that can write the hosted project's shared files → `project-files` with
+   `path: "<project-slug>/evidence"`; local runs only → `dir` with `path: "~/softure-evidence/<repo>"`;
+   object storage the owner already runs → `command` with the owner's upload script. Interactive:
+   ask once with that recommendation. `--auto`: write `artifact` when the page could be created,
+   `project-files` when the shared files are writable, otherwise nothing and list it as an
+   unresolved value. Then the project files (§11.1): when the shared files are reachable and
+   `<project-slug>/INDEX.md` is missing, write it from `references/templates.md`; otherwise print
+   the template in the report.
+7. **Write only what is missing:**
    - `context/workflow.json`: new file, or only the missing keys merged into an existing one.
      Never change an existing value.
    - `context/foundation/README.md` and an empty `context/foundation/lessons.md` (`# Lessons` +
@@ -87,11 +99,11 @@ start any work: no change, PRD or roadmap is created here.
      (templates in `references/templates.md`).
    - Do **not** create `shape-notes.md`, `prd.md`, `roadmap.md`, `roadmaps/`, change folders
      or empty directories. Their skills create them on first use.
-7. **Verify.** Re-read `workflow.json` and check that it parses as JSON. For every gate
+8. **Verify.** Re-read `workflow.json` and check that it parses as JSON. For every gate
    command, check that the referenced script exists in `package.json` (or that the binary is
    on PATH). Mark any gate you could not resolve as `null`, never as a guess. Re-running the
    detection must now produce no new writes.
-8. **Report** a status block, one line per artifact (`created`, `present` or `merged: <keys>`),
+9. **Report** a status block, one line per artifact (`created`, `present` or `merged: <keys>`),
    then the unresolved values the owner should fill in, every inferred value with its reason,
    and the next step. With `mode: "autonomous"`, end it with the project-instructions snippet
    for hosted projects (WORKFLOW §8.5), `<owner>/<repo>` filled in from `origin`, ready to paste,
@@ -136,6 +148,7 @@ only when it was detected or the user asked for it:
 | `integration.lookup` | every call starts a run | the project stores results per commit (e.g. a git note) and has a command that prints one |
 | `integration.coveredByRelease` | `false` | the release pipeline runs the same full suite on the released commit |
 | `worktree.cloudState` | `"main"` (roadmap state on the main branch, branches never edit `roadmap.md`) | the user runs cloud sessions whose pre-push hook has no cheap path for `context/`-only pushes and wants the state on the branch (`"branch"`) |
+| `evidence` | no store: evidence is kept locally and reported as not durable | step 6 picked a store (the one optional key besides `research.sources` that `--auto` writes) |
 | `research.sources` | none | step 2 found docs, ADRs or a PRD (interactive: listed in the plan; `--auto`: only paths that exist) |
 | `install` | gitignore the skills, inject all rule sections | the user wants committed skills or fewer rule sections (the language section always ships; `allowNonEnglishCode: true` only on the owner's explicit word) |
 | `autonomy` | roadmap as the work source, merge via pull request, `<main>` merged into a branch only when needed (`remergeMain: "when-needed"`; `"on-conflict"` when the main branch takes a migration or a dependency change on nearly every merge and the owner accepts testing the merged result on main and in the release gate; add `relatedTests`, e.g. `npx vitest related --run {files}`, when the test runner has one), reports every 60 min around the clock (`reports.every`, `reports.hours: null`; routines fire at most hourly; the routine is also the run's heartbeat, so keep it 24/7) | `mode` is `autonomous` and the user names issues as the queue, merges by push, or another report cadence |
@@ -150,7 +163,7 @@ fictional repo: read `references/templates.md` **when writing the READMEs** and
 
 Detect, write and report without asking. Record every value you inferred (rather than read
 directly) in the report, e.g. `- mainBranch -> master (origin/HEAD missing; local master exists)`.
-Optional keys other than `research.sources` are never written in `--auto`.
+Optional keys other than `research.sources` and `evidence` (step 6) are never written in `--auto`.
 
 ## Quality bar
 

@@ -46,6 +46,13 @@ missing) or `autonomous`. Its rules are the `## Operating mode` section below; i
 section in this block. Switch modes only on the owner's explicit word: set `mode`, re-run the installer
 (`npx softure-skills`) so this block follows, commit both as `docs(rules): switch to <mode> mode`.
 
+**Project files and evidence (WORKFLOW §11).** No screenshot, frame grab or recording enters git
+(visual-regression baselines next to their tests excepted). Save each with `softure-evidence` to the
+store in `workflow.json` → `evidence`, named `<change-id>/<NN>-<what>-<before|after>-<width>-<theme>.webp`,
+and link the stored files from the Progress item they prove. Owner material (briefs, real data, designs)
+stays in the project files (`<project-slug>/briefs|data|design/`, listed in `INDEX.md`) and is referenced
+by path, never copied into the repository.
+
 Execution state lives only in the `## Progress` section of `plan.md`. Commands, the main branch
 and the artifact language come from `context/workflow.json`. Before building anything generic
 (auth, mail, feature switches, billing, GDPR, analytics, UI primitives), check the

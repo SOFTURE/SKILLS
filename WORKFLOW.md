@@ -24,6 +24,7 @@ hygiene (any time)
   softure-code-review   review a diff against the project conventions
   softure-rule-review   audit AI rule files (AGENTS.md, CLAUDE.md, skills) for drift and contradictions
   softure-lesson        turn a repeated mistake into a numbered rule
+  softure-evidence      store screenshots and recordings outside git, by name, on one evidence page (§11)
 ```
 
 Each step produces a durable artifact the next step reads. A step never starts without its
@@ -102,6 +103,15 @@ or languages.
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
   },
+  "evidence": {                     // optional: where screenshots, frame grabs and recordings live (§11); never git
+    "store": "artifact",            // "artifact": the asset store of one evidence page (`url`), hosted cloud sessions;
+                                    // "project-files": the hosted project's shared files (`path`); "dir": a folder outside
+                                    // the repository (`path`), local runs; "command": object storage behind `upload`
+    "url": "https://claude.ai/code/artifact/<id>",   // artifact: the per-project evidence page
+    "path": null,                   // project-files: "<project-slug>/evidence"; dir: e.g. "~/softure-evidence/<repo>"
+    "upload": null,                 // command: e.g. "scripts/evidence-upload.sh {file} {key}", prints the link last
+    "retainMonths": null            // null: keep forever (default); N: prune evidence of changes archived N months ago
+  },
   "install": {                      // optional: read by the installer on every `npm install`
     "gitignore": true,              // false: commit the installed skills (e.g. cloud sessions that never run npm install)
     "rules": ["language", "workflow", "conventions"],  // sections of rules/AGENTS.md to inject; default: all.
@@ -171,6 +181,9 @@ context/
 ```
 
 `change-id` is kebab-case, ASCII, at most 40 characters, unique across `changes/` and `archive/`.
+
+**No binaries under `context/`.** Screenshots, frame grabs and recordings go to the evidence store and
+are linked, never committed; owner material stays in the project files and is referenced by path (§11).
 
 **Headings are fixed English** in every artifact (`## Intent`, `## Progress`, `## Done`, `## Owner decisions and checks`, …),
 regardless of `language`. Scripts and orchestrators find sections by these headings. Only the prose under them is
@@ -418,7 +431,8 @@ Rules:
   `Owner step:` lines, never owner checks (AGENTS.md → Operating mode: autonomous).
 - Notation:
   - done: `- [x] N.M text — <sha>`;
-  - a Manual item the agent verified itself: `- [x] N.M text — <sha> (verified by agent: <how>)`;
+  - a Manual item the agent verified itself: `- [x] N.M text — <sha> (verified by agent: <how>)`; when the
+    proof is visual, the stored files are linked: `(verified by agent: <how> → <result>; <link>[, <link>])` (§11);
   - dropped mid-flight: `- [x] ~~N.M text~~ — dropped: <reason>`.
 - SHA: the phase commit is created first, then its SHA is written into Progress. Never amend that edit into the
   phase commit (the amend changes the SHA it records). It rides with the next commit of the change, or goes into a
@@ -599,3 +613,56 @@ MCP access tokens, billing/trial, GDPR export/delete, consent, channel analytics
 checks and UI primitives. If a module covers the need, the plan uses the module, configured
 through `softure.config.ts`. If a module almost covers it, the plan records the gap as an
 issue for SOFTURE/AI instead of re-implementing it locally.
+
+## 11. Project files and evidence
+
+Two kinds of material never enter git: **owner material** kept outside the repository, and **run
+evidence** (screenshots, frame grabs, recordings) a run produces. Both are kept durably, under
+predictable names, and referenced from the repository by path or link.
+
+### 11.1 Project files (owner material)
+
+A hosted project's shared files (or the owner's equivalent folder) hold the project's briefs,
+concepts, private data and design material, in one layout:
+
+```
+<project-slug>/
+  INDEX.md                          file → what it is → who reads it
+  briefs/YYYY-MM-DD-<topic>.md      concepts, owner roadmaps, private data
+  data/YYYY-MM-DD-<topic>.<ext>     exports, real seed data, documents
+  design/<screen>-<variant>.<ext>   mock-ups, inspiration, brand material
+  evidence/                         run evidence when `evidence.store` is "project-files" (§11.2)
+  archive/                          superseded files
+```
+
+- Lowercase kebab-case, a date prefix, no version or `-final` suffixes: the version lives in the content.
+  A superseded file moves to `archive/`; `INDEX.md` gets one line per file.
+- The repository references a file by path (`project files: <project-slug>/briefs/2026-11-02-roadmap.md`)
+  and never copies its content. Anything with personal data, real bookings, amounts or addresses lives
+  there, never in the repository.
+- `softure-init` writes the `INDEX.md` template when the shared files are reachable and it is missing,
+  otherwise prints it for the owner (`softure-init/references/templates.md`).
+
+### 11.2 Run evidence
+
+- **Store:** `evidence.store` (§2), outside git. `artifact` (the asset store of one per-project
+  evidence page) suits hosted cloud sessions: it needs no secret and the owner browses the page.
+  `project-files` suits sessions that can write the shared files, `dir` local runs, `command` object
+  storage (R2/S3) behind a project script that holds its own key. Never `context/changes/<id>/`.
+- **Name:** `<change-id>/<NN>-<what>-<before|after>-<width>-<theme>.webp`, e.g.
+  `add-side-map/01-map-panel-after-390-dark.webp`. WebP at quality 85; PNG only above the WebP size
+  limit (a side over 16383 px); recordings keep their format.
+- **Link:** each Progress item that relied on visual evidence links its stored files (§6 notation)
+  instead of describing them. `softure-impl-review` treats a visual claim without a link that opens as
+  missing evidence.
+- **Page:** one evidence page per project lists the changes newest first, a thumbnail grid per change,
+  `before` and `after` of the same screen, width and theme side by side.
+- **Gate:** `softure-archive` stops when the change folder holds an image or a recording.
+- **Retention:** kept forever by default; `evidence.retainMonths` (or the owner's word) prunes the
+  evidence of changes archived that many months ago.
+- **Exception:** visual-regression baselines that tests compare against stay in the repository, next
+  to their tests.
+
+`softure-evidence` (`scripts/evidence.py`) does the naming, the conversion, the store and the page:
+`save`, `list`, `render`, `check`, `prune`. Without a configured store it keeps a local copy, reports it
+as not durable, and the setup gap goes to the owner once.

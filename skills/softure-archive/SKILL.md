@@ -47,6 +47,7 @@ re-running is always safe. Report what you found and what you completed.
 |---|---|---|
 | no uncommitted changes in the change folder or the files the change touched (`git status --porcelain -- <paths>`) | yes: commit them first; never archive over uncommitted work of the change | other uncommitted paths (someone else's WIP): leave them, never stage them |
 | nothing staged that is not part of this change (`git diff --cached --name-only`) | yes: it would ride along in the archive commit. Name the paths; never unstage them yourself, they may be someone's work | |
+| no image or recording in the change folder (`python3 .claude/skills/softure-evidence/scripts/evidence.py check context/changes/<id>`) | yes: run evidence never enters `archive/` (WORKFLOW §11). Save each file with `softure-evidence`, link it from its Progress item, `git rm` it, commit, then archive | |
 | change.md `status` is `impl_reviewed` | | `implemented` (no review) or earlier |
 | plan.md exists | | no: work done without the chain (interactively, or a change that turned out to need no code). Archive it anyway, see "Without a plan" |
 | plan.md Progress: no open `#### Automated` items | yes: name them | |
@@ -186,6 +187,7 @@ row by row during the merge. Do not touch rows of other items.
 ## Checklist
 
 - [ ] No uncommitted files of the change before and after; nobody else's WIP or staged work in the commit.
+- [ ] `evidence.py check` clean on the change folder: no image or recording goes into `archive/`.
 - [ ] `status: archived` and `archived_at` set, the stamp inside the commit; folder named by `created`.
 - [ ] Roadmap row last cell, item block status, `## Done` and `updated` all changed (or the skip is reported);
       with `--handoff`, `roadmap.md` untouched and `## Roadmap handoff` written instead.

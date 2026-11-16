@@ -39,7 +39,8 @@ Passed automatically:
 - 2.4 Gates green: typecheck, lint, test (412 tests)
 
 Verified by me:
-- 2.5 email renders in light and dark mail themes (screenshots in reviews/p2-email-*.png)
+- 2.5 email renders in light and dark mail themes (evidence: reminder-email/01-reminder-email-after-600-light.webp,
+  reminder-email/02-reminder-email-after-600-dark.webp)
 
 Please check:
 - 2.6 the reminder wording reads naturally to a customer (preview: GET /dev/mail/reminder)
@@ -181,8 +182,8 @@ For every item ticked in this phase that has no suffix yet:
 ```
 - [x] 2.1 reminder job selects bookings starting in 23-25 h
 → - [x] 2.1 reminder job selects bookings starting in 23-25 h — 7c41e0b
-- [x] 2.5 email renders in light and dark mail themes (verified by agent: screenshots in reviews/)
-→ - [x] 2.5 email renders in light and dark mail themes — 7c41e0b (verified by agent: screenshots in reviews/)
+- [x] 2.5 email renders in light and dark mail themes (verified by agent: mail preview → both themes legible; <link>, <link>)
+→ - [x] 2.5 email renders in light and dark mail themes — 7c41e0b (verified by agent: mail preview → both themes legible; <link>, <link>)
 ```
 
 Skip items that already carry a SHA; a re-entered sequence must not append twice. Dropped items

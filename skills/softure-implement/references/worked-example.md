@@ -106,8 +106,10 @@ first". The user continues.
 
 Test-after: the button and its component tests first, then 2.1 and 2.2 pass and the gates are
 green. For 2.4 the skill starts the dev server, opens a booking 20 hours out at 390 px in both
-themes, takes two screenshots into `reviews/`, and looks at them: the button is greyed out and
-the cursor is not a pointer. 2.4 is ticked `(verified by agent: screenshots in reviews/p2-*.png)`.
+themes, takes two screenshots into a scratch folder, and looks at them: the button is greyed out
+and the cursor is not a pointer. `softure-evidence save` stores them as
+`cancellation-window/01-cancel-button-disabled-after-390-light.webp` and `…-390-dark.webp`, and 2.4
+is ticked with their links.
 2.5 is a judgement about wording, so the gate opens:
 
 ```
@@ -175,7 +177,7 @@ Re-scan: no open Automated item; open Manual item 1.4. The skill writes `a61c07e
 - [x] 2.3 Gates green (typecheck, lint, test) — a61c07e
 
 #### Manual
-- [x] 2.4 Disabled state is visibly disabled in light and dark themes at 390 px — a61c07e (verified by agent: screenshots in reviews/p2-*.png)
+- [x] 2.4 Disabled state is visibly disabled in light and dark themes at 390 px — a61c07e (verified by agent: dev server, booking 20 h out → greyed out, no pointer; evidence/cancellation-window/01-cancel-button-disabled-after-390-light.webp, evidence/cancellation-window/02-cancel-button-disabled-after-390-dark.webp)
 - [x] 2.5 The reason text is clear to a customer — a61c07e
 ```
 

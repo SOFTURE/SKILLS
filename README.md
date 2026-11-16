@@ -94,6 +94,7 @@ operating modes.
 | hygiene | `softure-code-review` | review of a diff against conventions |
 | | `softure-lesson` | numbered rule in `lessons.md` |
 | | `softure-rule-review` | audit of AGENTS.md / CLAUDE.md / skills |
+| | `softure-evidence` | screenshots and recordings in the evidence store (never git) + the evidence page |
 
 Every interactive skill accepts `--auto`: it decides instead of asking and records each
 decision in the artifact. The orchestrators always use it, and `mode: "autonomous"` implies it.

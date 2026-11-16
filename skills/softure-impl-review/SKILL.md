@@ -71,9 +71,12 @@ Read when needed:
 2. **Audit Progress honesty.** For every `- [x]`, find the evidence: a test name, a file, a
    command output, a screenshot. Re-run the gates (`gates.*`) and every Automated criterion that
    names a command; do not trust earlier runs. A ticked box without evidence is **CRITICAL**.
-   `(verified by agent: …)` must point at something that exists. Open Manual items are pending,
-   not findings, except in `--auto`: there an open Manual item without `(owner only: <reason>)` is
-   a WARNING (the run could verify it), decided `fix now` by running its evidence and ticking it
+   `(verified by agent: …)` must point at something that exists; a visual claim (screenshot,
+   frame grab, recording) must link files in the evidence store (WORKFLOW §11) that open. A visual
+   claim with no link, or an image or recording added to the repository (visual-regression
+   baselines excepted), is a WARNING, fixed by saving the file with `softure-evidence` and linking
+   it. Open Manual items are pending, not findings, except in `--auto`: there an open Manual item
+   without `(owner only: <reason>)` is a WARNING (the run could verify it), decided `fix now` by running its evidence and ticking it
    through `softure-implement`'s notation.
 3. **Check drift.** Everything the code does that the plan did not ask for, everything the plan
    asked for that the code does not do. Intentional drift must be explained in plan.md

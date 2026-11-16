@@ -110,7 +110,10 @@ mandatory; stop with an error.
      rendered UI.
    - Manual items: first try to verify them yourself where a machine can stand in for the eye:
      screenshots at the stated widths and themes, a recorded request/response, a DB read. Tick
-     such an item with `(verified by agent: <how>)`. Anything that needs the owner's judgement
+     such an item with `(verified by agent: <how>)`. Visual evidence is saved with
+     `softure-evidence` (named `<change-id>/<NN>-<what>-<before|after>-<width>-<theme>.webp`, stored
+     outside git) and its links go into the tick: `(verified by agent: <how> → <result>; <link>)`.
+     Take screenshots into a scratch folder outside the repository, never into the change folder. Anything that needs the owner's judgement
      stays `- [ ]`. `--auto`: every `(evidence: …)` Manual item is verified by running that
      evidence; only `(owner only: <reason>)` items stay open (see `## --auto`).
 
@@ -198,7 +201,8 @@ steps 7 to 9:
 - **Verify the Manual items yourself.** Run the evidence each Manual item names (test, script,
   local render, screenshot or frame grab you look at, pipeline run and health check, CI logs,
   `ffprobe` or schema check) and tick it with
-  ` — <sha> (verified by agent: <command> → <result>[, <link>])`. Never leave an `(evidence: …)`
+  ` — <sha> (verified by agent: <command> → <result>[, <link>])`; a screenshot or recording is
+  saved with `softure-evidence` first and the link is its stored file. Never leave an `(evidence: …)`
   item open for the owner: a check that fails is a defect to fix in the phase; evidence that cannot
   be produced in this environment is an escalation naming why, not an owner check. Only
   `(owner only: <reason>)` items stay `- [ ]`. A Manual item with neither annotation (an older
@@ -213,6 +217,7 @@ steps 7 to 9:
 ## Quality checklist
 
 - [ ] Every ticked box was actually checked in this session, by command, query or screenshot.
+- [ ] Every screenshot or recording behind a tick is in the evidence store and linked; none is in the diff.
 - [ ] Gates are green at every phase commit.
 - [ ] The diff follows the language rule in AGENTS.md (when the project carries one).
 - [ ] There is one commit per phase with the WORKFLOW §9 message, and nothing unrelated is staged.
@@ -234,6 +239,8 @@ steps 7 to 9:
 - Amending after a failed hook: the failed commit never happened, so `--amend` rewrites the
   previous phase.
 - Handing every manual item to the user when a screenshot or a query would have settled it.
+- Saving screenshots into `context/changes/<id>/` (they end up in git) or into an ignored folder of a
+  cloud container (they vanish with it) instead of the evidence store.
 
 ## Handoff
 
