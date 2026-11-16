@@ -71,3 +71,23 @@ Planned for later, never what is in flight. A topic lives in exactly one place: 
 Numbered rules from real incidents in this repo (`## L-NNN: <rule>` with **Why**, **How to apply**
 and **Applies to**). Written by softure-lesson; read by research, frame, plan, implement and the reviews.
 ```
+
+## `<project-slug>/INDEX.md` (project files, outside the repository)
+
+Written into the hosted project's shared files when they are reachable and the file is missing;
+otherwise printed in the report for the owner (WORKFLOW §11.1).
+
+```markdown
+# <project-slug>: project files
+
+Owner material kept outside the repository. The repository references these files by path
+(`project files: <project-slug>/briefs/<file>`) and never copies them. Lowercase kebab-case, a date
+prefix, no version or `-final` suffix; superseded files move to `archive/`.
+
+| File | What it is | Who reads it |
+|---|---|---|
+| `briefs/YYYY-MM-DD-<topic>.md` | concept, owner roadmap, private data | softure-shape, softure-roadmap |
+| `data/YYYY-MM-DD-<topic>.<ext>` | export, real seed data, document | the change that needs it |
+| `design/<screen>-<variant>.<ext>` | mock-up, inspiration, brand material | softure-plan, softure-implement |
+| `evidence/` | run evidence (when `evidence.store` is "project-files") | the owner, softure-impl-review |
+```
