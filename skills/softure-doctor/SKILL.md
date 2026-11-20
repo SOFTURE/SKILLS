@@ -11,7 +11,7 @@ description: >
   agent settles to zero. Use in CI, before an archive or roadmap commit, or when the user says
   "check the context", "run the doctor", "what waits for me", "refresh the state", "clean up the
   history", "sweep the doctor to zero".
-argument-hint: "[doctor [--fix [--write] | --sweep] | state write|print|check] [--root <dir>] [--json] [--staged]"
+argument-hint: "[doctor [--fix [--write] | --sweep | --baseline] | state write|print|check] [--root <dir>] [--json] [--staged]"
 allowed-tools:
   - Read
   - Bash
@@ -27,6 +27,7 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 | `python3 <S>/doctor.py [--json]` | every check; exit 1 on a failure. Same as `npx softure-skills doctor` |
 | `python3 <S>/doctor.py --fix [--write]` | the mechanical repairs of history, printed edit by edit; a dry run unless `--write` |
 | `python3 <S>/doctor.py --sweep [--json]` | every remaining failure as a worklist entry with evidence pointers; read-only |
+| `python3 <S>/doctor.py --baseline` | last resort only: accept today's failures in `context/doctor-baseline.json`; it only shrinks |
 | `python3 <S>/context_state.py write` | regenerate `context/state.json` from the working tree |
 | `python3 <S>/context_state.py write --staged` | regenerate it from what is staged, and stage it (use right before a commit) |
 | `python3 <S>/context_state.py print` / `check` | show it / exit 1 when it is missing or stale |
@@ -60,6 +61,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `backlog-without-roadmap` | move live entries to a queued roadmap, then remove the folder |
 | `index-missing-file` | fix or drop the index row |
 | `state-missing` / `state-stale` | `context_state.py write`, commit `context/state.json` |
+| `baseline-stale` | a baselined failure is fixed: `doctor.py --baseline` rewrites the file without it (commit it) |
 
 ## Mechanical repairs: `--fix`
 
@@ -114,6 +116,17 @@ Work the list in one change per repository (`docs(context): settle history to ze
 
 An entry the agent cannot settle and that is not the owner's (the evidence is ambiguous) is named in
 the report with its evidence, not ticked.
+
+## Baseline: the last resort
+
+`doctor.py --baseline` writes the failures that remain to `context/doctor-baseline.json`. The check
+then reports them as `baselined` and fails only on a new failure and on a baseline entry that was
+fixed but not removed (`baseline-stale`). It only shrinks: run again, it drops the fixed entries,
+refuses to add new ones (exit 1, it names them) and removes the file once it is empty. State findings
+are never baselined, and `--fix` and `--sweep` ignore the baseline.
+
+Use it only when the owner decides a project cannot finish the sweep in one change; never to get a red
+CI green, and never on your own initiative. Record why in the commit. The sweep to zero is the path.
 
 A project that has never written `context/state.json` gets a `note`, not a failure, until the first
 script run creates it.

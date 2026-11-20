@@ -4,6 +4,7 @@
     doctor.py [--root <dir>] [--json]
     doctor.py --fix [--write] [--json]    mechanical repairs of history (dry run unless --write)
     doctor.py --sweep [--json]            every remaining failure as a worklist with evidence (read-only)
+    doctor.py --baseline                  last resort: accept today's failures in context/doctor-baseline.json
     npx softure-skills doctor [...]      (the same, from the installed package)
 
 Adopting projects run it in their CI check, documentation-only changes included (that is where the
@@ -23,11 +24,17 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   index-missing-file              an index row (README.md / INDEX.md table under context/) links a missing file
   state-missing                   context/state.json is missing although the project has written it before
   state-stale                     context/state.json does not match the markdown
+  baseline-stale                  context/doctor-baseline.json lists a failure that is fixed (remove it), or is unreadable
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
 moved, found through git history) and prints every edit; see doctor_fix.py. It is a dry run unless
 `--write` is given, and it writes only under `context/`. `--sweep` lists every remaining failure with
 the evidence an agent needs to settle it from the repository alone; see doctor_sweep.py.
+
+`--baseline` is a last resort for a project that cannot finish the sweep at once: it writes the failures
+that remain to `context/doctor-baseline.json`, and the check then fails only on new failures and on
+baseline entries that were fixed but not removed. It only shrinks: run again, it drops the fixed
+entries and never adds one. State findings are never baselined. The recommended path is the sweep to zero.
 
 A project that has never written `context/state.json` (it adopted the package before the file existed)
 gets a note, not a failure: the first run of `wt-roadmap.py`, `softure-archive` or `softure-roadmap`
@@ -52,6 +59,8 @@ from context_state import (  # noqa: E402
 )
 
 ARCHIVE_DIR = "context/archive"
+BASELINE_PATH = "context/doctor-baseline.json"
+NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale")
 BACKLOG_DIR = "context/backlog"
 CLOSED_STATUSES = ("done", "done_code", "dropped", "carried")
 SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
@@ -69,7 +78,7 @@ class Finding:
         return {"code": self.code, "path": self.path, "message": self.message, "severity": self.severity}
 
     def __str__(self) -> str:
-        label = "FAIL" if self.severity == "fail" else "note"
+        label = {"fail": "FAIL", "baselined": "baselined"}.get(self.severity, "note")
         return f"{label} {self.code} {self.path}: {self.message}"
 
 
@@ -323,8 +332,12 @@ def check_state(reader, root: str | None) -> list[Finding]:
                     f"{problem}; regenerate it (`npx softure-skills state`) and commit")]
 
 
-def run_checks(reader, root: str | None = None) -> list[Finding]:
-    """Every finding for the project `reader` sees. `root` (a git checkout) enables the history check."""
+def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[Finding]:
+    """Every finding for the project `reader` sees. `root` (a git checkout) enables the history check.
+
+    With `baseline` (the default) a failure listed in context/doctor-baseline.json is reported with severity
+    `baselined` instead of `fail`, and a listed failure that no longer occurs is a `baseline-stale` failure.
+    """
     if not reader.exists("context"):
         return []
     findings: list[Finding] = []
@@ -332,7 +345,84 @@ def run_checks(reader, root: str | None = None) -> list[Finding]:
                   check_queued_and_backlog, check_indexes):
         findings += check(reader)
     findings += check_state(reader, root)
-    return findings
+    return apply_baseline(reader, findings) if baseline else findings
+
+
+def _key(code: str, path: str) -> tuple[str, str]:
+    return code, path
+
+
+def read_baseline(reader) -> tuple[list[dict] | None, str | None]:
+    """(entries, problem): entries None when there is no baseline; problem when the file is unreadable."""
+    raw = reader.read(BASELINE_PATH)
+    if raw is None:
+        return None, None
+    try:
+        data = json.loads(raw)
+        entries = data["entries"]
+        if not isinstance(entries, list) or not all(isinstance(e, dict) and "code" in e and "path" in e
+                                                    for e in entries):
+            raise ValueError("entries must be objects with code and path")
+        return entries, None
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        return [], f"not a valid baseline ({exc}); restore it from git or remove it"
+
+
+def apply_baseline(reader, findings: list[Finding]) -> list[Finding]:
+    entries, problem = read_baseline(reader)
+    if entries is None:
+        return findings
+    if problem:
+        return findings + [Finding("baseline-stale", BASELINE_PATH, problem)]
+    accepted = {_key(entry["code"], entry["path"]) for entry in entries}
+    present = set()
+    out = []
+    for finding in findings:
+        key = _key(finding.code, finding.path)
+        if finding.severity == "fail" and key in accepted and finding.code not in NEVER_BASELINED:
+            present.add(key)
+            out.append(Finding(finding.code, finding.path, finding.message, severity="baselined"))
+        else:
+            out.append(finding)
+    for entry in entries:
+        key = _key(entry["code"], entry["path"])
+        if key not in present:
+            out.append(Finding("baseline-stale", BASELINE_PATH,
+                               f"`{entry['code']} {entry['path']}` is fixed but still in the baseline: remove the "
+                               "entry (`doctor --baseline` rewrites the file without it)"))
+    return out
+
+
+def build_baseline(reader, root: str | None) -> tuple[dict, dict]:
+    """The baseline file to write and what changed: {"kept", "dropped", "refused"} (lists of keys)."""
+    import datetime as dt
+
+    failures = [f for f in run_checks(reader, root, baseline=False)
+                if f.severity == "fail" and f.code not in NEVER_BASELINED]
+    current: dict[tuple, Finding] = {}
+    for finding in failures:
+        current.setdefault(_key(finding.code, finding.path), finding)
+    previous, problem = read_baseline(reader)
+    if problem:
+        raise ValueError(f"{BASELINE_PATH}: {problem}")
+    if previous is None:
+        keep = list(current)
+        dropped: list[tuple] = []
+        refused: list[tuple] = []
+        created = dt.date.today().isoformat()
+    else:
+        old = [_key(entry["code"], entry["path"]) for entry in previous]
+        keep = [key for key in old if key in current]
+        dropped = [key for key in old if key not in current]
+        refused = [key for key in current if key not in old]
+        created = (json.loads(reader.read(BASELINE_PATH) or "{}").get("created")) or dt.date.today().isoformat()
+    data = {
+        "note": "Last resort (WORKFLOW §12.2): failures accepted while the history is swept. It only shrinks: "
+                "`doctor --baseline` drops fixed entries and never adds one. The goal is an empty file, then none.",
+        "created": created,
+        "entries": [{"code": key[0], "path": key[1], "message": current[key].message} for key in sorted(keep)],
+    }
+    return data, {"kept": keep, "dropped": dropped, "refused": refused}
 
 
 def _take(args: list[str], flag: str) -> bool:
@@ -348,7 +438,7 @@ def run_fix(reader, root: str, git_root: str | None, write: bool, as_json: bool)
 
     plan = doctor_fix.plan_fixes(reader, git_root)
     after = FsReader(root, plan["files"])
-    remaining = [f for f in run_checks(after, git_root) if f.severity == "fail"]
+    remaining = [f for f in run_checks(after, git_root, baseline=False) if f.severity == "fail"]
     if write and plan["files"]:
         doctor_fix.apply_fixes(root, plan["files"])
     if as_json:
@@ -367,6 +457,32 @@ def run_fix(reader, root: str, git_root: str | None, write: bool, as_json: bool)
     if plan["files"] and not write:
         print("run again with --write to apply")
     return 0
+
+
+def run_baseline(reader, root: str, git_root: str | None) -> int:
+    """`--baseline`: write context/doctor-baseline.json; it never grows once it exists."""
+    try:
+        data, change = build_baseline(reader, git_root)
+    except ValueError as exc:
+        print(f"softure-doctor --baseline: {exc}", file=sys.stderr)
+        return 1
+    target = os.path.join(root, BASELINE_PATH)
+    if not data["entries"]:
+        if os.path.exists(target):
+            os.remove(target)
+            print(f"softure-doctor --baseline: every entry is fixed; removed {BASELINE_PATH}")
+        else:
+            print("softure-doctor --baseline: nothing fails, no baseline written")
+        return 0
+    with open(target, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    print(f"softure-doctor --baseline: wrote {BASELINE_PATH} with {len(data['entries'])} entr"
+          f"{'y' if len(data['entries']) == 1 else 'ies'} (last resort: sweep them to zero, WORKFLOW §12.2)")
+    for key in change["dropped"]:
+        print(f"dropped (fixed): {key[0]} {key[1]}")
+    for key in change["refused"]:
+        print(f"not added (the baseline only shrinks; fix it): {key[0]} {key[1]}")
+    return 1 if change["refused"] else 0
 
 
 def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
@@ -405,12 +521,13 @@ def main(argv: list[str] | None = None) -> int:
     fix = _take(args, "--fix")
     write = _take(args, "--write")
     do_sweep = _take(args, "--sweep")
+    do_baseline = _take(args, "--baseline")
     root = None
     if "--root" in args:
         k = args.index("--root")
         root = os.path.abspath(args[k + 1])
         del args[k:k + 2]
-    if args or (write and not fix) or (fix and do_sweep):
+    if args or (write and not fix) or sum((fix, do_sweep, do_baseline)) > 1:
         print(__doc__, file=sys.stderr)
         return 2
     top = subprocess.run(["git", "-C", root or os.getcwd(), "rev-parse", "--show-toplevel"],
@@ -429,6 +546,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_fix(reader, root, git_root, write, as_json)
     if do_sweep:
         return run_sweep(reader, root, git_root, as_json)
+    if do_baseline:
+        return run_baseline(reader, root, git_root)
     findings = run_checks(reader, git_root)
     failures = [f for f in findings if f.severity == "fail"]
     if as_json:
@@ -437,6 +556,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if failures else 0
     for finding in findings:
         print(finding)
+    baselined = sum(1 for f in findings if f.severity == "baselined")
+    if baselined:
+        print(f"softure-doctor: {baselined} failure(s) accepted by {BASELINE_PATH} (last resort; sweep them to zero)")
     if failures:
         print(f"softure-doctor: {len(failures)} problem(s) in the context/ contract (WORKFLOW.md §12)")
         mechanical = sum(1 for f in failures if f.code in ("archived-change-status", "index-missing-file"))

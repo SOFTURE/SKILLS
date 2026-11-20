@@ -11,6 +11,7 @@
 //   softure-skills doctor [--json]          check the context/ contract (WORKFLOW.md §12); exit 1 on drift
 //   softure-skills doctor --fix [--write]   mechanical repairs of history (dry run unless --write)
 //   softure-skills doctor --sweep [--json]  worklist of the judgement cases, with evidence (read-only)
+//   softure-skills doctor --baseline        last resort: accept today's failures; the file only shrinks
 //   softure-skills state [write|print|check] regenerate context/state.json (default: write)
 //   softure-skills portfolio [<repo> ...] [--owner] [--json]   read-only table across many repositories
 //

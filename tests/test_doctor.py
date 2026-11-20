@@ -385,6 +385,75 @@ class SweepTest(unittest.TestCase):
             project.cleanup()
 
 
+class BaselineTest(unittest.TestCase):
+    """`doctor --baseline`: a last resort that accepts today's failures and only ever shrinks."""
+
+    def setUp(self) -> None:
+        self.project = Project()
+        for case in ("archived-change-progress", "index-missing-file"):
+            self.project.apply_case(case)
+        self.project.commit("history")
+
+    def tearDown(self) -> None:
+        self.project.cleanup()
+
+    def baseline(self) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, os.path.join(SCRIPTS, "doctor.py"), "--root", self.project.root,
+                               "--baseline"], env={**os.environ, **GIT_ENV}, capture_output=True, text=True)
+
+    def entries(self) -> list[tuple[str, str]]:
+        data = json.loads(self.project.read("context/doctor-baseline.json"))
+        return [(entry["code"], entry["path"]) for entry in data["entries"]]
+
+    def test_unchanged_tree_passes(self) -> None:
+        self.assertEqual(self.baseline().returncode, 0)
+        self.assertEqual({code for code, _ in self.entries()}, {"archived-change-progress", "index-missing-file"})
+        code, report = self.project.doctor()
+        self.assertEqual((code, report["failures"]), (0, []))
+        self.assertEqual({note["severity"] for note in report["notes"]}, {"baselined"})
+
+    def test_new_drift_fails(self) -> None:
+        self.baseline()
+        self.project.apply_case("archived-change-status")
+        self.assertEqual(self.project.codes(), {"archived-change-status"})
+        result = self.baseline()
+        self.assertEqual(result.returncode, 1, "the baseline never grows")
+        self.assertIn("not added", result.stdout)
+        self.assertNotIn("archived-change-status", {code for code, _ in self.entries()})
+        self.assertEqual(self.project.codes(), {"archived-change-status"})
+
+    def test_fixed_entry_must_be_removed(self) -> None:
+        self.baseline()
+        plan = "context/archive/2026-09-01-staff-day-view/plan.md"
+        shutil.copyfile(os.path.join(FIXTURES, "clean", plan), self.project.path(plan))
+        self.assertEqual(self.project.codes(), {"baseline-stale"})
+        result = self.baseline()
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("dropped (fixed): archived-change-progress", result.stdout)
+        self.assertEqual(self.entries(), [("index-missing-file", "context/foundation/roadmaps/README.md")])
+        self.assertEqual(self.project.codes(), set())
+
+    def test_empty_baseline_is_removed_and_state_is_never_baselined(self) -> None:
+        self.baseline()
+        for case in ("archived-change-progress", "index-missing-file"):
+            for folder, _, files in os.walk(os.path.join(FIXTURES, "cases", case)):
+                for name in files:
+                    rel = os.path.relpath(os.path.join(folder, name), os.path.join(FIXTURES, "cases", case))
+                    shutil.copyfile(os.path.join(FIXTURES, "clean", rel), self.project.path(rel))
+        self.assertEqual(self.baseline().returncode, 0)
+        self.assertFalse(os.path.exists(self.project.path("context/doctor-baseline.json")))
+        self.project.apply_case("state-stale")
+        self.assertEqual(self.baseline().returncode, 0)
+        self.assertFalse(os.path.exists(self.project.path("context/doctor-baseline.json")))
+        self.assertEqual(self.project.codes(), {"state-stale"})
+
+    def test_sweep_ignores_the_baseline(self) -> None:
+        self.baseline()
+        status, report = self.project.doctor("--sweep")
+        self.assertEqual(status, 1)
+        self.assertEqual({entry["code"] for entry in report["entries"]}, {"archived-change-progress", "index-missing-file"})
+
+
 class StateTest(unittest.TestCase):
     def setUp(self) -> None:
         self.project = Project()
