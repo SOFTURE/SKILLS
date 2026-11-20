@@ -8,8 +8,10 @@
     npx softure-skills doctor [...]      (the same, from the installed package)
 
 Adopting projects run it in a CI job named `context-doctor`, documentation-only changes included (that is where the
-drift happens). `softure-archive` and `softure-roadmap --close` run it before their commit and fix
-what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
+drift happens). In GitHub Actions it also writes the failure codes as annotations of that check run (the first one,
+titled `context-doctor failure codes`, lists every code with its count) and as the job summary, so a reader of the
+forge API sees the codes on the main branch's head without a checkout. `softure-archive` and `softure-roadmap
+--close` run it before their commit and fix what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
 
   roadmap-archived-not-removed    roadmap.md is still there although the same roadmap is in foundation/archive/
   roadmap-status-mismatch         roadmap.md `status` contradicts its rows (done with open rows; waiting)
@@ -617,6 +619,61 @@ def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
     return 1
 
 
+# The annotation that lists every failure code of a run; readers of the check run (portfolio --source api) find it
+# by this title. GitHub keeps only the first few annotations of a step, so the codes come first, in one annotation.
+CI_CODES_TITLE = "context-doctor failure codes"
+CI_ANNOTATION_LIMIT = 9
+
+
+def failure_codes(failures: list[Finding]) -> list[tuple[str, int]]:
+    counts: dict[str, int] = {}
+    for failure in failures:
+        counts[failure.code] = counts.get(failure.code, 0) + 1
+    return sorted(counts.items())
+
+
+def _escape(value: str, property_value: bool = False) -> str:
+    value = value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return value.replace(":", "%3A").replace(",", "%2C") if property_value else value
+
+
+def report_to_ci(failures: list[Finding], env: dict | None = None, out=None) -> None:
+    """In GitHub Actions: the failure codes as annotations of the check run, and a job summary.
+
+    The first annotation (title `CI_CODES_TITLE`) lists every code with its count, so a reader of the check run
+    through the forge API gets the codes without a checkout; one annotation per failure follows, up to the limit.
+    The job summary (`$GITHUB_STEP_SUMMARY`) holds the same table. Outside Actions nothing changes.
+    """
+    env = os.environ if env is None else env
+    out = out or sys.stdout
+    if env.get("GITHUB_ACTIONS") != "true":
+        return
+    codes = failure_codes(failures)
+    if codes:
+        listed = ", ".join(f"{code} ({count})" for code, count in codes)
+        print(f"::error title={_escape(CI_CODES_TITLE, True)}::{_escape(listed)}", file=out)
+        for failure in failures[:CI_ANNOTATION_LIMIT]:
+            print(f"::error file={_escape(failure.path, True)},title={_escape(failure.code, True)}::"
+                  f"{_escape(failure.message)}", file=out)
+    target = env.get("GITHUB_STEP_SUMMARY")
+    if not target:
+        return
+    lines = ["### context-doctor", ""]
+    if codes:
+        lines += [f"{len(failures)} problem(s) in the context/ contract (WORKFLOW.md §12).", "",
+                  "| Code | Count | First path |", "| --- | --- | --- |"]
+        for code, count in codes:
+            first = next(failure.path for failure in failures if failure.code == code)
+            lines.append(f"| `{code}` | {count} | `{first}` |")
+    else:
+        lines.append("context/ contract OK")
+    try:
+        with open(target, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+    except OSError:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "-h" in args or "--help" in args:
@@ -661,6 +718,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if failures else 0
     for finding in findings:
         print(finding)
+    report_to_ci(failures)
     baselined = sum(1 for f in findings if f.severity == "baselined")
     if baselined:
         print(f"softure-doctor: {baselined} failure(s) accepted by {BASELINE_PATH} (last resort; sweep them to zero)")

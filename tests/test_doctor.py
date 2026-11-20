@@ -650,6 +650,49 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual({entry["code"] for entry in report["entries"]}, {"archived-change-progress", "index-missing-file"})
 
 
+class CiReportTest(unittest.TestCase):
+    """In GitHub Actions the doctor leaves its failure codes where the forge API can read them."""
+
+    def setUp(self) -> None:
+        self.project = Project()
+
+    def tearDown(self) -> None:
+        self.project.cleanup()
+
+    def run_in_actions(self) -> tuple[subprocess.CompletedProcess, str]:
+        summary = self.project.path("step-summary.md")
+        result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "doctor.py"), "--root", self.project.root],
+                                env={**os.environ, **GIT_ENV, "GITHUB_ACTIONS": "true", "GITHUB_STEP_SUMMARY": summary},
+                                capture_output=True, text=True)
+        if not os.path.exists(summary):
+            return result, ""
+        with open(summary, encoding="utf-8") as fh:
+            return result, fh.read()
+
+    def test_failure_codes_become_annotations_and_a_job_summary(self) -> None:
+        self.project.apply_case("archived-change-status")
+        self.project.apply_case("state-stale")
+        result, summary = self.run_in_actions()
+        self.assertEqual(result.returncode, 1)
+        first = next(line for line in result.stdout.splitlines() if line.startswith("::error"))
+        self.assertEqual(first, "::error title=context-doctor failure codes::archived-change-status (1), state-stale (1)")
+        self.assertIn("::error file=context/state.json,title=state-stale::", result.stdout)
+        self.assertIn("| `state-stale` | 1 | `context/state.json` |", summary)
+
+    def test_a_green_run_writes_a_summary_and_no_annotation(self) -> None:
+        result, summary = self.run_in_actions()
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("::error", result.stdout)
+        self.assertIn("context/ contract OK", summary)
+
+    def test_outside_actions_nothing_changes(self) -> None:
+        self.project.apply_case("state-stale")
+        result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "doctor.py"), "--root", self.project.root],
+                                env={**{k: v for k, v in os.environ.items() if not k.startswith("GITHUB_")}, **GIT_ENV},
+                                capture_output=True, text=True)
+        self.assertNotIn("::error", result.stdout)
+
+
 class StateTest(unittest.TestCase):
     def setUp(self) -> None:
         self.project = Project()

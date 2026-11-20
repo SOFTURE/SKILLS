@@ -33,7 +33,8 @@ repository, in both modes; a local checkout counts when its `origin` is on GitHu
 `--owner` prints only the owner queue across all projects, oldest first, with each entry's `id` (an owner-word issue
 names the entry it answers by that id, WORKFLOW §8.6). `--json` prints the same data
 for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`;
-with `--source api`, `doctor_check` is the check run's status and `doctor_check_url` its page). Exit 1 when a project could not be read (its row says why); nothing is ever written
+with `--source api`, `doctor_check` is the check run's status, `doctor_check_url` its page and `doctor_check_codes`
+the doctor's failure codes from the run's annotations; the table shows them after `failing`). Exit 1 when a project could not be read (its row says why); nothing is ever written
 outside a temporary folder.
 """
 from __future__ import annotations
@@ -58,6 +59,7 @@ GITHUB_RE = re.compile(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$")
 SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 # The CI job every adopting project runs the doctor in (WORKFLOW.md §12.2); its check run carries this name.
 DOCTOR_CHECK = "context-doctor"
+CODES_TITLE = "context-doctor failure codes"  # the doctor's annotation that lists its failure codes
 PASSING = ("success", "neutral", "skipped")
 
 
@@ -169,7 +171,20 @@ def doctor_check(slug: str, branch: str | None) -> dict:
         status = "pending"
     else:
         status = "ok" if run.get("conclusion") in PASSING else "failing"
-    return {"status": status, "url": run.get("html_url")}
+    codes = failure_codes(slug, run) if status == "failing" else []
+    return {"status": status, "url": run.get("html_url"), "codes": codes}
+
+
+def failure_codes(slug: str, run: dict) -> list[str]:
+    """The doctor's failure codes of a failing check run, from its `context-doctor failure codes` annotation."""
+    if not run.get("id") or not (run.get("output") or {}).get("annotations_count", 1):
+        return []
+    annotations = gh_json(f"repos/{slug}/check-runs/{run['id']}/annotations")
+    for annotation in annotations if isinstance(annotations, list) else []:
+        if annotation.get("title") == CODES_TITLE:
+            return [part.strip().split(" (")[0] for part in (annotation.get("message") or "").split(",")
+                    if part.strip()]
+    return []
 
 
 def pick_release(forge: dict | None, tag: dict | None, state: dict | None) -> dict:
@@ -263,6 +278,7 @@ def read_api(project: dict) -> dict:
     check = doctor_check(slug, project.get("branch"))
     return {"branch": project.get("branch") or "default", "state": state, "state_source": source,
             "doctor": None, "doctor_check": check["status"], "doctor_check_url": check["url"],
+            "doctor_check_codes": check.get("codes") or [],
             **release_fields(release)}
 
 
@@ -297,6 +313,8 @@ def collect(projects: list[dict], source: str) -> list[dict]:
 def check_cell(row: dict) -> str:
     """The doctor column of a row read through the API: the `context-doctor` check run, else `n/a`."""
     check = row.get("doctor_check")
+    if check == "failing" and row.get("doctor_check_codes"):
+        return f"failing: {', '.join(row['doctor_check_codes'])}"
     return check if check and check != "unknown" else "n/a"
 
 
