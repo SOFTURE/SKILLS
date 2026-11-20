@@ -780,7 +780,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `roadmap-archived-not-removed` | `roadmap.md` is still there although the same roadmap (slug and version) is in `foundation/archive/` |
 | `roadmap-status-mismatch` | `roadmap.md` says `done` while rows are open, or `waiting` (a queued roadmap's status) |
 | `archived-change-status` | an archived `change.md` whose status is not `archived` |
-| `archived-change-progress` | an archived `plan.md` with unticked Automated items (open Manual items are legitimate) |
+| `archived-change-progress` | an archived `plan.md` with unticked Automated items (open Manual items are legitimate; an item struck through or carrying a dropped/cancelled/not-applicable note is dropped, not open) |
 | `archived-roadmap-open-items` | an archived roadmap with rows that are not `done`, `done_code`, dropped or carried |
 | `archived-roadmap-summary` | an archived roadmap whose `## Summary` merge column holds placeholders instead of SHAs |
 | `archived-roadmap-open-checks` | an archived roadmap with an unticked `## Owner decisions and checks` entry, or an unticked `## Before the next release` step once its release is recorded or a later roadmap was closed |
@@ -797,7 +797,9 @@ left after them; `--fix --write` applies them, only under `context/`, and a seco
 - an archived change's `status` becomes `archived`; the old value is kept as `legacy_status` in its front matter;
 - an index row inside `context/archive/` or `context/foundation/archive/` that links a missing file is rewritten to
   the file's current path when git history shows where it moved (rename detection, followed across moves); a file
-  deleted on purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit.
+  deleted on purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit;
+- an unticked Progress item of an archived plan that is struck through or carries a dropped/cancelled/not-applicable
+  note is normalised to `- [x] ~~<item>~~ — dropped: <note>`.
 
 A row whose move or deletion the history does not show, and a live index, are left alone and named. A shallow clone
 works on the commits it holds and names what lies past its edge. Everything else is a judgement case.
