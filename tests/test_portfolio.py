@@ -28,9 +28,15 @@ GIT_ENV = {
 
 
 FAKE_GH = """#!/usr/bin/env python3
-import sys
+import os, sys
 args = " ".join(sys.argv[1:])
-if "repos/acme/shop/releases/latest" in args:
+path = sys.argv[-1]
+if path.startswith("repos/acme/") and path.count("/") == 2:
+    print('{"default_branch": "main"}')
+elif "/commits/main/check-runs?check_name=context-doctor" in path:
+    stub = sys.argv[0] + ".checks." + path.split("/")[2] + ".json"
+    print(open(stub).read() if os.path.exists(stub) else '{"total_count": 0, "check_runs": []}')
+elif "repos/acme/shop/releases/latest" in args:
     print('{"tag_name": "v1.6.0", "published_at": "2026-11-20T08:00:00Z"}')
 elif "repos/acme/shop/contents/context/state.json" in args or "repos/acme/old/contents/context/state.json" in args:
     sys.stdout.write(open(sys.argv[0] + ".state.json").read())
@@ -144,7 +150,28 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual((rows["shop"]["last_release"], rows["shop"]["last_release_source"]), ("v1.6.0", "release"))
         self.assertEqual((rows["old"]["last_release"], rows["old"]["last_release_source"]), ("v1.4.0", "roadmap"))
         table = self.run_portfolio("acme/old", "--source", "api").stdout
-        self.assertIn("| v1.4.0 (roadmap, 2026-10-02) | n/a |", table)
+        self.assertIn("| v1.4.0 (roadmap, 2026-10-02) | missing |", table)
+
+    def test_api_source_reads_the_context_doctor_check_run(self) -> None:
+        def stub(name: str, *runs: dict) -> None:
+            with open(f"{self.gh}.checks.{name}.json", "w", encoding="utf-8") as fh:
+                json.dump({"total_count": len(runs), "check_runs": [
+                    {"id": index, "name": "context-doctor", "started_at": f"2026-11-20T0{index}:00:00Z",
+                     "html_url": f"https://github.com/acme/{name}/runs/{index}", **run}
+                    for index, run in enumerate(runs, 1)]}, fh)
+        stub("shop", {"status": "completed", "conclusion": "failure"}, {"status": "completed", "conclusion": "success"})
+        stub("red", {"status": "completed", "conclusion": "failure"})
+        stub("wip", {"status": "in_progress", "conclusion": None})
+        result = self.run_portfolio("acme/shop", "acme/red", "acme/wip", "acme/old", "--source", "api", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = {row["name"]: row for row in json.loads(result.stdout)["projects"]}
+        self.assertEqual({name: row["doctor_check"] for name, row in rows.items()},
+                         {"shop": "ok", "red": "failing", "wip": "pending", "old": "missing"})
+        self.assertEqual(rows["shop"]["doctor_check_url"], "https://github.com/acme/shop/runs/2")
+        lines = self.run_portfolio("acme/shop", "acme/red", "acme/old", "--source", "api").stdout.splitlines()
+        self.assertIn("| shop | search 2/5 | 1 | 1 | 6 | v1.6.0 (2026-11-20) | ok |", lines)
+        self.assertIn("| red | no state.json | — | — | — | — | failing |", lines)
+        self.assertIn("| old | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | missing |", lines)
 
 
 if __name__ == "__main__":

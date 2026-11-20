@@ -17,8 +17,9 @@ branch is read; a local checkout is read at `origin/<mainBranch>` when that ref 
 `--source git` (default) reads `context/` of the main branch through git (a shallow, sparse, blob-less
 clone into a temporary folder for a remote), takes `context/state.json`, and runs softure-doctor on the
 same tree. A project without `state.json` gets one built in memory and is marked `*`.
-`--source api` reads only `context/state.json` through the GitHub API (`gh api`); the doctor column
-then shows `n/a`.
+`--source api` reads only `context/state.json` through the GitHub API (`gh api`) and runs no doctor: the
+doctor column shows the `context-doctor` check run on the main branch's head instead (`ok`, `failing`,
+`pending`, or `missing` when the project's CI has no job by that name).
 
 Default output, one row per project:
 
@@ -30,7 +31,8 @@ repository, in both modes; a local checkout counts when its `origin` is on GitHu
 `SOFTURE_GH` names another `gh` binary.
 
 `--owner` prints only the owner queue across all projects, oldest first. `--json` prints the same data
-for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`). Exit 1 when a project could not be read (its row says why); nothing is ever written
+for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`;
+with `--source api`, `doctor_check` is the check run's status and `doctor_check_url` its page). Exit 1 when a project could not be read (its row says why); nothing is ever written
 outside a temporary folder.
 """
 from __future__ import annotations
@@ -53,6 +55,9 @@ import doctor  # noqa: E402
 DEFAULT_CONFIG = os.path.join("~", ".config", "softure", "portfolio.json")
 GITHUB_RE = re.compile(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$")
 SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+# The CI job every adopting project runs the doctor in (WORKFLOW.md §12.2); its check run carries this name.
+DOCTOR_CHECK = "context-doctor"
+PASSING = ("success", "neutral", "skipped")
 
 
 def git(*args: str, cwd: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -126,6 +131,44 @@ def forge_release(slug: str | None) -> dict | None:
     if not data.get("tag_name"):
         return None
     return {"version": data["tag_name"], "date": (data.get("published_at") or "")[:10] or None, "source": "release"}
+
+
+def gh_json(path: str):
+    """`gh api <path>` as JSON; None without gh, access or a valid answer."""
+    try:
+        shown = subprocess.run([gh(), "api", path], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if shown.returncode != 0:
+        return None
+    try:
+        return json.loads(shown.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def doctor_check(slug: str, branch: str | None) -> dict:
+    """The newest `context-doctor` check run on the head of `branch` (else the default branch).
+
+    `status` is `ok`, `failing`, `pending`, `missing` (no check run by that name), or `unknown` (the forge
+    could not be asked).
+    """
+    if not branch:
+        branch = (gh_json(f"repos/{slug}") or {}).get("default_branch")
+    if not branch:
+        return {"status": "unknown", "url": None}
+    data = gh_json(f"repos/{slug}/commits/{branch}/check-runs?check_name={DOCTOR_CHECK}&filter=latest")
+    if not isinstance(data, dict):
+        return {"status": "unknown", "url": None}
+    runs = [run for run in data.get("check_runs") or [] if run.get("name") == DOCTOR_CHECK]
+    if not runs:
+        return {"status": "missing", "url": None}
+    run = max(runs, key=lambda run: (run.get("started_at") or "", run.get("id") or 0))
+    if run.get("status") != "completed":
+        status = "pending"
+    else:
+        status = "ok" if run.get("conclusion") in PASSING else "failing"
+    return {"status": status, "url": run.get("html_url")}
 
 
 def pick_release(forge: dict | None, tag: dict | None, state: dict | None) -> dict:
@@ -216,8 +259,10 @@ def read_api(project: dict) -> dict:
     elif "404" not in shown.stderr and "Not Found" not in shown.stderr:
         raise RuntimeError(f"gh api failed: {shown.stderr.strip()[:200]}")
     release = pick_release(forge_release(slug), None, state)
+    check = doctor_check(slug, project.get("branch"))
     return {"branch": project.get("branch") or "default", "state": state, "state_source": source,
-            "doctor": None, **release_fields(release)}
+            "doctor": None, "doctor_check": check["status"], "doctor_check_url": check["url"],
+            **release_fields(release)}
 
 
 def release_fields(release: dict) -> dict:
@@ -248,17 +293,25 @@ def collect(projects: list[dict], source: str) -> list[dict]:
     return rows
 
 
+def check_cell(row: dict) -> str:
+    """The doctor column of a row read through the API: the `context-doctor` check run, else `n/a`."""
+    check = row.get("doctor_check")
+    return check if check and check != "unknown" else "n/a"
+
+
 def summary_cells(row: dict) -> list[str]:
     name = row["name"] + ("*" if row.get("state_source") == "built" else "")
     if row["error"]:
         return [name, f"error: {row['error']}", "", "", "", "", ""]
     state = row["state"]
     if state is None:
-        return [name, "no state.json", "—", "—", "—", release_cell(row), "n/a"]
+        return [name, "no state.json", "—", "—", "—", release_cell(row), check_cell(row)]
     active = state.get("active_roadmap")
     roadmap = f"{active.get('slug') or '?'} {active['done']}/{active['total']}" if active else "—"
-    doctor_cell = "n/a" if row["doctor"] is None else ("ok" if not row["doctor"] else
-                                                       f"{len(row['doctor'])} failing")
+    if row["doctor"] is not None:
+        doctor_cell = "ok" if not row["doctor"] else f"{len(row['doctor'])} failing"
+    else:
+        doctor_cell = check_cell(row)
     return [name, roadmap, str(len(state.get("queued", []))), str(len(state.get("open_changes", []))),
             str(len(state.get("owner_queue", []))), release_cell(row), doctor_cell]
 

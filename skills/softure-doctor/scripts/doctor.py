@@ -7,7 +7,7 @@
     doctor.py --baseline                  last resort: accept today's failures in context/doctor-baseline.json
     npx softure-skills doctor [...]      (the same, from the installed package)
 
-Adopting projects run it in their CI check, documentation-only changes included (that is where the
+Adopting projects run it in a CI job named `context-doctor`, documentation-only changes included (that is where the
 drift happens). `softure-archive` and `softure-roadmap --close` run it before their commit and fix
 what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
 

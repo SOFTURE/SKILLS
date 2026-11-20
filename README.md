@@ -29,16 +29,24 @@ What the installer does (idempotent; re-run on every `npm install`):
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
 `--no-gitignore` (commit the skills instead).
 
-**CI line.** Add one step to the project's CI check, documentation-only changes included (in a project
-that already has history, once the rollout below brings the doctor to zero):
+**CI job.** Run the doctor in a CI job named `context-doctor`, with no paths filter and no condition, so
+documentation-only changes are checked too (in a project that already has history, once the rollout below
+brings the doctor to zero). Keep that name: outside readers (`portfolio --source api`, an aggregator) look for
+the `context-doctor` check run on the main branch's head.
 
-```bash
-npx softure-skills doctor
+```yaml
+  context-doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes --package @softure-ai/skills@<version> softure-skills doctor
+        env:
+          npm_config_ignore_scripts: "true"
 ```
 
 It fails on drift in `context/` (a roadmap left after its archive, archived changes not stamped,
 `## Summary` placeholders, a stale `context/state.json`, …; WORKFLOW §12). The installer prints the
-line until a workflow runs it. `npx softure-skills state` regenerates `context/state.json`, which the
+job until a workflow runs the doctor, and asks to rename a job that runs it under another name. `npx softure-skills state` regenerates `context/state.json`, which the
 scripts otherwise write themselves.
 
 **Rolling out to an existing project** (WORKFLOW §12.4). A project that adopted the package earlier
@@ -52,7 +60,7 @@ usually fails on history. Put it right, in this order, one pass per repository:
    releases or changes made them obsolete) are closed by the agent as obsolete, never forwarded.
 3. The owner's short list: only real owner items (a decision about future work, a secret, account or
    connector, a step outside the repository), carried to the live roadmap or an `owner-word` issue.
-4. The CI line above, once the doctor is at zero.
+4. The `context-doctor` job above, once the doctor is at zero.
 
 `npx softure-skills doctor --baseline` exists only as a last resort, for a project that cannot finish
 the history sweep at once: it accepts today's failures in `context/doctor-baseline.json`, the check

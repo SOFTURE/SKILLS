@@ -830,9 +830,22 @@ fixed entries, never adds one (it names them and exits 1), and removes the file 
 never baselined; `--fix` and `--sweep` ignore it. It is the owner's call, recorded in the commit; the recommended path
 is the sweep to zero.
 
-A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in their
-CI check**, documentation-only changes included; the installer prints the line (`npx softure-skills doctor`) until a
-workflow under `.github/workflows/` runs it. `softure-archive` and `softure-roadmap --close` run it before their commit
+A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in a CI
+job named `context-doctor`**, with no paths filter and no condition, so documentation-only changes are checked too and
+an outside reader finds the result by that name: the check run `context-doctor` on the main branch's head says whether
+the project's context contract is green (`portfolio --source api` reads it). Keep the job name, whatever the rest of
+the workflow looks like. The installer prints the job until a workflow under `.github/workflows/` runs the doctor, and
+asks to rename it while the job that runs it has another name:
+
+```yaml
+  context-doctor:  # keep this name: readers look for the check run "context-doctor"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes --package @softure-ai/skills@<version> softure-skills doctor
+        env:
+          npm_config_ignore_scripts: "true"  # run the doctor only, no install into the checkout
+``` `softure-archive` and `softure-roadmap --close` run it before their commit
 and fix what they own.
 
 ### 12.3 Portfolio: many projects at once
@@ -851,7 +864,8 @@ The config file lives outside every project (`--config <file>`, `$SOFTURE_PORTFO
 where `repo` is `owner/name`, a git URL or a local path. One row per project:
 `project | active roadmap X/N | queued | open changes | owner queue | last release | doctor`. The doctor runs on the
 same tree; a project without `state.json` yet gets one built in memory (marked `*`). `--source api` reads only
-`state.json` through `gh api` (no doctor). **Last release comes from the forge** when it can: the latest GitHub
+`state.json` through `gh api` and runs no doctor; its doctor column is the `context-doctor` check run on the main
+branch's head (`ok`, `failing`, `pending`, or `missing` when the project has no job by that name). **Last release comes from the forge** when it can: the latest GitHub
 release through `gh api` (both modes, for a GitHub repository; a local checkout counts when its `origin` is on GitHub),
 else the highest `v*` tag (git mode), else `state.json` → `last_release`, which only records what a closed roadmap
 wrote and is shown labelled: `v1.4.0 (roadmap, 2026-10-02)`. `--json` gives `last_release`, `last_release_date` and
@@ -873,8 +887,8 @@ long ago. The history is put right, not hidden. One pass per repository, in this
    a step outside the repository that nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an `owner-word` issue; the
    agent's report lists it once, short: `ID | what the owner decides or does | where it lives now`. Nothing else
    waits, so `portfolio --owner` shows only these and the live roadmaps' entries.
-4. **The CI line at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add it to the CI check
-   (documentation-only changes included). From then on every new drift is red where it happens.
+4. **The CI job at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add the `context-doctor` job
+   (§12.2; no paths filter, no condition), or rename the job that already runs the doctor to `context-doctor`. From then on every new drift is red where it happens.
 
 A project that cannot finish step 2 in one change may, on the owner's word, use `doctor --baseline` (§12.2) and add the
-CI line with it; the baseline only shrinks, and the sweep continues until the file is gone.
+`context-doctor` job with it; the baseline only shrinks, and the sweep continues until the file is gone.
