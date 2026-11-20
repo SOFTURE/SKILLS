@@ -30,7 +30,8 @@ repository, in both modes; a local checkout counts when its `origin` is on GitHu
 `v*` tag (git mode), else the value a closed roadmap recorded in `state.json`, labelled `(roadmap)`.
 `SOFTURE_GH` names another `gh` binary.
 
-`--owner` prints only the owner queue across all projects, oldest first. `--json` prints the same data
+`--owner` prints only the owner queue across all projects, oldest first, with each entry's `id` (an owner-word issue
+names the entry it answers by that id, WORKFLOW §8.6). `--json` prints the same data
 for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`;
 with `--source api`, `doctor_check` is the check run's status and `doctor_check_url` its page). Exit 1 when a project could not be read (its row says why); nothing is ever written
 outside a temporary folder.
@@ -363,9 +364,10 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"generated_at": generated, "projects": rows}, indent=2, ensure_ascii=False))
     elif flags["--owner"]:
         entries = owner_entries(rows)
-        print(table(["since", "project", "kind", "what", "source"],
+        print(table(["since", "project", "kind", "what", "source", "id"],
                     [[e.get("since") or "—", e["project"], e["kind"], e["text"],
-                      e["source"].replace("context/", "")] for e in entries]) if entries else "Nothing waits for the owner.")
+                      e["source"].replace("context/", ""), e.get("id") or "—"] for e in entries])
+              if entries else "Nothing waits for the owner.")
     else:
         print(table(["project", "active roadmap X/N", "queued", "open changes", "owner queue", "last release", "doctor"],
                     [summary_cells(row) for row in rows]))

@@ -623,8 +623,26 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   `change.md` or a standing order) gets a comment with the question and stays open.
 - **Manual mode.** The coordinator shows open `owner-word` issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
+- **Answering a queue entry.** An issue that answers one `owner_queue` entry (§12.1) may carry, next to the prose, one
+  machine-readable line that names the entry by its `id` and the answer:
+
+  ```markdown
+  Start the payments roadmap once the provider account is open.
+
+  <!-- owner-word: {"entry": "oq-bfe20288d8", "answer": "yes"} -->
+  ```
+
+  `answer` is `yes`, `no` or `later`; the prose still says the decision and wins where the two differ (the coordinator
+  asks in a comment). The coordinator settles the entry it names in the file `source` points to, citing the issue:
+  `yes`: it carries the decision out and ticks the entry `— done: #N` (with the thread, PR or merge SHA when there is
+  one); `no`: it ticks the entry `— declined: #N` and records what follows in the roadmap (an item `dropped`, a queued
+  roadmap left waiting); `later`: it leaves the entry open and appends `(later: #N)`, so the entry keeps its `id` and
+  stays in the queue. An `entry` that is not in the current `state.json` (already settled, or an unknown id) gets a
+  comment saying so, and the issue is closed when the entry was settled. An issue without the line is read as prose,
+  as before.
 - **Not in `state.json`.** Open owner-word issues live on the forge; an aggregator reads both (`state.json` for what
-  waits for the owner, the forge for the words already given).
+  waits for the owner, the forge for the words already given). With the line, it tells which entries an open issue
+  already answers (its `entry`) and shows them as answered until the entry leaves the queue.
 
 ## 9. Commits
 

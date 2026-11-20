@@ -119,7 +119,9 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual({entry["project"] for entry in queue}, {"alpha", "beta"})
         self.assertEqual([entry["since"] for entry in queue], sorted(entry["since"] for entry in queue))
         text = self.run_portfolio(self.alpha, "--owner").stdout
-        self.assertTrue(text.startswith("| since | project | kind | what | source |"))
+        self.assertTrue(text.startswith("| since | project | kind | what | source | id |"))
+        self.assertTrue(all(entry["id"].startswith("oq-") for entry in queue), "an owner-word issue names an entry by id")
+        self.assertIn("| oq-", text)
 
     def test_json_and_config_file(self) -> None:
         config = os.path.join(self._tmp.name, "portfolio.json")

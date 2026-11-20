@@ -86,7 +86,8 @@ step the owner has to undo.
   trade-off), ask with a recommendation instead of deciding silently.
 - **Owner-word issues** (label `owner-word`, WORKFLOW §8.6): at the start of a session, list the open
   ones in this project's repository and show them to the owner first, with what each would start. Act
-  on one only after the owner's word in this conversation; then comment what was done and close it.
+  on one only after the owner's word in this conversation; then comment what was done and close it. One that names
+  an `owner_queue` entry (`<!-- owner-word: {"entry": …} -->`) is settled on that entry, citing the issue (§8.6).
 - Rules of autonomous projects (standing merge consent, coordinators, report cadences) do not apply
   here, even when a memory or another session suggests them.
 
@@ -346,7 +347,11 @@ word in writing, equal to the same sentence in the main chat: one decision, its 
 on it like an order in the chat: a roadmap to start goes to a roadmap thread (`--promote`), a release
 word is recorded where the release rules look for it (the roadmap header's `Release:` order, quoted with
 the issue link), a "no" or "later" is recorded in the roadmap (`## Owner decisions and checks` or the
-item's status). Then it comments what it did (thread, PR, merge SHA, roadmap line), closes the issue as
+item's status). An issue whose body carries `<!-- owner-word: {"entry": "<id>", "answer": "yes|no|later"} -->`
+answers the `owner_queue` entry with that `id` in `context/state.json`: settle that entry in its `source` file and cite
+the issue (`yes`: carry it out and tick it `— done: #N`; `no`: tick it `— declined: #N` and record what follows;
+`later`: leave it open with `(later: #N)`); an `entry` no longer in the queue gets a comment saying so (WORKFLOW §8.6).
+Then it comments what it did (thread, PR, merge SHA, roadmap line), closes the issue as
 completed, and names it in the next report. An issue it cannot act on (unclear, contradicts `change.md`
 or a standing order) gets one comment with the question and stays open; the question also goes to the
 owner in the main chat. Owner-word issues are not work items: they never get a thread of their own
