@@ -4,7 +4,8 @@ name: SOFTURE SKILLS - VALIDATE AND RELEASE
 # Pushing a tag `vX.Y.Z` (matching package.json) releases that version:
 #   1. npmjs.com      @softure-ai/skills  (trusted publishing over OIDC, with provenance)
 #   2. GitHub Packages @softure/skills    (GitHub Packages requires the scope to equal the org)
-#   3. GitHub Release vX.Y.Z              (generated notes + the package tarball as an asset)
+#   3. GitHub Release vX.Y.Z              (.github/release-notes/vX.Y.Z.md when present, generated notes,
+#                                          and the package tarball as an asset)
 # Cut a release with: npm version patch|minor|major && git push --follow-tags,
 # or, where tags cannot be pushed (cloud agent sessions), bump the version on master and run
 # auto-release.yml, which creates the tag and starts this workflow on it (workflow_dispatch on the tag).
@@ -141,6 +142,10 @@ jobs:
             "Install from this release (no registry, no auth): \`npm i -D https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/softure-ai-skills-${VERSION}.tgz\`" \
             "" \
             "GitHub Packages: \`@softure/skills@${VERSION}\` (requires a token with read:packages)")
+          # Hand-written notes for this version (what changed and how it was measured), when there are any.
+          if [ -f ".github/release-notes/${GITHUB_REF_NAME}.md" ]; then
+            NOTES="$(cat ".github/release-notes/${GITHUB_REF_NAME}.md")"$'\n\n'"${NOTES}"
+          fi
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" softure-ai-skills-*.tgz --clobber
           else
