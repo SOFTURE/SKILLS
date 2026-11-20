@@ -80,6 +80,8 @@ or languages.
                                     // at once (default; branches never edit roadmap.md, so merging <main> in never conflicts
                                     // on it); "branch" commits them on the session branch only, <main> changes only by the merge
   },
+  "roadmap": { "sizes": false },    // optional: true lets softure-roadmap write a relative size (S / M / L) per item and
+                                    // a `### Slices` block (§5); default: only when the owner asks for sizes
   "release": { "owner": true },     // releases and deploys are never done by skills when true; false lets an autonomous
                                     // project release through its own pipeline (never a production deploy, §8.4)
   "autonomy": {                     // optional, read only when mode is "autonomous" (§8.4)
@@ -284,6 +286,14 @@ updated: 2026-10-01
 ## Order
 Why this order; which items may run in parallel and which files each one owns.
 
+**Sizes:** relative to each other, never hours or dates. S: … M: … L: …   (optional, see below)
+
+### Slices                                                                (optional, see below)
+| Slice | Items | Size |
+| --- | --- | --- |
+| **1. First usable** | FC-1, FC-2 | 1 S, 1 M |
+| 2. … | FC-3 | 1 L |
+
 ## Items
 
 ### FC-1: Hero in balance
@@ -291,6 +301,8 @@ Why this order; which items may run in parallel and which files each one owns.
 - **Status:** ready
 - **Outcome:** …
 - **Prerequisites:** …
+- **Touches (estimate):** files and areas, from a quick search
+- **Size:** S                                                             (optional, see below)
 - **Unknowns:** questions research must answer
 - **Risk:** …
 - **Baseline:** how we measure before/after
@@ -317,6 +329,16 @@ item block and appends to `## Done` itself. On a change branch (`softure-worktre
 branch never conflicts on the roadmap. Orchestrators fall back to `wt-roadmap.py done` themselves when a thread did not
 run it.
 Each item block may carry `- **Input:** <path>` (e.g. the change folder), which tells research where its brief lives.
+
+**Sizes and slices (optional).** An owner who funds a roadmap in slices ("the first usable slice now, the rest after
+it") needs a rough relative size to make that call. `softure-roadmap` writes sizes only when the owner asks for them or
+`workflow.json` sets `roadmap.sizes: true`; otherwise a roadmap has none:
+- `- **Size:** S | M | L` in an item block, after `Touches (estimate)`. Sizes are relative to each other, never hours,
+  days, points or dates; their meaning is defined once, in a `**Sizes:**` line under `## Order`.
+- `### Slices` under `## Order`: named groups of items in order, the first usable slice marked (bold), each with its size
+  sum as counts (`2 S, 1 M`), so the owner can fund slice by slice. Every sized item sits in exactly one slice.
+- The `## At a glance` table, the row status and the item block's first two fields stay as they are: the parsers
+  never read a size.
 `change.md` is defined **only** in §4. softure-roadmap (step 14, for every item it records) and softure-new write the same
 format; softure-new takes over a `change.md` the roadmap opened.
 

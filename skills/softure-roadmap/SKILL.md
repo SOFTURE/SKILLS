@@ -204,6 +204,11 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
     free slot", never a noun like "booking system"), `Unlocks` (foundations only), Prerequisites,
     Touches (estimate), Unknowns, Risk (one line: why it sits here and what could go wrong),
     Baseline (how it is measured before and after) and PRD refs (literal IDs, not paraphrases).
+    **Size (optional):** only when the owner asks for sizes or `workflow.json` sets
+    `roadmap.sizes: true`, add `- **Size:** S | M | L` after `Touches (estimate)` (WORKFLOW §5,
+    "Sizes and slices"). Sizes are relative to each other and read from the slicing signals (phases,
+    migrations, surfaces, unknowns; [references/slicing.md](references/slicing.md)), never hours,
+    days, points or dates. Without that word or key, write no size.
 
 11. **Header and `## Order`.**
     - frontmatter: `prd_version` = the PRD `version`;
@@ -215,6 +220,11 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
     - `## Order` opens with the framing (optimising for, first proof, main risk, depth), then the
       reasoning for the order, `### Starting point` (the confirmed baseline, one line per layer
       with a file), `### Lanes`, and one line pointing to deferred ideas in the backlog.
+    - With sizes (step 10): one `**Sizes:**` line under `## Order` that defines S, M and L for this
+      roadmap, relative to each other, and a `### Slices` block after `### Lanes`:
+      `| Slice | Items | Size |`, slices in order, the first usable slice in bold, each size as counts
+      (`2 S, 1 M`). Every sized item sits in exactly one slice. Slices are what the owner funds;
+      lanes stay what runs in parallel.
     - Define any strategy term (north star, riskiest assumption, …) in one plain sentence on first
       use, or replace it with plain words. A teammate must be able to read the roadmap cold.
 
@@ -277,8 +287,8 @@ Exactly the structure of WORKFLOW §5. Parser-critical rules:
   and `blocked`. `ready` means the item itself has no open decision; whether its prerequisites
   are merged is checked by the orchestrator.
 - Every item block has `- **Change ID:** \`<id>\`` followed directly by `- **Status:** <same as row>`.
-  Extra fields (`Unlocks`, `Touches (estimate)`, `Input`) come after those two.
-- The framing, baseline, lanes and deferred ideas live under `## Order`; owner questions under
+  Extra fields (`Unlocks`, `Touches (estimate)`, the optional `Size`, `Input`) come after those two.
+- The framing, baseline, lanes, the optional sizes and slices, and deferred ideas live under `## Order`; owner questions under
   `## Owner decisions and checks`. Do not add other top-level sections.
 - `## Done` starts empty; `softure-archive` is its only writer.
 
@@ -312,7 +322,10 @@ Record each choice under `## Decisions (auto)` at the end of the file:
       item sits in exactly one lane.
 - [ ] The table and item blocks agree on IDs, change-ids and statuses; change-ids are unique
       kebab-case outcomes, not IDs, dates or activities.
-- [ ] No estimates, sizes or dates for delivery; no implementation steps.
+- [ ] No estimates in time (hours, days, points) and no dates for delivery; no implementation steps.
+- [ ] Sizes only when asked (the owner's word or `roadmap.sizes: true`): then every item has `S`, `M`
+      or `L`, the `**Sizes:**` line defines them, and every item sits in exactly one slice whose size
+      sum matches its items. Without that, no item has a size.
 - [ ] Strategy terms are defined on first use.
 - [ ] The first item can start today with no open owner decision.
 
@@ -321,7 +334,8 @@ Record each choice under `## Decisions (auto)` at the end of the file:
 - Do not plan implementation steps. That is `softure-plan`, per change.
 - Do not change the status of an item that is in progress. That belongs to the orchestrators
   and `softure-archive`.
-- Do not estimate in hours, days, points or sizes. Order and slice size are the planning tools here.
+- Do not estimate in hours, days, points or dates. Order and slice size are the planning tools here;
+  a relative size (S / M / L) is written only when the owner asks for it or `roadmap.sizes` is true.
 - Do not chain into the next skill on your own; the handoff is a recommendation.
 - Do not implement roadmap items in the session that wrote the roadmap. In a coordinated run
   (autonomous mode, a hosted project), the roadmap thread commits and merges `roadmap.md` together
