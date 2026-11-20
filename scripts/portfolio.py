@@ -24,8 +24,13 @@ Default output, one row per project:
 
     project | active roadmap X/N | queued | open changes | owner queue | last release | doctor
 
+Last release comes from the forge when it can: the latest GitHub release through `gh api` (for a GitHub
+repository, in both modes; a local checkout counts when its `origin` is on GitHub), else the highest
+`v*` tag (git mode), else the value a closed roadmap recorded in `state.json`, labelled `(roadmap)`.
+`SOFTURE_GH` names another `gh` binary.
+
 `--owner` prints only the owner queue across all projects, oldest first. `--json` prints the same data
-for another tool. Exit 1 when a project could not be read (its row says why); nothing is ever written
+for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`). Exit 1 when a project could not be read (its row says why); nothing is ever written
 outside a temporary folder.
 """
 from __future__ import annotations
@@ -46,6 +51,7 @@ import context_state  # noqa: E402
 import doctor  # noqa: E402
 
 DEFAULT_CONFIG = os.path.join("~", ".config", "softure", "portfolio.json")
+GITHUB_RE = re.compile(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$")
 SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
 
@@ -86,6 +92,53 @@ def remote_url(repo: str) -> str:
     return repo
 
 
+def gh() -> str:
+    return os.environ.get("SOFTURE_GH") or "gh"
+
+
+def github_slug(repo: str, local_path: str | None = None) -> str | None:
+    """`owner/name` of a GitHub repository: from the argument, or the `origin` of a local checkout."""
+    if local_path:
+        url = git("remote", "get-url", "origin", cwd=local_path, check=False).stdout.strip()
+        match = GITHUB_RE.search(url)
+        return match.group(1) if match else None
+    if re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
+        return repo
+    match = GITHUB_RE.search(repo)
+    return match.group(1) if match else None
+
+
+def forge_release(slug: str | None) -> dict | None:
+    """The latest GitHub release of `slug` through `gh api`; None without gh, access or a release."""
+    if not slug:
+        return None
+    try:
+        shown = subprocess.run([gh(), "api", f"repos/{slug}/releases/latest"], capture_output=True, text=True,
+                               timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if shown.returncode != 0:
+        return None
+    try:
+        data = json.loads(shown.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not data.get("tag_name"):
+        return None
+    return {"version": data["tag_name"], "date": (data.get("published_at") or "")[:10] or None, "source": "release"}
+
+
+def pick_release(forge: dict | None, tag: dict | None, state: dict | None) -> dict:
+    """The forge's release, else the highest tag, else the roadmap-recorded value (labelled as such)."""
+    for found in (forge, tag):
+        if found and found.get("version"):
+            return found
+    recorded = (state or {}).get("last_release") or {}
+    if recorded.get("version"):
+        return {"version": recorded["version"], "date": recorded.get("date"), "source": "roadmap"}
+    return {"version": None, "date": None, "source": None}
+
+
 def highest_tag(tags: list[str]) -> str | None:
     versions = [(tuple(int(n) for n in SEMVER_RE.match(tag).groups()), tag) for tag in tags if SEMVER_RE.match(tag)]
     return max(versions)[1] if versions else None
@@ -115,6 +168,7 @@ def read_git(project: dict) -> dict:
             reader = context_state.GitReader(path, ref)
             tags = git("tag", "-l", "v*", cwd=path, check=False).stdout.split()
             branch = ref
+            slug = github_slug(repo, path)
         else:
             tmp = tempfile.mkdtemp(prefix="softure-portfolio-")
             url = remote_url(repo)
@@ -129,6 +183,7 @@ def read_git(project: dict) -> dict:
             branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=tmp, check=False).stdout.strip()
             listed = git("ls-remote", "--tags", "--refs", url, "v*", check=False).stdout
             tags = [line.split("refs/tags/", 1)[1] for line in listed.splitlines() if "refs/tags/" in line]
+            slug = github_slug(repo)
         if not reader.exists("context"):
             raise RuntimeError(f"no context/ on {branch}")
         state, source = context_state.load_prior(reader), "stored"
@@ -136,8 +191,11 @@ def read_git(project: dict) -> dict:
             state, source = context_state.build_state(reader), "built"
         findings = doctor.run_checks(reader, None)
         failures = [f.as_dict() for f in findings if f.severity == "fail"]
-        release = (state.get("last_release") or {}).get("version") or highest_tag(tags)
-        return {"branch": branch, "state": state, "state_source": source, "doctor": failures, "last_release": release}
+        top = highest_tag(tags)
+        release = pick_release(forge_release(slug), {"version": top, "date": None, "source": "tag"} if top else None,
+                               state)
+        return {"branch": branch, "state": state, "state_source": source, "doctor": failures,
+                **release_fields(release)}
     finally:
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -146,24 +204,34 @@ def read_git(project: dict) -> dict:
 def read_api(project: dict) -> dict:
     """State and last release of one GitHub project, through `gh api`; no doctor."""
     repo = project["repo"]
-    match = re.search(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$", repo)
-    slug = match.group(1) if match else repo
-    if not re.fullmatch(r"[\w.-]+/[\w.-]+", slug):
+    slug = github_slug(repo)
+    if not slug:
         raise RuntimeError("--source api needs a GitHub repository (owner/name)")
     ref = f"?ref={project['branch']}" if project.get("branch") else ""
-    shown = subprocess.run(["gh", "api", "-H", "Accept: application/vnd.github.raw",
+    shown = subprocess.run([gh(), "api", "-H", "Accept: application/vnd.github.raw",
                             f"repos/{slug}/contents/context/state.json{ref}"], capture_output=True, text=True)
     state, source = None, "missing"
     if shown.returncode == 0:
         state, source = json.loads(shown.stdout), "stored"
     elif "404" not in shown.stderr and "Not Found" not in shown.stderr:
         raise RuntimeError(f"gh api failed: {shown.stderr.strip()[:200]}")
-    latest = subprocess.run(["gh", "api", f"repos/{slug}/releases/latest", "--jq", ".tag_name"],
-                            capture_output=True, text=True)
-    release = ((state or {}).get("last_release") or {}).get("version") or (
-        latest.stdout.strip() if latest.returncode == 0 else None)
+    release = pick_release(forge_release(slug), None, state)
     return {"branch": project.get("branch") or "default", "state": state, "state_source": source,
-            "doctor": None, "last_release": release}
+            "doctor": None, **release_fields(release)}
+
+
+def release_fields(release: dict) -> dict:
+    return {"last_release": release["version"], "last_release_date": release["date"],
+            "last_release_source": release["source"]}
+
+
+def release_cell(row: dict) -> str:
+    version = row.get("last_release")
+    if not version:
+        return "—"
+    notes = [note for note in ("roadmap" if row.get("last_release_source") == "roadmap" else None,
+                               row.get("last_release_date")) if note]
+    return version + (f" ({', '.join(notes)})" if notes else "")
 
 
 def collect(projects: list[dict], source: str) -> list[dict]:
@@ -174,7 +242,8 @@ def collect(projects: list[dict], source: str) -> list[dict]:
             row.update(read_api(project) if source == "api" else read_git(project))
         except (RuntimeError, OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
             row.update({"branch": project.get("branch"), "state": None, "state_source": "missing",
-                        "doctor": None, "last_release": None, "error": str(exc)})
+                        "doctor": None, "last_release": None, "last_release_date": None,
+                        "last_release_source": None, "error": str(exc)})
         rows.append(row)
     return rows
 
@@ -185,13 +254,13 @@ def summary_cells(row: dict) -> list[str]:
         return [name, f"error: {row['error']}", "", "", "", "", ""]
     state = row["state"]
     if state is None:
-        return [name, "no state.json", "—", "—", "—", row["last_release"] or "—", "n/a"]
+        return [name, "no state.json", "—", "—", "—", release_cell(row), "n/a"]
     active = state.get("active_roadmap")
     roadmap = f"{active.get('slug') or '?'} {active['done']}/{active['total']}" if active else "—"
     doctor_cell = "n/a" if row["doctor"] is None else ("ok" if not row["doctor"] else
                                                        f"{len(row['doctor'])} failing")
     return [name, roadmap, str(len(state.get("queued", []))), str(len(state.get("open_changes", []))),
-            str(len(state.get("owner_queue", []))), row["last_release"] or "—", doctor_cell]
+            str(len(state.get("owner_queue", []))), release_cell(row), doctor_cell]
 
 
 def owner_entries(rows: list[dict]) -> list[dict]:
