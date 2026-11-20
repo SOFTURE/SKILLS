@@ -687,6 +687,20 @@ class StateTest(unittest.TestCase):
         with open(SCHEMA, encoding="utf-8") as fh:
             self.assertEqual(validate(self.state(), json.load(fh)), [])
 
+    def test_idle_placeholder_roadmap_is_no_active_roadmap(self) -> None:
+        self.project.apply_case("idle-roadmap", "state")
+        state = self.state()
+        self.assertIsNone(state["active_roadmap"])
+        self.assertEqual(state["project"], "Example clinic")
+        self.assertFalse(any(entry["source"].startswith(context_state.ROADMAP_PATH) for entry in state["owner_queue"]))
+        rel = "context/foundation/roadmap.md"
+        for line in ("status: idle\n", "roadmap: none\n"):
+            with self.subTest(dropped=line.strip()):
+                self.project.write(rel, self.project.read(rel).replace(line, ""))
+                self.project.state("write")
+                self.assertIsNone(self.state()["active_roadmap"])
+                self.project.apply_case("idle-roadmap", "state")
+
     def test_owner_queue_lists_what_waits_for_the_owner(self) -> None:
         queue = self.state()["owner_queue"]
         kinds = {(entry["kind"], entry["item"]) for entry in queue}

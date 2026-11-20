@@ -15,6 +15,7 @@
     "updated_at": { "type": "string", "description": "UTC ISO 8601; changes only when the content does" },
     "active_roadmap": {
       "type": ["object", "null"],
+      "description": "null when roadmap.md is absent or is the idle placeholder (status: idle or roadmap: none)",
       "required": ["slug", "title", "status", "version", "path", "done", "total", "items"],
       "additionalProperties": false,
       "properties": {

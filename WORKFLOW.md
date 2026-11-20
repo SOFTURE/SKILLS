@@ -726,7 +726,8 @@ A project without the file gets it from the first of these runs; nothing has to 
   "project": "Example clinic",         // workflow.json `project`, else the roadmap's, else the repository name; never null
   "mode": "autonomous", "main_branch": "main",
   "updated_at": "2026-11-20T09:00:00Z", // changes only when the content does
-  "active_roadmap": {                  // null when there is no roadmap.md
+  "active_roadmap": {                  // null when there is no roadmap.md, or it is the idle placeholder
+                                       // (front matter `status: idle` or `roadmap: none`)
     "slug": "search", "title": "…", "status": "ready", "version": "2", "path": "context/foundation/roadmap.md",
     "done": 2, "total": 5,             // done = rows done or done_code (the report's X of N)
     "items": [                         // rows not done yet
