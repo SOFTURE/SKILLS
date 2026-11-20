@@ -553,6 +553,30 @@ class MeasureTest(unittest.TestCase):
             project.cleanup()
 
 
+class BrokenPipeTest(unittest.TestCase):
+    """Piping into `head` closes stdout early; the scripts stop quietly instead of printing a traceback."""
+
+    def test_closed_stdout_is_quiet(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("adopter", "measure")
+            project.commit("adopter")
+            commands = [[os.path.join(SCRIPTS, "doctor.py"), "--root", project.root],
+                        [os.path.join(SCRIPTS, "doctor.py"), "--sweep", "--root", project.root],
+                        [os.path.join(SCRIPTS, "doctor.py"), "--fix", "--root", project.root],
+                        [os.path.join(SCRIPTS, "context_state.py"), "print", "--root", project.root]]
+            for command in commands:
+                with self.subTest(command=command[1:2]):
+                    proc = subprocess.Popen([sys.executable, *command], stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, env={**os.environ, **GIT_ENV})
+                    proc.stdout.close()  # the reader is gone before the first line
+                    _, err = proc.communicate()
+                    self.assertEqual(err.decode(), "")
+                    self.assertEqual(proc.returncode, 141)
+        finally:
+            project.cleanup()
+
+
 class BaselineTest(unittest.TestCase):
     """`doctor --baseline`: a last resort that accepts today's failures and only ever shrinks."""
 
