@@ -16,7 +16,8 @@ evidence comes from (`commit <path> <message>` writes the file and commits it wi
 `add` and `rm` take an optional commit message after the path).
 
 `tests/fixtures/doctor/state/<case>/` holds one shape of `context/` that an outside reader of `state.json` must get
-right (a project between roadmaps, an idle placeholder roadmap); `StateTest` checks what `write` produces from it.
+right (a project between roadmaps, an idle placeholder roadmap, owner entries reworded or moved after the clean
+state.json was written); `StateTest` checks what `write` produces from it.
 
 `tests/fixtures/doctor/measure/adopter/` mirrors the shapes adopting repositories hold (mentions in index cells,
 targets deleted on purpose, cancelled Progress items, non-SHA Summary cells, owner checks of a roadmap that later
@@ -700,6 +701,49 @@ class StateTest(unittest.TestCase):
                 self.project.state("write")
                 self.assertIsNone(self.state()["active_roadmap"])
                 self.project.apply_case("idle-roadmap", "state")
+
+    def test_owner_queue_ids_survive_rewording_and_moves(self) -> None:
+        before = {entry["text"]: entry for entry in self.state()["owner_queue"]}
+        self.assertTrue(all(entry["id"].startswith("oq-") for entry in before.values()))
+        self.project.apply_case("reworded-owner-queue", "state")
+        after = {entry["text"]: entry for entry in self.state()["owner_queue"]}
+        self.assertEqual(len(set(entry["id"] for entry in after.values())), len(after), "ids are unique")
+        pairs = {
+            "**SR-5**: choose the ranking provider and open the account. Gates SR-5.":
+                "**SR-5**: pick the ranking provider and open an account there. Gates SR-5.",
+            "Set `SEARCH_INDEX_URL` in production (**SR-1**)":
+                "Set `SEARCH_INDEX_URL` in the production environment (**SR-1**)",
+            "start queued roadmap payments: the owner opens a payment provider account":
+                "start queued roadmap payments: the owner opens an account with a payment provider",
+        }
+        moved = next(text for text in before if text.startswith("**SR-4**"))
+        pairs[moved] = next(text for text in after if text.startswith("**SR-4**"))
+        for old, new in pairs.items():
+            with self.subTest(entry=new):
+                self.assertEqual(after[new]["id"], before[old]["id"])
+                self.assertEqual(after[new]["since"], before[old]["since"])
+        self.assertTrue(after[pairs[moved]]["source"].endswith("#Before the next release"), "the SR-4 entry moved")
+        fresh = after["Decide whether search results show prices."]
+        self.assertNotIn(fresh["id"], {entry["id"] for entry in before.values()}, "a new entry gets a new id")
+        self.project.state("write")
+        self.assertEqual({entry["text"]: entry["id"] for entry in self.state()["owner_queue"]},
+                         {text: entry["id"] for text, entry in after.items()}, "a rewrite keeps every id")
+        with open(SCHEMA, encoding="utf-8") as fh:
+            self.assertEqual(validate(self.state(), json.load(fh)), [])
+
+    def test_owner_queue_ids_are_added_to_a_version_1_file(self) -> None:
+        state = self.state()
+        state["schema_version"] = 1
+        for entry in state["owner_queue"]:
+            del entry["id"]
+        self.project.write(context_state.STATE_PATH, json.dumps(state, indent=2) + "\n")
+        self.assertIn("schema_version 1", self.project.state("check").stdout + self.project.state("check").stderr)
+        self.project.state("write")
+        rewritten = self.state()
+        self.assertEqual(rewritten["schema_version"], context_state.SCHEMA_VERSION)
+        self.assertTrue(all(entry.get("id") for entry in rewritten["owner_queue"]))
+        self.assertEqual([entry["since"] for entry in rewritten["owner_queue"]],
+                         [entry["since"] for entry in state["owner_queue"]])
 
     def test_owner_queue_lists_what_waits_for_the_owner(self) -> None:
         queue = self.state()["owner_queue"]

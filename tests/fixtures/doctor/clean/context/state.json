@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project": "Example clinic",
   "mode": "autonomous",
   "main_branch": "main",
@@ -85,6 +85,7 @@
   ],
   "owner_queue": [
     {
+      "id": "oq-bfe20288d8",
       "kind": "word",
       "source": "context/foundation/roadmaps/roadmap-payments.md",
       "item": null,
@@ -92,6 +93,7 @@
       "text": "start queued roadmap payments: the owner opens a payment provider account"
     },
     {
+      "id": "oq-ae618ec1ba",
       "kind": "decision",
       "source": "context/foundation/roadmaps/roadmap-payments.md#Owner decisions and checks",
       "item": "PY-1",
@@ -99,6 +101,7 @@
       "text": "**PY-1**: pick the payment provider. Gates PY-1."
     },
     {
+      "id": "oq-7e8362c505",
       "kind": "word",
       "source": "context/foundation/roadmap.md#At a glance",
       "item": null,
@@ -106,6 +109,7 @@
       "text": "release: SR-4 merged and waiting for a release"
     },
     {
+      "id": "oq-5f769a4bdd",
       "kind": "secret",
       "source": "context/foundation/roadmap.md#Owner decisions and checks",
       "item": "SR-4",
@@ -113,6 +117,7 @@
       "text": "**SR-4**: owner step: add the provider api key to the deploy settings (secret only the owner has). archive/2026-11-09-search-synonyms/change.md"
     },
     {
+      "id": "oq-4dd470ebdb",
       "kind": "step",
       "source": "context/foundation/roadmap.md#Before the next release",
       "item": "SR-1",
@@ -120,6 +125,7 @@
       "text": "Set `SEARCH_INDEX_URL` in production (**SR-1**)"
     },
     {
+      "id": "oq-06e40f59e9",
       "kind": "decision",
       "source": "context/foundation/roadmap.md#Owner decisions and checks",
       "item": "SR-5",
