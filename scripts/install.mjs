@@ -284,7 +284,7 @@ function install(options) {
   for (const action of actions) console.log(`${prefix} ${action}`);
   console.log(`${prefix} ${PACKAGE.name}@${PACKAGE.version} -> ${projectRoot}`);
   if (!hasDoctorInCi(projectRoot)) {
-    console.log(`${prefix} CI: add \`${CI_LINE}\` to the project's CI check, documentation-only changes included (WORKFLOW.md §12)`);
+    console.log(`${prefix} CI: add \`${CI_LINE}\` to the project's CI check, documentation-only changes included, once it exits 0 (rollout: doctor --fix, doctor --sweep; WORKFLOW.md §12.4)`);
   }
 }
 
