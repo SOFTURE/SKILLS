@@ -417,7 +417,7 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
     active = None
     roadmap_text = reader.read(ROADMAP_PATH)
     rows_by_change: dict[str, dict] = {}
-    if roadmap_text is not None:
+    if roadmap_text is not None and not is_idle_placeholder(roadmap_text):
         meta = frontmatter(roadmap_text)
         rows = roadmap_rows(roadmap_text)
         done, total = _summary(rows)
@@ -506,6 +506,12 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
         "last_release": _last_release(reader),
     }
     return state
+
+
+def is_idle_placeholder(text: str) -> bool:
+    """A `roadmap.md` that only says there is no active roadmap (`status: idle` or `roadmap: none`)."""
+    meta = frontmatter(text)
+    return (meta.get("status") or "").lower() == "idle" or (meta.get("roadmap") or "").lower() == "none"
 
 
 def repository_name(reader) -> str:
