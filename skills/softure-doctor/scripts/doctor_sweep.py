@@ -18,7 +18,7 @@ evidence found in the repository, and how to settle it:
   anything else                 the file to fix (and `--fix` for the mechanical shapes)
 
 An entry with no evidence at all carries `"owner": true`: only the owner can settle it, and it goes to
-the owner's list (WORKFLOW §12.2). The skill section "Sweep history to zero" tells an agent how to work
+the owner's list (WORKFLOW §12.4). The skill section "Sweep history to zero" tells an agent how to work
 the list: settle every entry with its evidence, never without.
 
 Importable: `from doctor_sweep import sweep`.

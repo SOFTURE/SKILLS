@@ -29,7 +29,8 @@ What the installer does (idempotent; re-run on every `npm install`):
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
 `--no-gitignore` (commit the skills instead).
 
-**CI line.** Add one step to the project's CI check, documentation-only changes included:
+**CI line.** Add one step to the project's CI check, documentation-only changes included (in a project
+that already has history, once the rollout below brings the doctor to zero):
 
 ```bash
 npx softure-skills doctor
@@ -39,6 +40,18 @@ It fails on drift in `context/` (a roadmap left after its archive, archived chan
 `## Summary` placeholders, a stale `context/state.json`, …; WORKFLOW §12). The installer prints the
 line until a workflow runs it. `npx softure-skills state` regenerates `context/state.json`, which the
 scripts otherwise write themselves.
+
+**Rolling out to an existing project** (WORKFLOW §12.4). A project that adopted the package earlier
+usually fails on history. Put it right, in this order, one pass per repository:
+
+1. `npx softure-skills doctor --fix`, then `--fix --write`: the mechanical repairs (archived change
+   statuses, with the old value kept as `legacy_status`; archive index links to moved files). Commit.
+2. `npx softure-skills doctor --sweep --json`, worked by an agent with the `softure-doctor` skill
+   ("Sweep history to zero"): every entry settled with its evidence (commit, release, file), never
+   without, in one change, until the doctor exits 0.
+3. The owner's short list: only real owner items (an open decision, a step outside the repository),
+   carried to the live roadmap or an `owner-word` issue.
+4. The CI line above, once the doctor is at zero.
 
 `npx softure-skills doctor --baseline` exists only as a last resort, for a project that cannot finish
 the history sweep at once: it accepts today's failures in `context/doctor-baseline.json`, the check

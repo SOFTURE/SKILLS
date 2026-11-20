@@ -848,3 +848,25 @@ release through `gh api` (both modes, for a GitHub repository; a local checkout 
 else the highest `v*` tag (git mode), else `state.json` → `last_release`, which only records what a closed roadmap
 wrote and is shown labelled: `v1.4.0 (roadmap, 2026-10-02)`. `--json` gives `last_release`, `last_release_date` and
 `last_release_source` (`release`, `tag` or `roadmap`).
+
+### 12.4 Rolling out the doctor to an existing project
+
+A project that adopted the package before the doctor existed usually fails on history: archived changes with old
+status values, archive indexes that link moved files, unticked Progress items and owner checks in roadmaps closed
+long ago. The history is put right, not hidden. One pass per repository, in this order:
+
+1. **Mechanical fixes.** Update the package, then `npx softure-skills doctor --fix` (review the printed edits) and
+   `npx softure-skills doctor --fix --write`. Commit: `docs(context): mechanical history fixes (doctor --fix)`.
+2. **The sweep, worked by an agent.** `npx softure-skills doctor --sweep --json`, settled entry by entry as the
+   `softure-doctor` skill describes ("Sweep history to zero"): every tick, SHA, status and obsolete mark carries its
+   evidence (commit, release, file), never without. Regenerate the state, re-run the doctor until it exits 0, and land it
+   as one change: `docs(context): settle history to zero`.
+3. **The owner's list.** What only the owner can settle (a decision still open, a step outside the repository that
+   nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an `owner-word` issue; the
+   agent's report lists it once, short: `ID | what the owner decides or does | where it lives now`. Nothing else
+   waits, so `portfolio --owner` shows only these and the live roadmaps' entries.
+4. **The CI line at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add it to the CI check
+   (documentation-only changes included). From then on every new drift is red where it happens.
+
+A project that cannot finish step 2 in one change may, on the owner's word, use `doctor --baseline` (§12.2) and add the
+CI line with it; the baseline only shrinks, and the sweep continues until the file is gone.
