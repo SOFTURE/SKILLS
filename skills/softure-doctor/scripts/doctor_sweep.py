@@ -341,12 +341,12 @@ def _index_entries(reader, root: str | None) -> list[dict]:
                 evidence.append(_evidence("file", traced[1], f"`{missing['target']}` moved here (git rename history)"))
                 break
             if traced:
-                evidence.append(_evidence("commit", traced[1], f"the last commit that had `{candidate}`; "
-                                                                "it was deleted, not moved"))
+                evidence.append(_evidence("commit", traced[1], f"deleted `{candidate}` on purpose (no rename); "
+                                                                "`doctor --fix --write` marks the row (removed in it)"))
                 break
         if not evidence:
             evidence.append(_evidence("file", f"{missing['path']}:{missing['line']}",
-                                      "the target was never in git history: fix the link or drop the row"))
+                                      "git shows no move or deletion of the target: fix the link or drop the row"))
         entries.append(_entry("index-missing-file", missing["path"], missing["line"], missing["text"],
                               f"`{missing['target']}`", evidence, target=missing["target"]))
     return entries
