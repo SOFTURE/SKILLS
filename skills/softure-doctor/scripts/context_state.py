@@ -1,0 +1,578 @@
+#!/usr/bin/env python3
+"""Build `context/state.json`: the machine-readable state of a project (WORKFLOW.md §12).
+
+    context_state.py write  [--root <dir>] [--staged]   regenerate context/state.json
+    context_state.py print  [--root <dir>] [--staged]   print what `write` would write
+    context_state.py check  [--root <dir>]              exit 1 when the file is missing or stale
+
+The file is written only by scripts, never by hand: `wt-roadmap.py` (every mode) commits it together
+with `roadmap.md`, and `softure-archive` and `softure-roadmap` (record, promote, close) run
+`write --staged` right before their commit. `--staged` reads what is staged (the index) instead of
+the working tree, so someone else's uncommitted edits never leak into the file, and stages the result.
+
+Everything in the file is derived from the markdown under `context/` (and `context/workflow.json`):
+the active roadmap, the queued roadmaps, the change folders, and one `owner_queue` that lists every
+entry that waits for the owner. The schema ships next to this script
+(`../references/state.schema.json`). A reader needs this one file per repository instead of parsing
+the markdown.
+
+`since` of an owner-queue entry is kept from the previous file for an entry that is still there, so
+"oldest first" stays true across rewrites. `updated_at` changes only when the content does.
+
+Importable: `from context_state import build_state, render_state, FsReader, GitReader, IndexReader`.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/skills
+
+SCHEMA_VERSION = 1
+STATE_PATH = "context/state.json"
+WORKFLOW_PATH = "context/workflow.json"
+ROADMAP_PATH = "context/foundation/roadmap.md"
+QUEUED_DIR = "context/foundation/roadmaps"
+ARCHIVE_ROADMAPS_DIR = "context/foundation/archive"
+CHANGES_DIR = "context/changes"
+# Fields a script rewrites without the markdown changing: never a reason to call the file stale.
+VOLATILE_FIELDS = ("updated_at", "open_changes")
+
+ROW_RE = re.compile(r"^\|\s*\*\*(?P<id>[A-Z]+-\d+)\*\*\s*\|")
+ID_RE = re.compile(r"\b[A-Z]+-\d+\b")
+DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+STATUS_RE = re.compile(r"^(proposed|ready_to_merge|ready|blocked|in_progress|done_code|done|dropped|carried)\b")
+SINCE_RE = re.compile(r"since (\d{4}-\d{2}-\d{2})")
+DONE_CODE_DATE_RE = re.compile(r"^done_code \((\d{4}-\d{2}-\d{2})")
+CHECKBOX_RE = re.compile(r"^\s*- \[(?P<mark>[ xX])\] (?P<text>.+)$")
+ITEM_REF_RE = re.compile(r"\*\*(?P<id>[A-Z]+-\d+)\*\*")
+SECRET_RE = re.compile(r"\b(secret|api[ -]?key|token|credential|password|private key)s?\b", re.IGNORECASE)
+RELEASE_LINE_RE = re.compile(
+    r"^(?:- )?\**Release:?\**:?\s*(?P<version>v?\d+\.\d+\.\d+[0-9A-Za-z.+-]*)(?:\s*\((?P<date>\d{4}-\d{2}-\d{2})\))?")
+OWNER_SECTION = "Owner decisions and checks"
+RELEASE_SECTION = "Before the next release"
+DONE_STATUSES = ("done", "done_code")
+
+
+# ---------------------------------------------------------------- readers
+
+
+class FsReader:
+    """Reads the working tree under `root`; `overrides` maps a path to replacement text (None: absent)."""
+
+    def __init__(self, root: str, overrides: dict | None = None) -> None:
+        self.root = os.path.abspath(root)
+        self.overrides = dict(overrides or {})
+
+    def read(self, rel: str) -> str | None:
+        if rel in self.overrides:
+            return self.overrides[rel]
+        try:
+            with open(os.path.join(self.root, rel), encoding="utf-8") as fh:
+                return fh.read()
+        except (FileNotFoundError, NotADirectoryError, IsADirectoryError, UnicodeDecodeError):
+            return None
+
+    def listdir(self, rel: str) -> list[tuple[str, bool]]:
+        """Entries of a directory as (name, is_dir), sorted; [] when it does not exist."""
+        full = os.path.join(self.root, rel)
+        entries: dict[str, bool] = {}
+        if os.path.isdir(full):
+            for name in os.listdir(full):
+                entries[name] = os.path.isdir(os.path.join(full, name))
+        _merge_overrides(entries, rel, self.overrides)
+        return sorted(entries.items())
+
+    def exists(self, rel: str) -> bool:
+        if rel in self.overrides:
+            return self.overrides[rel] is not None
+        return os.path.exists(os.path.join(self.root, rel))
+
+
+class GitReader:
+    """Reads a commit (`rev`) of the repository at `repo`, plus `overrides`."""
+
+    def __init__(self, repo: str, rev: str, overrides: dict | None = None) -> None:
+        self.repo = repo
+        self.rev = rev
+        self.overrides = dict(overrides or {})
+        self._tree: dict[str, str] | None = None
+
+    def _git(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", self.repo, *args], capture_output=True, text=True)
+
+    def _paths(self) -> dict[str, str]:
+        if self._tree is None:
+            listed = self._git("ls-tree", "-r", "-t", self.rev, "--", "context").stdout
+            tree: dict[str, str] = {}
+            for line in listed.splitlines():
+                meta, _, path = line.partition("\t")
+                fields = meta.split()
+                tree[path] = fields[1] if len(fields) > 1 else "blob"
+            self._tree = tree
+        return self._tree
+
+    def read(self, rel: str) -> str | None:
+        if rel in self.overrides:
+            return self.overrides[rel]
+        if self._paths().get(rel) != "blob":
+            return None
+        shown = self._git("show", f"{self.rev}:{rel}")
+        return shown.stdout if shown.returncode == 0 else None
+
+    def listdir(self, rel: str) -> list[tuple[str, bool]]:
+        prefix = rel.rstrip("/") + "/"
+        entries: dict[str, bool] = {}
+        for path, kind in self._paths().items():
+            if path.startswith(prefix) and "/" not in path[len(prefix):]:
+                entries[path[len(prefix):]] = kind == "tree"
+        _merge_overrides(entries, rel, self.overrides)
+        return sorted(entries.items())
+
+    def exists(self, rel: str) -> bool:
+        if rel in self.overrides:
+            return self.overrides[rel] is not None
+        return rel in self._paths()
+
+
+class IndexReader(GitReader):
+    """Reads what is staged (the index) of the repository at `repo`."""
+
+    def __init__(self, repo: str, overrides: dict | None = None) -> None:
+        super().__init__(repo, "", overrides)
+
+    def _paths(self) -> dict[str, str]:
+        if self._tree is None:
+            files = self._git("ls-files", "--", "context").stdout.splitlines()
+            tree: dict[str, str] = {}
+            for path in files:
+                tree[path] = "blob"
+                parts = path.split("/")
+                for depth in range(1, len(parts)):
+                    tree.setdefault("/".join(parts[:depth]), "tree")
+            self._tree = tree
+        return self._tree
+
+    def read(self, rel: str) -> str | None:
+        if rel in self.overrides:
+            return self.overrides[rel]
+        if self._paths().get(rel) != "blob":
+            return None
+        shown = self._git("show", f":{rel}")
+        return shown.stdout if shown.returncode == 0 else None
+
+
+def _merge_overrides(entries: dict[str, bool], rel: str, overrides: dict) -> None:
+    prefix = rel.rstrip("/") + "/"
+    for path, text in overrides.items():
+        if not path.startswith(prefix):
+            continue
+        rest = path[len(prefix):]
+        name, _, deeper = rest.partition("/")
+        if deeper:
+            entries[name] = True
+        elif text is None:
+            entries.pop(name, None)
+        else:
+            entries[name] = False
+
+
+# ---------------------------------------------------------------- markdown parsing
+
+
+def frontmatter(text: str) -> dict:
+    """The `key: value` lines of a leading `---` block; quotes stripped, `null` -> None."""
+    match = re.match(r"^---\n(.*?)\n---", text or "", re.DOTALL)
+    fields: dict = {}
+    if not match:
+        return fields
+    for line in match.group(1).splitlines():
+        pair = re.match(r"^([A-Za-z_][\w-]*):\s*(.*?)\s*(?:#.*)?$", line)
+        if not pair:
+            continue
+        value = pair.group(2).strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        fields[pair.group(1)] = None if value in ("", "null", "~") else value
+    return fields
+
+
+def sections(text: str) -> dict[str, list[str]]:
+    """Lines under each `## <heading>` (the heading itself excluded); later duplicates append."""
+    result: dict[str, list[str]] = {}
+    current = None
+    for line in (text or "").splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            result.setdefault(current, [])
+            continue
+        if current is not None:
+            result[current].append(line)
+    return result
+
+
+def title_of(text: str) -> str | None:
+    for line in (text or "").splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return None
+
+
+def cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def parse_status(raw: str) -> dict:
+    """`**in_progress** (plan, since 2026-10-01; …)` -> keyword, detail, stage, since."""
+    text = raw.replace("**", "").strip()
+    match = STATUS_RE.match(text)
+    keyword = match.group(1) if match else (text.split(" ", 1)[0] if text else "unknown")
+    detail = None
+    paren = re.search(r"\((.*)\)\s*$", text)
+    if paren:
+        detail = paren.group(1).strip()
+    stage = None
+    if keyword == "in_progress" and detail:
+        stage = re.split(r"[,;]", detail, maxsplit=1)[0].strip() or None
+    since = None
+    found = SINCE_RE.search(text) or DONE_CODE_DATE_RE.match(text)
+    if found:
+        since = found.group(1)
+    return {"status": keyword, "detail": detail, "stage": stage, "since": since}
+
+
+def roadmap_rows(text: str) -> list[dict]:
+    """Table rows `| **ID** | `change-id` | outcome | depends on | mode | status |` (WORKFLOW §5)."""
+    rows = []
+    seen = set()
+    for line in (text or "").splitlines():
+        if not ROW_RE.match(line):
+            continue
+        parts = cells(line)
+        if len(parts) < 3:
+            continue
+        rid = ID_RE.search(parts[0]).group(0)
+        if rid in seen:
+            continue
+        seen.add(rid)
+        change = parts[1].strip("` ") if len(parts) > 1 else None
+        status = parse_status(parts[-1])
+        rows.append({
+            "id": rid,
+            "change_id": change or None,
+            "outcome": parts[2] if len(parts) > 3 else None,
+            "prerequisites": ID_RE.findall(parts[3]) if len(parts) > 4 else [],
+            "mode": parts[4] if len(parts) > 5 else None,
+            **status,
+        })
+    return rows
+
+
+def open_checkboxes(lines: list[str]) -> list[str]:
+    out = []
+    for line in lines:
+        match = CHECKBOX_RE.match(line)
+        if match and match.group("mark") == " ":
+            out.append(match.group("text").strip())
+    return out
+
+
+# ---------------------------------------------------------------- state
+
+
+def _today() -> str:
+    return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
+def _owner_entries(path: str, text: str, rows: list[dict], fallback_since: str,
+                   archived: bool = False) -> list[dict]:
+    """Every open entry of one roadmap file that waits for the owner.
+
+    An archived roadmap keeps its `done_code` rows as a record for the release notes, so only its open
+    checkboxes count, and its `## Before the next release` only until its `## Summary` records a release.
+    """
+    entries: list[dict] = []
+    parts = sections(text)
+    ids_with_entry: set[str] = set()
+    for line in open_checkboxes(parts.get(OWNER_SECTION, [])):
+        ref = ITEM_REF_RE.search(line)
+        item = ref.group("id") if ref else None
+        lowered = line.lower()
+        if "owner step:" in lowered:
+            kind = "secret" if SECRET_RE.search(line) else "step"
+        elif re.search(r"\(Manual \d", line):
+            kind = "step"
+        else:
+            kind = "decision"
+        if item:
+            ids_with_entry.add(item)
+        entries.append({"kind": kind, "source": f"{path}#{OWNER_SECTION}", "item": item,
+                        "since": _date_in(line) or fallback_since, "text": line})
+    released = archived and any(RELEASE_LINE_RE.match(line.strip()) for line in parts.get("Summary", []))
+    for line in ([] if released else open_checkboxes(parts.get(RELEASE_SECTION, []))):
+        ref = ITEM_REF_RE.search(line)
+        entries.append({"kind": "secret" if SECRET_RE.search(line) else "step",
+                        "source": f"{path}#{RELEASE_SECTION}", "item": ref.group("id") if ref else None,
+                        "since": _date_in(line) or fallback_since, "text": line})
+    waiting_release = []
+    for row in ([] if archived else rows):
+        if row["status"] != "done_code":
+            continue
+        waiting = re.sub(r"^\d{4}-\d{2}-\d{2};\s*", "", row["detail"] or "")
+        waiting = re.sub(r"^waiting:\s*", "", waiting)
+        if "release" in waiting.lower():
+            waiting_release.append(row)
+        elif "owner" in waiting.lower() and row["id"] not in ids_with_entry:
+            entries.append({"kind": "secret" if SECRET_RE.search(waiting) else "step",
+                            "source": f"{path}#At a glance", "item": row["id"],
+                            "since": row["since"] or fallback_since, "text": f"{row['id']}: {waiting}"})
+    if waiting_release:
+        ids = ", ".join(row["id"] for row in waiting_release)
+        dates = [row["since"] for row in waiting_release if row["since"]]
+        entries.append({"kind": "word", "source": f"{path}#At a glance", "item": None,
+                        "since": min(dates) if dates else fallback_since,
+                        "text": f"release: {ids} merged and waiting for a release"})
+    return entries
+
+
+def _date_in(text: str) -> str | None:
+    match = DATE_RE.search(text)
+    return match.group(1) if match else None
+
+
+def _summary(rows: list[dict]) -> tuple[int, int]:
+    return sum(1 for row in rows if row["status"] in DONE_STATUSES), len(rows)
+
+
+def _roadmap_files(reader, directory: str, pattern: str) -> list[str]:
+    return [f"{directory}/{name}" for name, is_dir in reader.listdir(directory)
+            if not is_dir and re.match(pattern, name)]
+
+
+def _last_release(reader) -> dict | None:
+    for path in reversed(_roadmap_files(reader, ARCHIVE_ROADMAPS_DIR, r"^\d{4}-\d{2}-\d{2}-roadmap.*\.md$")):
+        text = reader.read(path) or ""
+        for line in reversed(sections(text).get("Summary", [])):
+            match = RELEASE_LINE_RE.match(line.strip())
+            if match:
+                return {"version": match.group("version"), "date": match.group("date"), "source": path}
+    return None
+
+
+def build_state(reader, prior: dict | None = None, now: str | None = None) -> dict:
+    """The state of the project that `reader` sees. `prior` keeps the `since` of entries still present."""
+    today = _today()
+    workflow: dict = {}
+    raw = reader.read(WORKFLOW_PATH)
+    if raw:
+        try:
+            loaded = json.loads(raw)
+            workflow = loaded if isinstance(loaded, dict) else {}
+        except json.JSONDecodeError:
+            workflow = {}
+
+    owner_queue: list[dict] = []
+    active = None
+    roadmap_text = reader.read(ROADMAP_PATH)
+    rows_by_change: dict[str, dict] = {}
+    if roadmap_text is not None:
+        meta = frontmatter(roadmap_text)
+        rows = roadmap_rows(roadmap_text)
+        done, total = _summary(rows)
+        rows_by_change = {row["change_id"]: row for row in rows if row["change_id"]}
+        active = {
+            "slug": meta.get("roadmap"),
+            "title": title_of(roadmap_text),
+            "status": meta.get("status"),
+            "version": meta.get("version"),
+            "path": ROADMAP_PATH,
+            "done": done,
+            "total": total,
+            "items": [{key: row[key] for key in ("id", "change_id", "outcome", "status", "stage", "since",
+                                                  "detail", "prerequisites", "mode")}
+                      for row in rows if row["status"] not in DONE_STATUSES],
+        }
+        owner_queue += _owner_entries(ROADMAP_PATH, roadmap_text, rows, meta.get("updated") or today)
+
+    queued = []
+    for path in _roadmap_files(reader, QUEUED_DIR, r"^roadmap-.+\.md$"):
+        text = reader.read(path) or ""
+        meta = frontmatter(text)
+        rows = roadmap_rows(text)
+        done, total = _summary(rows)
+        slug = meta.get("roadmap") or os.path.basename(path)[len("roadmap-"):-len(".md")]
+        condition = meta.get("trigger") or _start_order(text)
+        since = meta.get("created") or meta.get("updated") or today
+        queued.append({
+            "slug": slug,
+            "title": title_of(text),
+            "status": meta.get("status"),
+            "path": path,
+            "start_condition": condition,
+            "done": done,
+            "total": total,
+            "items": [{key: row[key] for key in ("id", "change_id", "outcome", "status")} for row in rows],
+        })
+        owner_queue.append({"kind": "word", "source": path, "item": None, "since": since,
+                            "text": f"start queued roadmap {slug}" + (f": {condition}" if condition else "")})
+        owner_queue += _owner_entries(path, text, rows, meta.get("updated") or today)
+
+    for path in _roadmap_files(reader, ARCHIVE_ROADMAPS_DIR, r"^\d{4}-\d{2}-\d{2}-roadmap.*\.md$"):
+        text = reader.read(path) or ""
+        meta = frontmatter(text)
+        owner_queue += _owner_entries(path, text, roadmap_rows(text), meta.get("updated") or path.split("/")[-1][:10],
+                                      archived=True)
+
+    open_changes = []
+    for name, is_dir in reader.listdir(CHANGES_DIR):
+        if not is_dir:
+            continue
+        text = reader.read(f"{CHANGES_DIR}/{name}/change.md")
+        if text is None:
+            continue
+        meta = frontmatter(text)
+        change_id = meta.get("change_id") or name
+        row = rows_by_change.get(change_id)
+        open_changes.append({
+            "change_id": change_id,
+            "title": meta.get("title"),
+            "status": meta.get("status"),
+            "roadmap_item": meta.get("roadmap_item"),
+            "updated": meta.get("updated"),
+            "stage": (row["stage"] or row["status"]) if row else None,
+        })
+
+    previous = {_entry_key(entry): entry.get("since") for entry in (prior or {}).get("owner_queue", [])}
+    for entry in owner_queue:
+        entry["since"] = previous.get(_entry_key(entry)) or entry["since"]
+    owner_queue.sort(key=lambda entry: (entry["since"] or "", entry["source"], entry["text"]))
+
+    state = {
+        "schema_version": SCHEMA_VERSION,
+        "project": workflow.get("project") or (frontmatter(roadmap_text).get("project") if roadmap_text else None),
+        "mode": workflow.get("mode") or "manual",
+        "main_branch": workflow.get("mainBranch"),
+        "updated_at": now or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "active_roadmap": active,
+        "queued": queued,
+        "open_changes": open_changes,
+        "owner_queue": owner_queue,
+        "last_release": _last_release(reader),
+    }
+    return state
+
+
+def _start_order(text: str) -> str | None:
+    """A run-wide order about starting the roadmap (`> - Start: …`), when the header has one."""
+    for line in (text or "").splitlines():
+        match = re.match(r"^>\s*-\s*(Start[^:]*):\s*(.+)$", line, re.IGNORECASE)
+        if match:
+            return match.group(2).strip()
+    return None
+
+
+def _entry_key(entry: dict) -> tuple:
+    return (entry.get("kind"), entry.get("source"), entry.get("text"))
+
+
+def comparable(state: dict | None) -> dict | None:
+    """The state without the fields a rewrite may change on its own (see VOLATILE_FIELDS)."""
+    if state is None:
+        return None
+    return {key: value for key, value in state.items() if key not in VOLATILE_FIELDS}
+
+
+def serialize(state: dict) -> str:
+    return json.dumps(state, indent=2, ensure_ascii=False) + "\n"
+
+
+def load_prior(reader) -> dict | None:
+    raw = reader.read(STATE_PATH)
+    if not raw:
+        return None
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def render_state(reader) -> str:
+    """The text of `context/state.json` for what `reader` sees; the previous text when nothing changed."""
+    prior = load_prior(reader)
+    state = build_state(reader, prior)
+    if prior is not None and prior.get("updated_at") and json.dumps(_stable(prior)) == json.dumps(_stable(state)):
+        state["updated_at"] = prior["updated_at"]
+    return serialize(state)
+
+
+def _stable(state: dict) -> dict:
+    return {key: value for key, value in state.items() if key != "updated_at"}
+
+
+def staleness(reader) -> str | None:
+    """None when `context/state.json` matches the markdown; otherwise why not."""
+    prior = load_prior(reader)
+    if prior is None:
+        return "missing or not valid JSON" if reader.exists(STATE_PATH) else "missing"
+    if prior.get("schema_version") != SCHEMA_VERSION:
+        return f"schema_version {prior.get('schema_version')!r}, expected {SCHEMA_VERSION}"
+    fresh = build_state(reader, prior)
+    old, new = comparable(prior), comparable(fresh)
+    if old == new:
+        return None
+    changed = sorted(key for key in set(old) | set(new) if old.get(key) != new.get(key))
+    return "out of date with the markdown (" + ", ".join(changed) + ")"
+
+
+# ---------------------------------------------------------------- command line
+
+
+def repo_root(start: str) -> str:
+    out = subprocess.run(["git", "-C", start, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    return out.stdout.strip() if out.returncode == 0 else os.path.abspath(start)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    root = None
+    if "--root" in args:
+        k = args.index("--root")
+        root = args[k + 1]
+        del args[k:k + 2]
+    staged = "--staged" in args
+    args = [arg for arg in args if arg != "--staged"]
+    if len(args) != 1 or args[0] not in ("write", "print", "check"):
+        print(__doc__, file=sys.stderr)
+        return 2
+    root = os.path.abspath(root) if root else repo_root(os.getcwd())
+    if not os.path.isdir(os.path.join(root, "context")):
+        print(f"no context/ directory in {root}: nothing to do", file=sys.stderr)
+        return 0 if args[0] != "check" else 1
+    reader = IndexReader(root) if staged else FsReader(root)
+    if args[0] == "check":
+        problem = staleness(FsReader(root))
+        if problem:
+            print(f"{STATE_PATH}: {problem}", file=sys.stderr)
+            return 1
+        print(f"{STATE_PATH}: up to date")
+        return 0
+    text = render_state(reader)
+    if args[0] == "print":
+        sys.stdout.write(text)
+        return 0
+    target = os.path.join(root, STATE_PATH)
+    with open(target, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    if staged:
+        subprocess.run(["git", "-C", root, "add", "--", STATE_PATH], check=True)
+    print(f"wrote {STATE_PATH}" + (" (staged)" if staged else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

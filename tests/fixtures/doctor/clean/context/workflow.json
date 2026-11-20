@@ -1,0 +1,7 @@
+{
+  "project": "Example clinic",
+  "mode": "autonomous",
+  "language": "en",
+  "mainBranch": "main",
+  "gates": { "test": "npm test" }
+}

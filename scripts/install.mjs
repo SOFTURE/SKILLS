@@ -7,6 +7,10 @@
 //
 // Flags: --postinstall (never fails the host install), --dry-run, --target <dir>, --no-gitignore
 //
+// Subcommands (run from the project root; Python 3, like the other scripts):
+//   softure-skills doctor [--json]          check the context/ contract (WORKFLOW.md §12); exit 1 on drift
+//   softure-skills state [write|print|check] regenerate context/state.json (default: write)
+//
 // Per-project choices live in context/workflow.json -> "install" (all optional):
 //   "gitignore": false              commit the installed skills instead of ignoring them
 //   "rules": ["workflow", ...]      rule sections to inject; default: every section in RULE_SECTIONS
@@ -14,6 +18,7 @@
 // section that is always injected, whatever "rules" says. The "language" section is mandatory too:
 // only "allowNonEnglishCode": true (an owner's explicit exception) leaves it out.
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +37,33 @@ const RULE_SECTIONS = { language: "## Language", workflow: "## How work flows", 
 const MODE_HEADING = "## Operating mode: ";
 const MODES = ["manual", "autonomous"];
 const DEFAULT_MODE = "manual";
+const DOCTOR_SCRIPTS = path.join(PACKAGE_ROOT, "skills", "softure-doctor", "scripts");
+// Subcommand -> [script, default arguments]. Each runs with the caller's working directory.
+const SUBCOMMANDS = {
+  doctor: [path.join(DOCTOR_SCRIPTS, "doctor.py"), []],
+  state: [path.join(DOCTOR_SCRIPTS, "context_state.py"), ["write"]],
+};
+const CI_LINE = "npx softure-skills doctor";
+
+function runSubcommand(name, args) {
+  const [script, defaults] = SUBCOMMANDS[name];
+  const result = spawnSync("python3", [script, ...(args.length > 0 ? args : defaults)], { stdio: "inherit" });
+  if (result.error) {
+    console.error(`[softure-skills] ${name} needs python3 on PATH: ${result.error.message}`);
+    return 1;
+  }
+  return result.status ?? 1;
+}
+
+// True when one of the project's GitHub workflows already runs the doctor.
+function hasDoctorInCi(projectRoot) {
+  const dir = path.join(projectRoot, ".github", "workflows");
+  if (!fs.existsSync(dir)) return false;
+  return fs
+    .readdirSync(dir)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .some((name) => fs.readFileSync(path.join(dir, name), "utf8").includes("softure-skills doctor"));
+}
 
 function parseArgs(argv) {
   const options = { isPostinstall: false, isDryRun: false, target: null, shouldIgnore: true };
@@ -222,6 +254,14 @@ function install(options) {
   const prefix = options.isDryRun ? "[softure-skills] (dry run)" : "[softure-skills]";
   for (const action of actions) console.log(`${prefix} ${action}`);
   console.log(`${prefix} ${PACKAGE.name}@${PACKAGE.version} -> ${projectRoot}`);
+  if (!hasDoctorInCi(projectRoot)) {
+    console.log(`${prefix} CI: add \`${CI_LINE}\` to the project's CI check, documentation-only changes included (WORKFLOW.md §12)`);
+  }
+}
+
+const [subcommand, ...subcommandArgs] = process.argv.slice(2);
+if (subcommand in SUBCOMMANDS) {
+  process.exit(runSubcommand(subcommand, subcommandArgs));
 }
 
 try {
@@ -233,4 +273,4 @@ try {
   process.exit(isPostinstall ? 0 : 1);
 }
 
-export { replaceManagedBlock, selectRuleSections };
+export { CI_LINE, replaceManagedBlock, selectRuleSections };

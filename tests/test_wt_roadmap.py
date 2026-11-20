@@ -17,6 +17,8 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, "skills", "softure-worktree", "scripts", "wt-roadmap.py")
+sys.path.insert(0, os.path.join(ROOT, "skills", "softure-doctor", "scripts"))
+import context_state  # noqa: E402
 GIT_ENV = {
     "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@example.com",
     "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.com",
@@ -174,6 +176,37 @@ class RoadmapDoneTest(unittest.TestCase):
         text = self.roadmap()
         self.assertIn("| autonomous | done |", text)
         self.assertIn("- **Status:** done\n", text)
+
+
+    def test_done_writes_a_fresh_state_in_the_same_commit(self) -> None:
+        self.setup_repo("autonomous", ["- **Status:** done_code (waiting: release)",
+                                       "- **Done:** a title search finds the page"])
+        result = self.run_script("done", "search-titles")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        files = self.git("show", "--name-only", "--format=", "HEAD").split()
+        self.assertEqual(sorted(files), ["context/foundation/roadmap.md", "context/state.json"])
+        self.assertIsNone(context_state.staleness(context_state.GitReader(self.repo, "HEAD")))
+        state = json.loads(self.git("show", "HEAD:context/state.json"))
+        self.assertEqual(state["active_roadmap"]["done"], 1)
+        self.assertTrue(any(entry["kind"] == "word" and "WK-8" in entry["text"] for entry in state["owner_queue"]))
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_cloud_mode_pushes_roadmap_and_state_to_origin(self) -> None:
+        self.setup_repo("autonomous", ["- **Status:** done"])
+        origin = tempfile.TemporaryDirectory()
+        self.addCleanup(origin.cleanup)
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", origin.name], check=True, capture_output=True)
+        self.git("remote", "add", "origin", origin.name)
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "-b", "claude/search-titles")
+        result = self.run_script("stage", "search-titles", "archive", "--cloud")
+        self.assertNotEqual(result.returncode, 0)  # the row is ready_to_merge, not in_progress
+        result = self.run_script("done", "search-titles", "--cloud")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pushed = subprocess.run(["git", "--git-dir", origin.name, "show", "--name-only", "--format=", "main"],
+                                check=True, capture_output=True, text=True).stdout.split()
+        self.assertEqual(sorted(pushed), ["context/foundation/roadmap.md", "context/state.json"])
+        self.assertIsNone(context_state.staleness(context_state.GitReader(origin.name, "main")))
 
 
 if __name__ == "__main__":
