@@ -70,7 +70,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 ## Mechanical repairs: `--fix`
 
 `doctor.py --fix` prints every edit it would make and the failures left after them; `--fix --write`
-applies them. It writes only under `context/`, and a second run changes nothing. Three shapes are
+applies them. It writes only under `context/`, and a second run changes nothing. Four shapes are
 mechanical:
 
 - `archived-change-status`: the archived `change.md` gets `status: archived`, and the old value is kept
@@ -79,7 +79,11 @@ mechanical:
   path when git history shows where it moved (renames followed across several moves); a file deleted on
   purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit;
 - a dropped Progress item of an archived plan (unticked, but struck through or carrying an explicit
-  dropped/cancelled/not-applicable note) is normalised to `- [x] ~~<item>~~ — dropped: <note>`.
+  dropped/cancelled/not-applicable note) is normalised to `- [x] ~~<item>~~ — dropped: <note>`;
+- a carried entry of an archived roadmap: an unticked owner check or pre-release step, or an open row, whose
+  text carries a carry marker (`→ roadmap-<slug>`, `carried to <roadmap>`) naming a roadmap that exists
+  (queued, archived or the live one) is ticked `- [x] <text> — carried to <path>` (a row becomes
+  `carried (to <path>)`). A marker whose roadmap does not exist is left alone and named: it stays a failure.
 
 It skips, and names, every row it cannot settle from history (a live index, a target whose move or
 deletion the history does not show). A shallow clone works on the commits it holds and names what lies
@@ -105,6 +109,7 @@ The evidence it looks for:
 | `archived-roadmap-summary` | the merge (or squash) commit of the item's change on the main line; the last SHA of its archived plan |
 | `archived-roadmap-open-items` | the item's archived change folder, its merge commit, the release that contains it, later roadmaps that mention it |
 | `archived-roadmap-open-checks` | the same for the item the check names, plus the first release after the close (for pre-release steps) |
+| carried entries | a check or row with a carry marker whose roadmap exists: that roadmap (`--fix --write` ticks it) |
 | anything else | the file to fix (`index-missing-file`: where git history says the file went, or that it never existed) |
 
 Work the list in one change per repository (`docs(context): settle history to zero`):

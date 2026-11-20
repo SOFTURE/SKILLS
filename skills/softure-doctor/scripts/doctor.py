@@ -223,6 +223,40 @@ def open_checks(text: str, include_release: bool = True) -> list[str]:
     return found
 
 
+# A carry marker: the line says which roadmap took the entry over (`→ roadmap-later`, `carried to
+# roadmaps/roadmap-later.md`, `carried over to roadmap.md`).
+CARRY_RE = re.compile(r"(?:→|->|\bcarried(?:\s+over)?\s+to)\s*\**\s*`?(?P<target>(?:[\w.-]+/)*roadmap"
+                      r"(?:-[A-Za-z0-9][\w-]*?(?:\.md)?|\.md))(?![\w-])`?", re.IGNORECASE)
+
+
+def carry_target(text: str) -> str | None:
+    """The roadmap a carry marker in `text` names (as written), or None."""
+    match = CARRY_RE.search(text or "")
+    return match.group("target") if match else None
+
+
+def resolve_carry(reader, target: str | None) -> str | None:
+    """The file of the roadmap a carry marker names, when it exists (queued, archived, or the live one)."""
+    if not target:
+        return None
+    name = target.rsplit("/", 1)[-1]
+    if name == "roadmap.md":
+        text = reader.read(ROADMAP_PATH)
+        return ROADMAP_PATH if text is not None else None
+    slug = name[len("roadmap-"):]
+    slug = slug[:-3] if slug.endswith(".md") else slug
+    queued = f"{QUEUED_DIR}/roadmap-{slug}.md"
+    if reader.read(queued) is not None:
+        return queued
+    live = reader.read(ROADMAP_PATH)
+    if live is not None and frontmatter(live).get("roadmap") == slug:
+        return ROADMAP_PATH
+    for path in _files(reader, ARCHIVE_ROADMAPS_DIR, r"^\d{4}-\d{2}-\d{2}-roadmap.*\.md$"):
+        if frontmatter(reader.read(path) or "").get("roadmap") == slug or path.endswith(f"roadmap-{slug}.md"):
+            return path
+    return None
+
+
 def check_archived_roadmaps(reader) -> list[Finding]:
     findings: list[Finding] = []
     pending = pending_release_roadmap(reader)

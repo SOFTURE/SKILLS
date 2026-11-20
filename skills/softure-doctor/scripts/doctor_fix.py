@@ -17,6 +17,11 @@ Three shapes are mechanical, and only files under `context/` are edited:
   dropped Progress item    an unticked item of an archived plan's `## Progress` that is struck through or
                            carries a dropped/cancelled/not-applicable note is normalised to
                            `- [x] ~~<item>~~ — dropped: <note>` (the doctor already reads it as dropped)
+  carried entry            an unticked owner check or pre-release step of an archived roadmap, or an open row,
+                           whose text carries a carry marker (`→ roadmap-<slug>`, `carried to <roadmap>`) naming a
+                           roadmap that exists (queued, archived or the live one): the check is ticked
+                           `- [x] <text> — carried to <path>`, the row (and its item block) becomes
+                           `carried (to <path>)`; a marker whose roadmap does not exist is left alone and named
 
 Everything else (an index row whose target is not in the history this checkout holds, a live index)
 is a judgement case: `doctor.py --sweep` lists it with evidence. A shallow clone works: what it cannot
@@ -221,6 +226,8 @@ def plan_fixes(reader, root: str | None) -> dict:
         if lines != text.split("\n"):
             files[rel] = "\n".join(lines)
 
+    _plan_carried(reader, files, edits, skipped)
+
     history = History(root)
     for missing in doctor.missing_index_targets(reader):
         if not missing["path"].startswith(ARCHIVE_PREFIXES):
@@ -261,6 +268,65 @@ def plan_fixes(reader, root: str | None) -> dict:
         files[missing["path"]] = "\n".join(lines)
         edits.append({"code": "index-missing-file", "path": missing["path"], "line": missing["line"], "what": what})
     return {"edits": edits, "skipped": skipped, "files": files}
+
+
+def _foundation_relative(path: str) -> str:
+    prefix = "context/foundation/"
+    return path[len(prefix):] if path.startswith(prefix) else path
+
+
+def _plan_carried(reader, files: dict[str, str], edits: list[dict], skipped: list[dict]) -> None:
+    """Tick carry-marked checks and close carry-marked rows of archived roadmaps whose target roadmap exists."""
+    import doctor  # noqa: E402
+
+    from context_state import CHECKBOX_RE, OWNER_SECTION, RELEASE_SECTION, pending_release_roadmap, roadmap_rows
+
+    pending = pending_release_roadmap(reader)
+    for path in doctor._archived_roadmaps(reader):
+        text = files.get(path, reader.read(path) or "")
+        lines = text.split("\n")
+        wanted = {OWNER_SECTION} | ({RELEASE_SECTION} if path != pending else set())
+        open_rows = {row["id"]: row for row in roadmap_rows(text) if row["status"] not in doctor.CLOSED_STATUSES}
+        section = None
+        for index, line in enumerate(lines):
+            if line.startswith("## "):
+                section = line[3:].strip()
+                continue
+            box = CHECKBOX_RE.match(line)
+            row = re.match(r"^\|\s*\*\*([A-Z]+-\d+)\*\*\s*\|", line)
+            if box and box.group("mark") == " " and section in wanted:
+                subject = box.group("text")
+            elif row and row.group(1) in open_rows:
+                subject = [cell.strip() for cell in line.strip().strip("|").split("|")][-1]
+            else:
+                continue
+            target = doctor.carry_target(subject)
+            if not target:
+                continue
+            found = doctor.resolve_carry(reader, target)
+            if not found:
+                skipped.append({"code": "archived-roadmap-open-checks" if box else "archived-roadmap-open-items",
+                                "path": path, "line": index + 1,
+                                "why": f"carry marker names `{target}`, which is no queued, archived or live roadmap"})
+                continue
+            where = _foundation_relative(found)
+            if box:
+                lines[index] = line.replace("- [ ] ", "- [x] ", 1).rstrip() + f" — carried to {where}"
+                edits.append({"code": "archived-roadmap-open-checks", "path": path, "line": index + 1,
+                              "what": f"carried check ticked: carried to {where}"})
+            else:
+                old_status = subject
+                new_status = f"carried (to {where})"
+                head = line.rstrip()
+                cut = head.rstrip("|").rstrip().rfind(old_status)
+                lines[index] = head[:cut] + new_status + head[cut + len(old_status):]
+                for block_index, block_line in enumerate(lines):
+                    if block_line.strip() == f"- **Status:** {old_status}":
+                        lines[block_index] = block_line.replace(old_status, new_status, 1)
+                edits.append({"code": "archived-roadmap-open-items", "path": path, "line": index + 1,
+                              "what": f"{row.group(1)} {old_status} -> {new_status}"})
+        if lines != text.split("\n"):
+            files[path] = "\n".join(lines)
 
 
 def apply_fixes(root: str, files: dict[str, str]) -> None:
