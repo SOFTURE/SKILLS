@@ -601,6 +601,25 @@ the set. It never derives the next start only from the thread that just merged.
 scoped to the project's own repository: attach a repository the run needs (for example SOFTURE/SKILLS
 to file a gap) before deciding it is out of reach.
 
+### 8.6 Owner-word issues
+
+The owner often decides for a project from outside its chat, for example while reviewing several projects at once
+(`softure-skills portfolio --owner`, §12.3). Such a decision travels as an issue in the project's own repository,
+labelled **`owner-word`**: one decision, its scope and any limit ("start the queued roadmap payments", "release only
+after the last item", "drop SA-12"). It is the owner's word in writing, equal to the same sentence in the main chat.
+
+- **Label.** The installer creates `owner-word` when the forge allows it (GitHub through an authenticated `gh`,
+  outside CI); otherwise it prints the one command that creates it.
+- **Autonomous mode.** The coordinator lists open `owner-word` issues first at the start of a run and again on every
+  report and wake-up, and acts on each like an order in the chat: a roadmap to start goes through a roadmap thread,
+  a release word is recorded where the release rules look for it, a "no" or "later" is recorded in the roadmap. It
+  comments what it did (thread, PR, merge SHA) and closes the issue; one it cannot act on (unclear, contradicts
+  `change.md` or a standing order) gets a comment with the question and stays open.
+- **Manual mode.** The coordinator shows open `owner-word` issues to the owner at the start of a session and acts
+  only on the owner's word in the conversation; it then comments and closes them the same way.
+- **Not in `state.json`.** Open owner-word issues live on the forge; an aggregator reads both (`state.json` for what
+  waits for the owner, the forge for the words already given).
+
 ## 9. Commits
 
 - Implementation: `<type>(<change-id>): <phase title> (p<N>)`. Type is `feat`, `fix`, `refactor`,
@@ -736,7 +755,7 @@ archived roadmaps:
 An archived roadmap contributes only its open checkboxes (its `## Before the next release` only until its
 `## Summary` records a release). `source` is the file, `#`, and the heading; `item` the roadmap ID the entry names;
 `since` the date in the entry, else the file's `updated`, and once written it is kept for that entry on every
-rewrite. Owner-word issues live on the forge, not here.
+rewrite. Owner-word issues (§8.6) live on the forge, not here.
 
 `open_changes` and `updated_at` are refreshed on every write but never make the file stale: a change branch edits
 its own `change.md` without touching `state.json`, and stays green.

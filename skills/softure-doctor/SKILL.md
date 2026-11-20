@@ -65,3 +65,5 @@ script run creates it.
 - The doctor never edits anything. A skill that runs it fixes only the files it owns in that run.
 - `open_changes` and `updated_at` are refreshed on every write and never make the file stale, so a
   change branch that edits its own `change.md` keeps a green doctor.
+- Owner-word issues (label `owner-word`, WORKFLOW §8.6) live on the forge, not in `state.json`;
+  an aggregator reads both.

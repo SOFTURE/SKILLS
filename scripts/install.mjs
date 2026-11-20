@@ -46,6 +46,26 @@ const SUBCOMMANDS = {
   portfolio: [path.join(PACKAGE_ROOT, "scripts", "portfolio.py"), []],
 };
 const CI_LINE = "npx softure-skills doctor";
+// Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6).
+const OWNER_WORD_LABEL = {
+  name: "owner-word",
+  color: "5319e7",
+  description: "An owner decision the coordinator acts on (SOFTURE workflow)",
+};
+const LABEL_COMMAND = `gh label create ${OWNER_WORD_LABEL.name} --color ${OWNER_WORD_LABEL.color} --description "${OWNER_WORD_LABEL.description}"`;
+
+// Creates the owner-word label on the project's forge when it can (GitHub through an authenticated gh,
+// outside CI, once per checkout). Returns [action line, whether the label is known to exist].
+function ensureOwnerWordLabel(projectRoot, previous, options) {
+  if ((previous.labels ?? []).includes(OWNER_WORD_LABEL.name)) return [null, true];
+  if (options.isDryRun) return [`label ${OWNER_WORD_LABEL.name} (created on the forge when gh can)`, false];
+  if (process.env.CI) return [null, false];
+  const result = spawnSync("gh", ["label", "create", OWNER_WORD_LABEL.name, "--color", OWNER_WORD_LABEL.color,
+    "--description", OWNER_WORD_LABEL.description], { cwd: projectRoot, encoding: "utf8", timeout: 15000 });
+  if (result.status === 0) return [`label ${OWNER_WORD_LABEL.name} created on the forge`, true];
+  if (/already exists/i.test(result.stderr ?? "")) return [null, true];
+  return [`label ${OWNER_WORD_LABEL.name}: not created here; run once in the repository: ${LABEL_COMMAND}`, false];
+}
 
 function runSubcommand(name, args) {
   const [script, defaults] = SUBCOMMANDS[name];
@@ -233,6 +253,9 @@ function install(options) {
     }
   }
 
+  const [labelAction, hasLabel] = ensureOwnerWordLabel(projectRoot, previous, options);
+  if (labelAction) actions.push(labelAction);
+
   if (!options.isDryRun) {
     fs.mkdirSync(path.join(projectRoot, ".claude"), { recursive: true });
     const manifest = {
@@ -244,6 +267,7 @@ function install(options) {
       rules: ruleSections,
       mode,
       gitignore: shouldIgnore,
+      labels: hasLabel ? [OWNER_WORD_LABEL.name] : [],
     };
     // A re-install that changes nothing keeps the old timestamp, so a committed manifest
     // does not dirty every fresh clone or worktree after `npm ci`.
@@ -275,4 +299,4 @@ try {
   process.exit(isPostinstall ? 0 : 1);
 }
 
-export { CI_LINE, replaceManagedBlock, selectRuleSections };
+export { CI_LINE, OWNER_WORD_LABEL, replaceManagedBlock, selectRuleSections };
