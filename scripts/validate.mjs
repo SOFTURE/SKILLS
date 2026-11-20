@@ -4,6 +4,7 @@
 // - a skill name does not start with "softure-" or has no description
 // - any shipped file mentions third-party course branding (this package is original work)
 // - any shipped file contains Polish diacritics (everything shipped is English)
+// - a mode section of the rules block does not mention the owner-word label (WORKFLOW.md §8.6)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -54,6 +55,14 @@ for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...wa
     if (pattern.test(content)) errors.push(`${path.relative(ROOT, file)}: matches forbidden pattern ${pattern}`);
   }
 }
+
+const rules = fs.readFileSync(path.join(ROOT, "rules", "AGENTS.md"), "utf8");
+for (const mode of ["manual", "autonomous"]) {
+  const section = rules.split(/\n(?=## )/).find((part) => part.startsWith(`## Operating mode: ${mode}`)) ?? "";
+  if (!section.includes("`owner-word`")) errors.push(`rules/AGENTS.md: "Operating mode: ${mode}" does not mention the \`owner-word\` label`);
+}
+const startOfRun = rules.slice(rules.indexOf("**Start of a run.**"), rules.indexOf("**Messages to the owner"));
+if (!/owner-word/.test(startOfRun)) errors.push('rules/AGENTS.md: "Start of a run" does not act on `owner-word` issues first');
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);

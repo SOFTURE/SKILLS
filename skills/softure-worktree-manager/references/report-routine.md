@@ -34,7 +34,9 @@ Roadmap report for <roadmap name> (SOFTURE workflow, AGENTS.md → Operating mod
 If several firings queued up while busy, do one.
 - Running as the coordinator: post the roadmap report in the main chat in the standard shape
   (title, "X of N on <main>", the four-column table of the items not done yet, Decision, times),
-  in chatLanguage, times in timezone. Before posting, run the heartbeat: recompute the startable set
+  in chatLanguage, times in timezone. Before posting, act on every open `owner-word` issue of
+  <owner/repo> (WORKFLOW §8.6: carry it out, comment, close; ask in a comment when unclear), then run
+  the heartbeat: recompute the startable set
   from roadmap.md on origin/<main> (softure-worktree/scripts/wt-startable.py; never only the
   successors of the last merge) and start a thread for every item that is not done, has no thread
   and has all prerequisites on <main> or none; give the go to every READY thread; nudge every

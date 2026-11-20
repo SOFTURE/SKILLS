@@ -24,6 +24,7 @@ What the installer does (idempotent; re-run on every `npm install`):
 | `rules/AGENTS.md` | managed block in `AGENTS.md` (or `CLAUDE.md` if only that exists) |
 | ignore entries | managed block in `.gitignore`: installed skills are restored by `npm install`, not committed |
 | manifest | `.claude/softure-skills.json` |
+| label `owner-word` | created on the forge when an authenticated `gh` can (outside CI); otherwise the command is printed |
 
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
 `--no-gitignore` (commit the skills instead).
