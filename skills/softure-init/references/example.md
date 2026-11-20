@@ -8,6 +8,7 @@ A fictional repo, first run, interactive. Use it for the shape of the plan and t
 - `package.json` scripts: `typecheck: "tsc --noEmit"`, `lint: "eslint ."`, `test: "vitest run"`,
   `test:e2e: "playwright test"`, `stack:test: "docker compose -f docker/test.yml up -d && playwright test; docker compose -f docker/test.yml down"`,
   `db:generate: "drizzle-kit generate"`.
+- README's first heading `# Booking` -> project `Booking`.
 - `origin/HEAD` -> `origin/main`.
 - `drizzle/` with `0000_init.sql` ... `0014_slots_index.sql`.
 - `.env` present.
@@ -28,6 +29,7 @@ context/
 
 ```json
 {
+  "project": "Booking",
   "language": "en",
   "mainBranch": "main",
   "gates": {
@@ -51,7 +53,7 @@ context/
 ```
 
 ```text
-read:     gates.*, migrations.dir, mainBranch (origin/HEAD)
+read:     project (README heading), gates.*, migrations.dir, mainBranch (origin/HEAD)
 inferred: integration.local -> stack:test (brings up its own stack; test:e2e expects a running app)
           migrations.pattern -> from 15 existing file names
 Optional keys you may want: timezone, integration.cadence, worktree.cloudState, install.

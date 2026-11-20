@@ -494,7 +494,8 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
 
     state = {
         "schema_version": SCHEMA_VERSION,
-        "project": workflow.get("project") or (frontmatter(roadmap_text).get("project") if roadmap_text else None),
+        "project": (workflow.get("project") or (frontmatter(roadmap_text).get("project") if roadmap_text else None)
+                    or repository_name(reader)),
         "mode": workflow.get("mode") or "manual",
         "main_branch": workflow.get("mainBranch"),
         "updated_at": now or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -505,6 +506,20 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
         "last_release": _last_release(reader),
     }
     return state
+
+
+def repository_name(reader) -> str:
+    """The repository's name: the last segment of `origin`'s URL, else the checkout's folder name.
+
+    The last fallback for `project`, so a project between roadmaps without `project` in workflow.json still
+    has a name. The URL comes first because a checkout's folder can be named anything (a worktree, a clone
+    into a temporary folder).
+    """
+    folder = getattr(reader, "root", None) or getattr(reader, "repo", None) or os.getcwd()
+    url = subprocess.run(["git", "-C", folder, "remote", "get-url", "origin"], capture_output=True,
+                         text=True).stdout.strip()
+    name = re.split(r"[/:]", url.rstrip("/"))[-1] if url else os.path.basename(os.path.abspath(folder))
+    return re.sub(r"\.git$", "", name) or "unnamed"
 
 
 def _start_order(text: str) -> str | None:

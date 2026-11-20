@@ -15,6 +15,9 @@ so rename detection has a real history to read.
 evidence comes from (`commit <path> <message>` writes the file and commits it with that message, `tag <name>`;
 `add` and `rm` take an optional commit message after the path).
 
+`tests/fixtures/doctor/state/<case>/` holds one shape of `context/` that an outside reader of `state.json` must get
+right (a project between roadmaps, an idle placeholder roadmap); `StateTest` checks what `write` produces from it.
+
 `tests/fixtures/doctor/measure/adopter/` mirrors the shapes adopting repositories hold (mentions in index cells,
 targets deleted on purpose, cancelled Progress items, non-SHA Summary cells, owner checks of a roadmap that later
 roadmaps and releases superseded). `MeasureTest` pins its numbers before and after `--fix` and per sweep class.
@@ -663,6 +666,26 @@ class StateTest(unittest.TestCase):
         self.project.write("context/foundation/roadmap.md", "# nothing parsable\n")
         self.project.state("write")
         self.assertEqual(validate(self.state(), schema), [])
+
+    def test_project_between_roadmaps_comes_from_workflow_json(self) -> None:
+        self.project.apply_case("between-roadmaps", "state")
+        state = self.state()
+        self.assertIsNone(state["active_roadmap"])
+        self.assertEqual(state["project"], "Example clinic")
+
+    def test_project_between_roadmaps_falls_back_to_the_repository_name(self) -> None:
+        self.project.apply_case("between-roadmaps", "state")
+        workflow = json.loads(self.project.read(context_state.WORKFLOW_PATH))
+        del workflow["project"]
+        self.project.write(context_state.WORKFLOW_PATH, json.dumps(workflow, indent=2) + "\n")
+        self.project.git("remote", "add", "origin", "https://github.com/acme/clinic-site.git")
+        self.project.state("write")
+        self.assertEqual(self.state()["project"], "clinic-site")
+        self.project.git("remote", "remove", "origin")
+        self.project.state("write")
+        self.assertEqual(self.state()["project"], os.path.basename(self.project.root))
+        with open(SCHEMA, encoding="utf-8") as fh:
+            self.assertEqual(validate(self.state(), json.load(fh)), [])
 
     def test_owner_queue_lists_what_waits_for_the_owner(self) -> None:
         queue = self.state()["owner_queue"]

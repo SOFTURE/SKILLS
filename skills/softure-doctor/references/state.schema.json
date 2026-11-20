@@ -9,7 +9,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": { "type": "integer", "enum": [1] },
-    "project": { "type": ["string", "null"], "description": "workflow.json `project`, else the roadmap's `project`" },
+    "project": { "type": "string", "description": "workflow.json `project`, else the active roadmap's `project`, else the repository name (origin's URL, else the folder); never null" },
     "mode": { "type": "string", "enum": ["manual", "autonomous"] },
     "main_branch": { "type": ["string", "null"] },
     "updated_at": { "type": "string", "description": "UTC ISO 8601; changes only when the content does" },
