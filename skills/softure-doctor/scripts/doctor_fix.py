@@ -11,11 +11,12 @@ Only two kinds of failure are mechanical, and only files under `context/` are ed
   index-missing-file       a row of an index inside an archive folder (`context/archive/`,
                            `context/foundation/archive/`) that links a missing file is rewritten to the
                            file's current path when git history shows where it moved (rename detection,
-                           followed across several moves); a file that was deleted, not moved, is marked
-                           `(moved, not found; last seen in <sha>: <path>)` with the last commit that had it
+                           followed across several moves); a file that was deleted on purpose (git shows
+                           the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit
 
-Everything else (and an index row whose target was never in git history, or any row when the
-checkout has no full history) is a judgement case: `doctor.py --sweep` lists it with evidence.
+Everything else (an index row whose target is not in the history this checkout holds, a live index)
+is a judgement case: `doctor.py --sweep` lists it with evidence. A shallow clone works: what it cannot
+see is skipped and named, never guessed.
 Every edit is printed; a second run after `--write` changes nothing.
 
 Importable: `from doctor_fix import plan_fixes, apply_fixes`.
@@ -32,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_state import frontmatter  # noqa: E402
 
 ARCHIVE_PREFIXES = ("context/archive/", "context/foundation/archive/")
-GONE_MARK = "moved, not found"
+REMOVED_MARK = "removed in"
 MAX_HOPS = 10
 
 
@@ -40,14 +41,17 @@ MAX_HOPS = 10
 
 
 class History:
-    """Where files under a git checkout went. `usable` is False without git or with a shallow clone."""
+    """Where files under a git checkout went. `usable` is False without git; `shallow` marks a shallow
+    clone, whose answers cover only the commits it holds."""
 
     def __init__(self, root: str | None) -> None:
         self.root = root
         self.usable = False
+        self.shallow = False
         if root:
             probe = self._git("rev-parse", "--is-shallow-repository")
-            self.usable = probe.returncode == 0 and probe.stdout.strip() == "false"
+            self.usable = probe.returncode == 0
+            self.shallow = probe.stdout.strip() == "true"
 
     def _git(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(["git", "-C", self.root or ".", *args], capture_output=True, text=True)
@@ -60,12 +64,12 @@ class History:
         return os.path.exists(os.path.join(self.root or ".", rel))
 
     def trace(self, rel: str) -> tuple[str, str] | None:
-        """("moved", <current path>) or ("gone", <short sha of the last commit that had it>); None when
-        the path was never in history (or history is not usable)."""
+        """("moved", <current path>) or ("removed", <short sha of the commit that deleted it>); None when
+        the history this checkout holds shows neither (never there, or past a shallow clone's edge)."""
         if not self.usable:
             return None
         current = rel.rstrip("/")
-        last_having = None
+        last = None
         for _ in range(MAX_HOPS):
             if current != rel.rstrip("/") and self.exists_now(current):
                 return "moved", current
@@ -73,17 +77,27 @@ class History:
             sha = log.stdout.strip()
             if log.returncode != 0 or not sha:
                 break
-            parent = self._git("rev-parse", "-q", "--verify", f"{sha}^")
-            last_having = parent.stdout.strip() if parent.returncode == 0 else sha
+            last = (sha, current)
             moved_to = self._renamed_in(sha, current)
             if not moved_to or moved_to == current:
                 break
             current = moved_to
-        if last_having is None:
+        if last is None:
             return None
         if current != rel.rstrip("/") and self.exists_now(current):
             return "moved", current
-        return "gone", self.short(last_having)
+        sha, path = last
+        if self.exists_now(path) or not self._deleted_in(sha, path):
+            return None
+        return "removed", self.short(sha)
+
+    def _deleted_in(self, sha: str, path: str) -> bool:
+        """Whether commit `sha` deletes `path` (a file, or every file under a folder)."""
+        shown = self._git("show", "-M", "--name-status", "--format=", sha)
+        statuses = [line.split("\t") for line in shown.stdout.splitlines()]
+        hits = [parts[0] for parts in statuses if len(parts) >= 2
+                and (parts[1] == path or parts[1].startswith(path + "/"))]
+        return bool(hits) and all(status == "D" for status in hits)
 
     def _renamed_in(self, sha: str, path: str) -> str | None:
         shown = self._git("show", "-M", "--name-status", "--format=", sha)
@@ -155,9 +169,10 @@ def _replace_target(line: str, missing: dict, replacement: str | None, gone_note
         if replacement is not None:
             return pattern.sub(lambda m: f"[{m.group(1)}]({replacement}{m.group(2)})", line, count=1)
         return pattern.sub(lambda m: f"{m.group(1)} ({gone_note}: {target})", line, count=1)
+    cell = re.compile(r"(\|\s*)`?" + re.escape(target) + r"`?(\s*\|)")
     if replacement is not None:
-        return line.replace(f"`{target}`", f"`{replacement}`", 1)
-    return line.replace(f"`{target}`", f"{target} ({gone_note})", 1)
+        return cell.sub(lambda m: f"{m.group(1)}`{replacement}`{m.group(2)}", line, count=1)
+    return cell.sub(lambda m: f"{m.group(1)}{target} ({gone_note}){m.group(2)}", line, count=1)
 
 
 def plan_fixes(reader, root: str | None) -> dict:
@@ -188,7 +203,7 @@ def plan_fixes(reader, root: str | None) -> dict:
             continue
         if not history.usable:
             skipped.append({"code": "index-missing-file", "path": missing["path"], "target": missing["target"],
-                            "why": "no full git history in this checkout"})
+                            "why": "not a git checkout"})
             continue
         found = None
         for candidate in missing["candidates"]:
@@ -197,8 +212,11 @@ def plan_fixes(reader, root: str | None) -> dict:
                 found = (candidate, traced)
                 break
         if not found:
+            why = ("not moved or deleted in the history this shallow clone holds (fetch more with "
+                   "`git fetch --deepen`), or never in git: fix or drop the row (--sweep)" if history.shallow
+                   else "git shows no move or deletion (never in git?): fix or drop the row (--sweep)")
             skipped.append({"code": "index-missing-file", "path": missing["path"], "target": missing["target"],
-                            "why": "never in git history: fix or drop the row (--sweep)"})
+                            "why": why})
             continue
         candidate, (kind, value) = found
         text = files.get(missing["path"], reader.read(missing["path"]) or "")
@@ -211,7 +229,7 @@ def plan_fixes(reader, root: str | None) -> dict:
             lines[index] = _replace_target(lines[index], missing, new_target, None)
             what = f"`{missing['target']}` -> `{new_target}` (moved to {value})"
         else:
-            note = f"{GONE_MARK}; last seen in {value}"
+            note = f"{REMOVED_MARK} {value}"
             lines[index] = _replace_target(lines[index], missing, None, note)
             what = f"`{missing['target']}` marked ({note})"
         files[missing["path"]] = "\n".join(lines)

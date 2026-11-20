@@ -12,7 +12,12 @@ fail with exactly that code on the case and pass on the clean tree.
 so rename detection has a real history to read.
 
 `tests/fixtures/doctor/sweep/<case>/` holds one judgement case for `doctor --sweep`, with the history its
-evidence comes from (`commit <path> <message>` writes the file and commits it with that message, `tag <name>`).
+evidence comes from (`commit <path> <message>` writes the file and commits it with that message, `tag <name>`;
+`add` and `rm` take an optional commit message after the path).
+
+`tests/fixtures/doctor/measure/adopter/` mirrors the shapes adopting repositories hold (mentions in index cells,
+targets deleted on purpose, cancelled Progress items, non-SHA Summary cells, owner checks of a roadmap that later
+roadmaps and releases superseded). `MeasureTest` pins its numbers before and after `--fix` and per sweep class.
 """
 from __future__ import annotations
 
@@ -110,13 +115,16 @@ class Project:
         with open(history, encoding="utf-8") as fh:
             steps = [line.split() for line in fh.read().splitlines() if line.strip()]
         for step in steps:
+            message = " ".join(step)
             if step[0] == "add":
                 self.write(step[1], f"# {os.path.basename(step[1])}\n\nContent of {step[1]}.\n")
+                message = " ".join(step[2:]) or message
             elif step[0] == "mv":
                 os.makedirs(os.path.dirname(self.path(step[2])), exist_ok=True)
                 self.git("mv", step[1], step[2])
             elif step[0] == "rm":
                 self.git("rm", "-q", step[1])
+                message = " ".join(step[2:]) or message
             elif step[0] == "commit":
                 existing = self.read(step[1]) if os.path.exists(self.path(step[1])) else ""
                 self.write(step[1], existing + f"// {' '.join(step[2:])}\n")
@@ -125,7 +133,7 @@ class Project:
             elif step[0] == "tag":
                 self.git("tag", step[1])
                 continue
-            self.commit(" ".join(step))
+            self.commit(message)
 
     def apply_case(self, case: str, group: str = "cases") -> None:
         source = os.path.join(FIXTURES, group, case)
@@ -260,15 +268,15 @@ class FixTest(unittest.TestCase):
         finally:
             project.cleanup()
 
-    def test_deleted_file_is_marked_with_the_last_commit_that_had_it(self) -> None:
+    def test_deleted_file_is_marked_with_the_commit_that_removed_it(self) -> None:
         project = Project()
         try:
             project.apply_case("index-gone", "fix")
             project.commit("index")
-            last = project.git("rev-parse", "--short", "HEAD~2").strip()  # before `rm`
+            removed = project.git("rev-parse", "--short", "HEAD~1").strip()  # the `rm` commit
             project.doctor("--fix", "--write")
             index = project.read("context/archive/2026-09-01-staff-day-view/INDEX.md")
-            self.assertIn(f"draft (moved, not found; last seen in {last}: ../../changes/staff-day-view/draft.md)", index)
+            self.assertIn(f"draft (removed in {removed}: ../../changes/staff-day-view/draft.md)", index)
         finally:
             project.cleanup()
 
@@ -382,6 +390,74 @@ class SweepTest(unittest.TestCase):
                                 for entry in queue), "the owner item was carried to the live roadmap")
             self.assertFalse(any("/archive/" in entry["source"] for entry in queue))
         finally:
+            project.cleanup()
+
+
+class MeasureTest(unittest.TestCase):
+    """`tests/fixtures/doctor/measure/adopter/`: the shapes adopting repositories hold (issue #41), measured.
+
+    The numbers are what the release notes report: failures before `--fix`, its edits, failures after it,
+    and the sweep's entries by class. The owner class is the one that must stay a handful.
+    """
+
+    EXPECTED = {
+        "failures": 5,
+        "fix_edits": 2,
+        "after_fix": 3,
+        "sweep": {"total": 12, "with_evidence": 0, "owner": 12},
+    }
+
+    def measure(self, project: Project) -> dict:
+        _, before = project.doctor()
+        _, fix = project.doctor("--fix", "--write")
+        _, after = project.doctor()
+        _, swept = project.doctor("--sweep")
+        return {"failures": len(before["failures"]), "fix_edits": len(fix["edits"]),
+                "after_fix": len(after["failures"]), "sweep": swept["summary"]}
+
+    def test_adopter_numbers(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("adopter", "measure")
+            project.commit("adopter")
+            self.assertEqual(self.measure(project), self.EXPECTED)
+        finally:
+            project.cleanup()
+
+    def test_mentions_are_not_links_and_removed_targets_are_marked(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("adopter", "measure")
+            project.commit("adopter")
+            _, report = project.doctor()
+            missing = [failure["message"] for failure in report["failures"] if failure["code"] == "index-missing-file"]
+            self.assertEqual(len(missing), 2, missing)
+            self.assertFalse(any(name in " ".join(missing) for name in ("change.md", "research.md", "plan.md")))
+            project.doctor("--fix", "--write")
+            folder = "context/archive/2026-07-01-booking-page"
+            removed = project.git("log", "-1", "--format=%h", "--diff-filter=D", "--",
+                                  f"{folder}/old-notes.md").strip()
+            self.assertIn(f"| old-notes.md (removed in {removed}) |", project.read(f"{folder}/INDEX.md"))
+            self.assertIn("step 0 (removed in ", project.read(f"{folder}/screenshots/README.md"))
+            self.assertNotIn("index-missing-file", project.codes())
+        finally:
+            project.cleanup()
+
+    def test_shallow_clone_marks_what_it_can_see(self) -> None:
+        project = Project()
+        clone = tempfile.TemporaryDirectory()
+        try:
+            project.apply_case("adopter", "measure")
+            project.commit("adopter")
+            subprocess.run(["git", "clone", "-q", "--depth", "4", f"file://{project.root}", clone.name + "/s"],
+                           check=True, env={**os.environ, **GIT_ENV})
+            shallow = Project.__new__(Project)
+            shallow.root = clone.name + "/s"
+            _, fix = shallow.doctor("--fix")
+            self.assertEqual([edit["what"].split(" marked")[0] for edit in fix["edits"]], ["`old-notes.md`"])
+            self.assertTrue(any("shallow" in skip["why"] for skip in fix["skipped"]), fix["skipped"])
+        finally:
+            clone.cleanup()
             project.cleanup()
 
 

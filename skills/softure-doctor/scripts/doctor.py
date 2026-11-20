@@ -22,12 +22,14 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   queued-roadmap-done             a queued roadmap in foundation/roadmaps/ whose rows are all done
   backlog-without-roadmap         a backlog/roadmap-<slug>/ folder without its queued (or promoted) roadmap
   index-missing-file              an index row (README.md / INDEX.md table under context/) links a missing file
+                                  (a markdown link, or a cell that is only a path in a file column; a mention
+                                  in a description cell is not a link)
   state-missing                   context/state.json is missing although the project has written it before
   state-stale                     context/state.json does not match the markdown
   baseline-stale                  context/doctor-baseline.json lists a failure that is fixed (remove it), or is unreadable
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
-moved, found through git history) and prints every edit; see doctor_fix.py. It is a dry run unless
+moved or was deleted on purpose, found through git history) and prints every edit; see doctor_fix.py. It is a dry run unless
 `--write` is given, and it writes only under `context/`. `--sweep` lists every remaining failure with
 the evidence an agent needs to settle it from the repository alone; see doctor_sweep.py.
 
@@ -67,7 +69,9 @@ SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
 EMPTY_MERGE = {"—", "-", "–", "n/a", "none", "no merge", "not merged"}
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 INDEX_NAMES = ("README.md", "INDEX.md")
-CODE_PATH_RE = re.compile(r"`((?:\.{1,2}/)?(?:[\w.-]+/)*[\w.-]+\.md|(?:\.{1,2}/)?(?:[\w.-]+/)+)`")
+_PATH = r"(?:\.{1,2}/)?(?:[\w.-]+/)*[\w.-]+\.md|(?:\.{1,2}/)?(?:[\w.-]+/)+"
+WHOLE_PATH_RE = re.compile(r"(?P<tick>`?)(?P<path>" + _PATH + r")(?P=tick)")  # a cell that is only a path
+FILE_COLUMN_RE = re.compile(r"\b(?:files?|paths?|documents?|docs?|links?|artifacts?)\b")
 
 
 class Finding:
@@ -245,8 +249,20 @@ def check_queued_and_backlog(reader) -> list[Finding]:
     return findings
 
 
+def _table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _is_separator(cells: list[str]) -> bool:
+    return all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells if cell) and any(cells)
+
+
 def missing_index_targets(reader) -> list[dict]:
-    """Every link or backticked path in an index row (README.md / INDEX.md under context/) that does not exist.
+    """Every real link in an index row (README.md / INDEX.md table under context/) whose target does not exist.
+
+    A real link is a markdown link anywhere in the row, or a cell whose whole content is a path (in backticks
+    or bare) in a column that indexes files (`File`, `Path`, `Document`, `Link`, ...). A path merely mentioned
+    in a description cell (`see \`change.md\``) is not a link and never fails.
 
     Each entry: `path` (the index), `line` (1-based), `text` (the line), `kind` (`link` or `code`), `target`
     (as written), `base` (the index folder) and `candidates` (the repository paths the target may mean).
@@ -256,8 +272,16 @@ def missing_index_targets(reader) -> list[dict]:
         if os.path.basename(path) not in INDEX_NAMES:
             continue
         base = os.path.dirname(path)
+        header: list[str] | None = None
         for number, line in enumerate((reader.read(path) or "").splitlines(), start=1):
             if not line.strip().startswith("|"):
+                header = None
+                continue
+            cells = _table_cells(line)
+            if header is None:
+                header = [cell.strip("*` ").lower() for cell in cells]
+                continue
+            if _is_separator(cells):
                 continue
             for target in LINK_RE.findall(line):
                 if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE) or target.startswith("#"):
@@ -271,8 +295,14 @@ def missing_index_targets(reader) -> list[dict]:
                 if not reader.exists(resolved.rstrip("/")):
                     out.append({"path": path, "line": number, "text": line, "kind": "link", "target": target,
                                 "base": base, "candidates": [resolved.rstrip("/")]})
-            for target in CODE_PATH_RE.findall(line):
-                # A path in backticks: relative to the index, to context/ or to the repository root.
+            for column, cell in enumerate(cells):
+                if column >= len(header) or not FILE_COLUMN_RE.search(header[column]):
+                    continue
+                whole = WHOLE_PATH_RE.fullmatch(cell)
+                if not whole:
+                    continue
+                target = whole.group("path")
+                # A path cell: relative to the index, to context/ or to the repository root.
                 candidates = [os.path.normpath(os.path.join(prefix, target)).replace(os.sep, "/").rstrip("/")
                               for prefix in (base, "context", ".")]
                 inside = [c for c in candidates if c.startswith("context/")]

@@ -1,0 +1,8 @@
+add context/archive/2026-07-01-booking-page/screenshots/step-0.md docs: screenshots of the first page
+add context/archive/2026-07-01-booking-page/old-notes.md docs: early notes
+commit src/booking/page.tsx feat: the first booking page (#3)
+rm context/archive/2026-07-01-booking-page/screenshots/step-0.md docs: drop the old start page screenshot
+rm context/archive/2026-07-01-booking-page/old-notes.md docs: fold the early notes into the plan
+tag v1.0.0
+commit src/booking/page.tsx feat: the booking page, rebuilt (#8)
+tag v1.1.0

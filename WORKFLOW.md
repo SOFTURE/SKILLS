@@ -786,7 +786,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `archived-roadmap-open-checks` | an archived roadmap with an unticked `## Owner decisions and checks` entry, or an unticked `## Before the next release` step once its release is recorded or a later roadmap was closed |
 | `queued-roadmap-done` | a queued roadmap whose rows are all done, never archived |
 | `backlog-without-roadmap` | `backlog/roadmap-<slug>/` without `roadmaps/roadmap-<slug>.md` (or the promoted main roadmap) |
-| `index-missing-file` | a table row of a `README.md` or `INDEX.md` under `context/` that links or names a missing file |
+| `index-missing-file` | a table row of a `README.md` or `INDEX.md` under `context/` that links a missing file: a markdown link, or a cell that is only a path in a file column (`File`, `Path`, `Document`, `Link`); a path mentioned in a description cell is not a link |
 | `state-missing` | `context/state.json` is gone although git history holds it |
 | `state-stale` | `context/state.json` does not match the markdown |
 | `baseline-stale` | `context/doctor-baseline.json` lists a failure that no longer occurs (remove it), or is unreadable |
@@ -796,11 +796,11 @@ left after them; `--fix --write` applies them, only under `context/`, and a seco
 
 - an archived change's `status` becomes `archived`; the old value is kept as `legacy_status` in its front matter;
 - an index row inside `context/archive/` or `context/foundation/archive/` that links a missing file is rewritten to
-  the file's current path when git history shows where it moved (rename detection, followed across moves);
-  otherwise it is marked `(moved, not found; last seen in <sha>: <path>)` with the last commit that had the file.
+  the file's current path when git history shows where it moved (rename detection, followed across moves); a file
+  deleted on purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit.
 
-A row whose target was never in git history, a live index, and a checkout without full history are left alone and
-named. Everything else is a judgement case.
+A row whose move or deletion the history does not show, and a live index, are left alone and named. A shallow clone
+works on the commits it holds and names what lies past its edge. Everything else is a judgement case.
 
 **Judgement cases: the sweep.** `npx softure-skills doctor --sweep [--json]` (read-only) lists every remaining failure
 as one worklist entry per thing to settle (an unticked Progress item, a `## Summary` placeholder, an open row, an open

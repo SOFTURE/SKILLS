@@ -60,7 +60,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `archived-roadmap-summary` | put the merge SHA (`git log --merges --grep "<change-id>"`) into each `## Summary` row |
 | `queued-roadmap-done` | archive the finished queued roadmap to `foundation/archive/` |
 | `backlog-without-roadmap` | move live entries to a queued roadmap, then remove the folder |
-| `index-missing-file` | fix or drop the index row |
+| `index-missing-file` | a real link (a markdown link, or a cell that is only a path in a file column) points at a missing file: fix or drop the row; a path mentioned in a description cell never fails |
 | `state-missing` / `state-stale` | `context_state.py write`, commit `context/state.json` |
 | `baseline-stale` | a baselined failure is fixed: `doctor.py --baseline` rewrites the file without it (commit it) |
 
@@ -73,11 +73,12 @@ mechanical:
 - `archived-change-status`: the archived `change.md` gets `status: archived`, and the old value is kept
   as `legacy_status` in its front matter (`implemented`, `done`, `impl_reviewed`, … stay readable);
 - `index-missing-file` in an index inside an archive folder: the link is rewritten to the file's current
-  path when git history shows where it moved (renames followed across several moves); a file that was
-  deleted, not moved, is marked `(moved, not found; last seen in <sha>: <path>)`.
+  path when git history shows where it moved (renames followed across several moves); a file deleted on
+  purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit.
 
-It skips, and names, every row it cannot settle from history (a live index, a target that was never
-in git, a shallow checkout). Those and every other failure are judgement cases.
+It skips, and names, every row it cannot settle from history (a live index, a target whose move or
+deletion the history does not show). A shallow clone works on the commits it holds and names what lies
+past its edge (`git fetch --deepen <n>` reaches further). Those and every other failure are judgement cases.
 
 ## Sweep history to zero
 
