@@ -86,8 +86,15 @@ past its edge (`git fetch --deepen <n>` reaches further). Those and every other 
 
 `doctor.py --sweep --json` lists every failure left after `--fix` as one entry per thing to settle:
 `code`, `path`, `line` and the exact `text` of the line, `evidence` (pointers of kind `commit`,
-`release` or `file`, each with a note), `settle` (what to do), and `owner: true` when the repository
-holds no evidence at all. The evidence it looks for:
+`release` or `file`, each with a note), `settle` (what to do), and a `class`:
+
+| Class | Means | Who settles it |
+|---|---|---|
+| `evidence` | the repository holds proof (below) | the agent, with that proof |
+| `superseded` | no direct proof, but later work made it obsolete: for an owner check or open row of an archived roadmap, a later roadmap was closed and a release shipped after it, or the same item ID or file area appears in a later archived change; for a Progress item, a later phase of the same plan is ticked. Its `evidence` names the roadmap, release or change | the agent, as obsolete; never forwarded |
+| `owner` (`owner: true`) | still meaningful today and only the owner can settle it: a decision about future work (`owner_reason: decision`), a secret, account or connector (`secret`), a step outside the repository whose effect the agent cannot see (`outside`), or nothing found at all (`unsettled`). `tried` says what the sweep looked for | the owner |
+
+The evidence it looks for:
 
 | Code | Evidence |
 |---|---|
@@ -109,9 +116,15 @@ Work the list in one change per repository (`docs(context): settle history to ze
    - Open row: `done` (it shipped), `carried (to <path>)` (a later roadmap took it), `dropped (<reason>)`.
    - Open check: `- [x] <text> — done: <sha | release | path>`, `- [x] <text> — obsolete: <reason, with
      the evidence that made it obsolete>`, or carried (below).
+   - `superseded` entry: close it yourself as obsolete, with its evidence: `- [x] <text> — obsolete:
+     superseded by <release / roadmap / change>` (a row: `dropped (obsolete: superseded by <ref>)`).
+     Never forward it to the owner: a screenshot review of a page rebuilt since, or "after the release,
+     re-run X" for a release long gone, has no answer the owner could give.
 3. **Only true owner items stay open, in one place.** An entry is the owner's when the evidence does
-   not settle it and only the owner can: a real decision that is still open, or a step outside the
-   repository (a production setting, a secret, an account) that nothing shows as done. Carry it to the
+   not settle it, nothing later superseded it, and only the owner can: a decision about future work
+   that is still open, a secret, account or connector, or a step outside the repository (a production
+   setting, a real device) whose effect the agent cannot see. Before forwarding an `unsettled` entry,
+   try what its `tried` lines did not, and say in the report what you tried. Carry it to the
    live roadmap's `## Owner decisions and checks` (or an `owner-word` issue, WORKFLOW §8.6) and tick
    the archived line `— carried to <path | #N>`. Never carry a check whose work the evidence shows done,
    and never tick a decision on the owner's behalf.

@@ -810,11 +810,16 @@ owner check), with `path`, `line`, the exact `text`, and evidence pointers found
 Progress items the commits that touched the phase's files after the plan's date (and the SHA the phase's ticked items
 cite); for `## Summary` placeholders the merge commit of the item's change (first-parent log, branch name, change ID in
 the message); for open rows and owner checks the item's archived change, merge commit, the release that contains it,
-and later roadmaps that mention the item. An entry with no evidence is marked `owner`. The `softure-doctor` skill
-("Sweep history to zero") tells an agent how to work it: every entry is settled with its evidence written into the line,
-never without; what only the owner can settle (a real open decision, a step outside the repository) is carried to the
-live roadmap's `## Owner decisions and checks` or an `owner-word` issue and collected in one short list for the owner;
-nothing else is left open.
+and later roadmaps that mention the item. Each entry has a class. `evidence`: the repository settles it. `superseded`:
+no direct evidence, but later work made it obsolete (for an owner check or open row of an archived roadmap, a later
+roadmap was closed and a release shipped after it, or the same item ID or file area appears in a later archived change;
+for a Progress item, a later phase of the same plan is ticked); its evidence names that roadmap, release or change, and
+the agent closes it as `obsolete: superseded by <ref>` itself, never forwards it. `owner`: only for what is still
+meaningful today, a decision about future work, a secret, account or connector, or a step outside the repository whose
+effect the agent cannot see; the entry says which (`owner_reason`) and what the sweep looked for (`tried`). The
+`softure-doctor` skill ("Sweep history to zero") tells an agent how to work it: every entry is settled with its evidence
+written into the line, never without; the owner entries are carried to the live roadmap's `## Owner decisions and
+checks` or an `owner-word` issue and collected in one short list for the owner; nothing else is left open.
 
 **Baseline: a last resort.** For a project that cannot finish the sweep at once, `doctor --baseline` writes the failures
 that remain to `context/doctor-baseline.json` (`{ "note", "created", "entries": [ { "code", "path", "message" } ] }`).
@@ -863,8 +868,8 @@ long ago. The history is put right, not hidden. One pass per repository, in this
    `softure-doctor` skill describes ("Sweep history to zero"): every tick, SHA, status and obsolete mark carries its
    evidence (commit, release, file), never without. Regenerate the state, re-run the doctor until it exits 0, and land it
    as one change: `docs(context): settle history to zero`.
-3. **The owner's list.** What only the owner can settle (a decision still open, a step outside the repository that
-   nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an `owner-word` issue; the
+3. **The owner's list.** What only the owner can settle (a decision about future work, a secret, account or connector,
+   a step outside the repository that nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an `owner-word` issue; the
    agent's report lists it once, short: `ID | what the owner decides or does | where it lives now`. Nothing else
    waits, so `portfolio --owner` shows only these and the live roadmaps' entries.
 4. **The CI line at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add it to the CI check

@@ -33,7 +33,8 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
 moved or was deleted on purpose, found through git history; a dropped Progress item, normalised) and prints every edit; see doctor_fix.py. It is a dry run unless
 `--write` is given, and it writes only under `context/`. `--sweep` lists every remaining failure with
-the evidence an agent needs to settle it from the repository alone; see doctor_sweep.py.
+the evidence an agent needs to settle it from the repository alone, classed `evidence`, `superseded` (later
+work made it obsolete; the agent closes it) or `owner`; see doctor_sweep.py.
 
 `--baseline` is a last resort for a project that cannot finish the sweep at once: it writes the failures
 that remain to `context/doctor-baseline.json`, and the check then fails only on new failures and on
@@ -326,7 +327,7 @@ def missing_index_targets(reader) -> list[dict]:
 
     A real link is a markdown link anywhere in the row, or a cell whose whole content is a path (in backticks
     or bare) in a column that indexes files (`File`, `Path`, `Document`, `Link`, ...). A path merely mentioned
-    in a description cell (`see \`change.md\``) is not a link and never fails.
+    in a description cell (see `change.md`) is not a link and never fails.
 
     Each entry: `path` (the index), `line` (1-based), `text` (the line), `kind` (`link` or `code`), `target`
     (as written), `base` (the index folder) and `candidates` (the repository paths the target may mean).
@@ -584,11 +585,14 @@ def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
     import doctor_sweep
 
     entries = doctor_sweep.sweep(reader, git_root)
-    owner = [entry for entry in entries if entry["owner"]]
+    owner = [entry for entry in entries if entry["class"] == "owner"]
+    superseded = [entry for entry in entries if entry["class"] == "superseded"]
+    with_evidence = len(entries) - len(owner) - len(superseded)
     if as_json:
         print(json.dumps({"root": root, "entries": entries,
-                          "summary": {"total": len(entries), "with_evidence": len(entries) - len(owner),
-                                      "owner": len(owner)}}, indent=2, ensure_ascii=False))
+                          "summary": {"total": len(entries), "with_evidence": with_evidence,
+                                      "superseded": len(superseded), "owner": len(owner)}},
+                         indent=2, ensure_ascii=False))
         return 1 if entries else 0
     if not entries:
         print("softure-doctor --sweep: nothing to settle, the context/ contract is OK")
@@ -598,11 +602,15 @@ def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
         print(f"{entry['code']} {where}: {entry['subject']}")
         for evidence in entry["evidence"]:
             print(f"    evidence {evidence['kind']} {evidence['ref']}: {evidence['note']}")
+        if entry["class"] == "superseded":
+            print("    superseded: later work made it obsolete; close it yourself, never forward it")
         if entry["owner"]:
-            print("    owner: no evidence in the repository; only the owner can settle it")
+            print(f"    owner ({entry['owner_reason']}): only the owner can settle it")
+            for tried in entry["tried"]:
+                print(f"    tried: {tried}")
         print(f"    settle: {entry['settle']}")
     print(f"softure-doctor --sweep: {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} to settle, "
-          f"{len(entries) - len(owner)} with evidence, {len(owner)} for the owner")
+          f"{with_evidence} with evidence, {len(superseded)} superseded, {len(owner)} for the owner")
     return 1
 
 
