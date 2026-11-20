@@ -36,6 +36,9 @@ if path.startswith("repos/acme/") and path.count("/") == 2:
 elif "/commits/main/check-runs?check_name=context-doctor" in path:
     stub = sys.argv[0] + ".checks." + path.split("/")[2] + ".json"
     print(open(stub).read() if os.path.exists(stub) else '{"total_count": 0, "check_runs": []}')
+elif "/check-runs/" in path and path.endswith("/annotations"):
+    stub = sys.argv[0] + ".annotations." + path.split("/")[2] + ".json"
+    print(open(stub).read() if os.path.exists(stub) else "[]")
 elif "repos/acme/shop/releases/latest" in args:
     print('{"tag_name": "v1.6.0", "published_at": "2026-11-20T08:00:00Z"}')
 elif "repos/acme/shop/contents/context/state.json" in args or "repos/acme/old/contents/context/state.json" in args:
@@ -164,15 +167,21 @@ class PortfolioTest(unittest.TestCase):
         stub("shop", {"status": "completed", "conclusion": "failure"}, {"status": "completed", "conclusion": "success"})
         stub("red", {"status": "completed", "conclusion": "failure"})
         stub("wip", {"status": "in_progress", "conclusion": None})
+        with open(f"{self.gh}.annotations.red.json", "w", encoding="utf-8") as fh:
+            json.dump([{"title": "context-doctor failure codes", "annotation_level": "failure",
+                        "message": "archived-change-progress (3), state-stale (1)"},
+                       {"title": "state-stale", "path": "context/state.json", "message": "out of date"}], fh)
         result = self.run_portfolio("acme/shop", "acme/red", "acme/wip", "acme/old", "--source", "api", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = {row["name"]: row for row in json.loads(result.stdout)["projects"]}
         self.assertEqual({name: row["doctor_check"] for name, row in rows.items()},
                          {"shop": "ok", "red": "failing", "wip": "pending", "old": "missing"})
         self.assertEqual(rows["shop"]["doctor_check_url"], "https://github.com/acme/shop/runs/2")
+        self.assertEqual(rows["red"]["doctor_check_codes"], ["archived-change-progress", "state-stale"])
+        self.assertEqual(rows["shop"]["doctor_check_codes"], [])
         lines = self.run_portfolio("acme/shop", "acme/red", "acme/old", "--source", "api").stdout.splitlines()
         self.assertIn("| shop | search 2/5 | 1 | 1 | 6 | v1.6.0 (2026-11-20) | ok |", lines)
-        self.assertIn("| red | no state.json | — | — | — | — | failing |", lines)
+        self.assertIn("| red | no state.json | — | — | — | — | failing: archived-change-progress, state-stale |", lines)
         self.assertIn("| old | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | missing |", lines)
 
 

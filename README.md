@@ -32,7 +32,9 @@ It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--ta
 **CI job.** Run the doctor in a CI job named `context-doctor`, with no paths filter and no condition, so
 documentation-only changes are checked too (in a project that already has history, once the rollout below
 brings the doctor to zero). Keep that name: outside readers (`portfolio --source api`, an aggregator) look for
-the `context-doctor` check run on the main branch's head.
+the `context-doctor` check run on the main branch's head. In GitHub Actions the doctor writes its failure codes on
+that check run (the annotation `context-doctor failure codes`, then one per failure) and in the job summary, so a
+reader gets the codes through the forge API without a checkout.
 
 ```yaml
   context-doctor:

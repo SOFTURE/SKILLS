@@ -855,7 +855,10 @@ is the sweep to zero.
 A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in a CI
 job named `context-doctor`**, with no paths filter and no condition, so documentation-only changes are checked too and
 an outside reader finds the result by that name: the check run `context-doctor` on the main branch's head says whether
-the project's context contract is green (`portfolio --source api` reads it). Keep the job name, whatever the rest of
+the project's context contract is green (`portfolio --source api` reads it). In GitHub Actions the doctor also leaves
+its failure codes on that check run: the first annotation, titled `context-doctor failure codes`, lists every code with
+its count (`archived-change-progress (3), state-stale (1)`), one annotation per failure follows (as many as GitHub
+keeps), and the job summary holds the same table. Keep the job name, whatever the rest of
 the workflow looks like. The installer prints the job until a workflow under `.github/workflows/` runs the doctor, and
 asks to rename it while the job that runs it has another name:
 
@@ -887,7 +890,8 @@ where `repo` is `owner/name`, a git URL or a local path. One row per project:
 `project | active roadmap X/N | queued | open changes | owner queue | last release | doctor`. The doctor runs on the
 same tree; a project without `state.json` yet gets one built in memory (marked `*`). `--source api` reads only
 `state.json` through `gh api` and runs no doctor; its doctor column is the `context-doctor` check run on the main
-branch's head (`ok`, `failing`, `pending`, or `missing` when the project has no job by that name). **Last release comes from the forge** when it can: the latest GitHub
+branch's head (`ok`, `failing` with the doctor's failure codes from that run's annotations, `pending`, or `missing` when
+the project has no job by that name). **Last release comes from the forge** when it can: the latest GitHub
 release through `gh api` (both modes, for a GitHub repository; a local checkout counts when its `origin` is on GitHub),
 else the highest `v*` tag (git mode), else `state.json` → `last_release`, which only records what a closed roadmap
 wrote and is shown labelled: `v1.4.0 (roadmap, 2026-10-02)`. `--json` gives `last_release`, `last_release_date` and
