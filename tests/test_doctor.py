@@ -10,6 +10,9 @@ fail with exactly that code on the case and pass on the clean tree.
 `tests/fixtures/doctor/fix/<case>/` holds one historical shape that `doctor --fix` repairs. Its optional
 `_history` file is replayed as commits before the overlay lands (`add <path>`, `mv <from> <to>`, `rm <path>`),
 so rename detection has a real history to read.
+
+`tests/fixtures/doctor/sweep/<case>/` holds one judgement case for `doctor --sweep`, with the history its
+evidence comes from (`commit <path> <message>` writes the file and commits it with that message, `tag <name>`).
 """
 from __future__ import annotations
 
@@ -36,6 +39,7 @@ import context_state  # noqa: E402
 
 CASES = sorted(os.listdir(os.path.join(FIXTURES, "cases")))
 FIX_CASES = sorted(os.listdir(os.path.join(FIXTURES, "fix")))
+SWEEP_CASES = sorted(os.listdir(os.path.join(FIXTURES, "sweep")))
 
 
 def validate(value, schema: dict, path: str = "$") -> list[str]:
@@ -113,6 +117,14 @@ class Project:
                 self.git("mv", step[1], step[2])
             elif step[0] == "rm":
                 self.git("rm", "-q", step[1])
+            elif step[0] == "commit":
+                existing = self.read(step[1]) if os.path.exists(self.path(step[1])) else ""
+                self.write(step[1], existing + f"// {' '.join(step[2:])}\n")
+                self.commit(" ".join(step[2:]))
+                continue
+            elif step[0] == "tag":
+                self.git("tag", step[1])
+                continue
             self.commit(" ".join(step))
 
     def apply_case(self, case: str, group: str = "cases") -> None:
@@ -273,6 +285,102 @@ class FixTest(unittest.TestCase):
             self.assertTrue(any(skip["path"] == "context/foundation/roadmaps/README.md" for skip in report["skipped"]))
             self.assertEqual(project.codes(), {"archived-change-progress", "archived-roadmap-open-items",
                                                "index-missing-file"})
+        finally:
+            project.cleanup()
+
+
+def settle(project: Project, entry: dict) -> None:
+    """What the skill's sweep tells an agent to do with one worklist entry, applied from its evidence alone."""
+    lines = project.read(entry["path"]).split("\n")
+    index = entry["line"] - 1
+    assert lines[index] == entry["text"], (lines[index], entry["text"])
+    text = entry["text"]
+    commits = [evidence["ref"] for evidence in entry["evidence"] if evidence["kind"] == "commit"]
+    if entry["code"] == "archived-change-progress":
+        lines[index] = text.replace("- [ ] ", "- [x] ", 1) + f" — {commits[0]}"
+    elif entry["code"] == "archived-roadmap-summary":
+        lines[index] = text.replace(entry["cell"], commits[0])
+    elif entry["code"] == "archived-roadmap-open-items":
+        lines[index] = text.replace(entry["status"], f"done (merged {commits[0]})")
+    elif entry["code"] == "archived-roadmap-open-checks" and entry["owner"]:
+        live = "context/foundation/roadmap.md"
+        roadmap = project.read(live).replace("## Owner decisions and checks\n",
+                                             f"## Owner decisions and checks\n- [ ] {entry['subject']}\n", 1)
+        project.write(live, roadmap)
+        lines[index] = text.replace("- [ ] ", "- [x] ", 1) + f" — carried to {live}"
+    elif entry["code"] == "archived-roadmap-open-checks":
+        lines[index] = text.replace("- [ ] ", "- [x] ", 1) + f" — done: {entry['evidence'][0]['ref']}"
+    else:
+        raise AssertionError(f"no scripted settlement for {entry['code']}")
+    project.write(entry["path"], "\n".join(lines))
+
+
+class SweepTest(unittest.TestCase):
+    """`doctor --sweep`: a worklist with evidence for every judgement case, worked to doctor exit 0."""
+
+    EXPECTED = {
+        "progress": ("archived-change-progress", "src/day-view.ts"),
+        "summary": ("archived-roadmap-summary", "staff-day-view"),
+        "open-items": ("archived-roadmap-open-items", "v1.3.0"),
+        "open-checks": ("archived-roadmap-open-checks", "reminder-sms"),
+    }
+
+    def test_each_case_lists_evidence_or_owner(self) -> None:
+        self.assertEqual(set(SWEEP_CASES), set(self.EXPECTED))
+        for case in SWEEP_CASES:
+            with self.subTest(case=case):
+                project = Project()
+                try:
+                    project.apply_case(case, "sweep")
+                    project.commit(case)
+                    code, expected = self.EXPECTED[case]
+                    self.assertEqual(project.codes(), {code})
+                    status, report = project.doctor("--sweep")
+                    self.assertEqual(status, 1)
+                    entries = report["entries"]
+                    self.assertTrue(entries)
+                    for entry in entries:
+                        self.assertEqual(entry["code"], code)
+                        self.assertTrue(entry["evidence"] or entry["owner"], entry)
+                        self.assertEqual(project.read(entry["path"]).split("\n")[entry["line"] - 1], entry["text"])
+                    notes = json.dumps([entry["evidence"] for entry in entries])
+                    self.assertIn(expected, notes)
+                finally:
+                    project.cleanup()
+
+    def test_open_checks_split_evidence_from_owner_items(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("open-checks", "sweep")
+            project.commit("history")
+            entries = project.doctor("--sweep")[1]["entries"]
+            self.assertEqual(sorted((entry["item"], entry["section"], entry["owner"]) for entry in entries),
+                             [("RM-1", "Before the next release", False), ("RM-1", "Owner decisions and checks", False),
+                              ("RM-2", "Owner decisions and checks", True)])
+            kinds = {evidence["kind"] for entry in entries for evidence in entry["evidence"]}
+            self.assertEqual(kinds, {"commit", "release"})
+        finally:
+            project.cleanup()
+
+    def test_scripted_sweep_ends_at_doctor_exit_0(self) -> None:
+        project = Project()
+        try:
+            for case in SWEEP_CASES:
+                project.apply_case(case, "sweep")
+            project.commit("history")
+            self.assertEqual(project.codes(), {code for code, _ in self.EXPECTED.values()})
+            _, report = project.doctor("--sweep")
+            for entry in report["entries"]:
+                settle(project, entry)
+            project.state("write")
+            code, final = project.doctor()
+            self.assertEqual((code, final["failures"]), (0, []))
+            status, empty = project.doctor("--sweep")
+            self.assertEqual((status, empty["entries"]), (0, []))
+            queue = json.loads(project.read(context_state.STATE_PATH))["owner_queue"]
+            self.assertTrue(any("RM-2" in entry["text"] and entry["source"].startswith("context/foundation/roadmap.md")
+                                for entry in queue), "the owner item was carried to the live roadmap")
+            self.assertFalse(any("/archive/" in entry["source"] for entry in queue))
         finally:
             project.cleanup()
 

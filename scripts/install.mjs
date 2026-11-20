@@ -10,6 +10,7 @@
 // Subcommands (run from the project root; Python 3, like the other scripts):
 //   softure-skills doctor [--json]          check the context/ contract (WORKFLOW.md §12); exit 1 on drift
 //   softure-skills doctor --fix [--write]   mechanical repairs of history (dry run unless --write)
+//   softure-skills doctor --sweep [--json]  worklist of the judgement cases, with evidence (read-only)
 //   softure-skills state [write|print|check] regenerate context/state.json (default: write)
 //   softure-skills portfolio [<repo> ...] [--owner] [--json]   read-only table across many repositories
 //
