@@ -49,6 +49,18 @@ const SUBCOMMANDS = {
   portfolio: [path.join(PACKAGE_ROOT, "scripts", "portfolio.py"), []],
 };
 const CI_LINE = "npx softure-skills doctor";
+// The CI job that runs the doctor has this fixed name, so a reader (portfolio --source api, an aggregator)
+// finds its check run on the main branch's head. No paths filter and no condition: it runs on every push.
+const CI_JOB = "context-doctor";
+const CI_JOB_YAML = (version) => [
+  `  ${CI_JOB}:  # keep this name: readers look for the check run "${CI_JOB}"`,
+  "    runs-on: ubuntu-latest",
+  "    steps:",
+  "      - uses: actions/checkout@v4",
+  `      - run: npx --yes --package @softure-ai/skills@${version} softure-skills doctor`,
+  "        env:",
+  "          npm_config_ignore_scripts: \"true\"  # run the doctor only, no install into the checkout",
+].join("\n");
 // Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6).
 const OWNER_WORD_LABEL = {
   name: "owner-word",
@@ -80,14 +92,25 @@ function runSubcommand(name, args) {
   return result.status ?? 1;
 }
 
-// True when one of the project's GitHub workflows already runs the doctor.
-function hasDoctorInCi(projectRoot) {
+// How the project's GitHub workflows run the doctor: "named" (in a job whose id or name is CI_JOB),
+// "unnamed" (somewhere else), or "none".
+function doctorInCi(projectRoot) {
   const dir = path.join(projectRoot, ".github", "workflows");
-  if (!fs.existsSync(dir)) return false;
-  return fs
+  if (!fs.existsSync(dir)) return "none";
+  const texts = fs
     .readdirSync(dir)
     .filter((name) => /\.ya?ml$/.test(name))
-    .some((name) => fs.readFileSync(path.join(dir, name), "utf8").includes("softure-skills doctor"));
+    .map((name) => fs.readFileSync(path.join(dir, name), "utf8"))
+    .filter((text) => text.includes("softure-skills doctor"));
+  if (texts.length === 0) return "none";
+  return texts.some((text) => hasCiJob(text)) ? "named" : "unnamed";
+}
+
+// True when a workflow has a job whose id or `name:` is CI_JOB (the name its check run carries).
+function hasCiJob(text) {
+  const id = new RegExp(`^\\s+${CI_JOB}:\\s*(#.*)?$`, "m");
+  const name = new RegExp(`^\\s+name:\\s*["']?${CI_JOB}["']?\\s*(#.*)?$`, "m");
+  return id.test(text) || name.test(text);
 }
 
 function parseArgs(argv) {
@@ -286,8 +309,11 @@ function install(options) {
   if (fs.existsSync(path.join(projectRoot, WORKFLOW_CONFIG_PATH)) && !workflowConfig.project) {
     console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json falls back to the repository name; softure-init asks for it)`);
   }
-  if (!hasDoctorInCi(projectRoot)) {
-    console.log(`${prefix} CI: add \`${CI_LINE}\` to the project's CI check, documentation-only changes included, once it exits 0 (rollout: doctor --fix, doctor --sweep; WORKFLOW.md §12.4)`);
+  const ci = doctorInCi(projectRoot);
+  if (ci === "none") {
+    console.log(`${prefix} CI: once \`${CI_LINE}\` exits 0 (rollout: doctor --fix, doctor --sweep; WORKFLOW.md §12.4), add this job to a workflow under .github/workflows/ that runs on every push and pull request, documentation-only changes included:\n${CI_JOB_YAML(PACKAGE.version)}`);
+  } else if (ci === "unnamed") {
+    console.log(`${prefix} CI: run the doctor in a job named \`${CI_JOB}\` (no paths filter, no condition), so its check run can be found by that name (WORKFLOW.md §12.2):\n${CI_JOB_YAML(PACKAGE.version)}`);
   }
 }
 
@@ -305,4 +331,4 @@ try {
   process.exit(isPostinstall ? 0 : 1);
 }
 
-export { CI_LINE, OWNER_WORD_LABEL, replaceManagedBlock, selectRuleSections };
+export { CI_JOB, CI_LINE, OWNER_WORD_LABEL, hasCiJob, replaceManagedBlock, selectRuleSections };

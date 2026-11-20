@@ -37,7 +37,7 @@ The full contract is in `node_modules/@softure-ai/skills/WORKFLOW.md`.
 
 `context/state.json` is the machine-readable state of the project (WORKFLOW §12). Only scripts write
 it (`wt-roadmap.py`, and `context_state.py write --staged` in `softure-archive` and `softure-roadmap`),
-in the same commit as the markdown; never edit it by hand. CI runs `npx softure-skills doctor`, which
+in the same commit as the markdown; never edit it by hand. CI runs `npx softure-skills doctor` in the job `context-doctor` (keep that name), which
 fails on drift in `context/`: fix the file it names, never the check.
 
 **Every change goes through the chain, however small.** A one-line fix reported in chat is a change

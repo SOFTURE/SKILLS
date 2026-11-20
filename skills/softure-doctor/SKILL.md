@@ -36,9 +36,10 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 
 ## When it runs
 
-- **CI of every adopting project**, documentation-only changes included: `npx softure-skills doctor`
-  (the installer prints this line). A project with history adds it after the rollout (WORKFLOW §12.4):
-  `--fix --write`, the sweep to zero, the owner's short list, then the CI line. Drift happens in the documents, so a CI that skips doc-only
+- **CI of every adopting project**, documentation-only changes included: `npx softure-skills doctor` in a job
+  named `context-doctor`, with no paths filter and no condition (the installer prints the job; WORKFLOW §12.2).
+  Keep the name: outside readers look for that check run on the main branch's head. A project with history adds it after the rollout (WORKFLOW §12.4):
+  `--fix --write`, the sweep to zero, the owner's short list, then the CI job. Drift happens in the documents, so a CI that skips doc-only
   changes misses it.
 - **`softure-archive`** (on the main branch) and **`softure-roadmap`** (record, `--queue`, `--promote`,
   `--close`): `context_state.py write --staged` right before the commit, then `doctor.py`; each fixes
