@@ -25,6 +25,7 @@ hygiene (any time)
   softure-rule-review   audit AI rule files (AGENTS.md, CLAUDE.md, skills) for drift and contradictions
   softure-lesson        turn a repeated mistake into a numbered rule
   softure-evidence      store screenshots and recordings outside git, by name, on one evidence page (§11)
+  softure-doctor        check the context/ contract and keep context/state.json current (§12)
 ```
 
 Each step produces a durable artifact the next step reads. A step never starts without its
@@ -149,14 +150,17 @@ Parallel sessions push often, and every push can start the project's CI. The ski
 The project's side: when the git hooks already run the gates (`pre-commit`, `pre-push`), CI does not need to
 repeat them on every pushed branch. A pre-push hook needs a cheap path for a push whose changed files are all
 under `context/` (the roadmap commits of `wt-roadmap.py`): skip typecheck, lint and tests, keep the language
-check. Without it every stage costs a full suite, which is what `cloudState: "branch"` works around. Run CI on pull requests, on the main branch or on demand, skip changes
-that touch only documents, and cancel superseded runs (`concurrency`).
+check. Without it every stage costs a full suite, which is what `cloudState: "branch"` works around. Run CI on pull requests, on the main branch or on demand, skip
+the gates for changes that touch only documents, and cancel superseded runs (`concurrency`). The one step that
+does run on documentation-only changes is `npx softure-skills doctor` (§12): it takes seconds and checks exactly
+the files those changes edit.
 
 ## 3. Artifacts
 
 ```
 context/
   workflow.json
+  state.json            machine-readable project state, written by scripts only (§12)
   foundation/
     shape-notes.md      softure-shape     (frontmatter: session, status, context_type: greenfield | brownfield, created, updated; optional `## Frame` from softure-frame)
     prd.md              softure-prd       (frontmatter: version, status: draft | accepted, context_type, source, updated)
@@ -382,13 +386,17 @@ the release keep `done_code` in the archived `## At a glance`, so the release st
 Then, in one commit (`docs(roadmap): close <slug>`):
 
 - move `roadmap.md` to `foundation/archive/<YYYY-MM-DD>-roadmap.md` (same-day collision: `-2`, `-3`, never other
-  suffixes) and append `## Summary`: one table `| ID | Item | What changed | Merge |` (merge SHA per row) and the
-  integration result line. It is the version history; release notes can be built from it;
+  suffixes) and append `## Summary`: one table `| ID | Item | What changed | Merge |` (merge SHA per row, `—` for a
+  carried or dropped row, never a placeholder) and the integration result line. It is the version history; release
+  notes can be built from it. The release that ships it may add one line `Release: <version> (<YYYY-MM-DD>)` under
+  the summary; `context/state.json` reports the newest one as `last_release`;
 - carried rows move to the next roadmap or to a queued one, never silently dropped;
 - if this roadmap was promoted from `roadmaps/roadmap-<slug>.md`, remove its backlog folder
   `backlog/roadmap-<slug>/` (move entries that are still alive to another queued roadmap first) and its row in an
   index file such as `foundation/roadmaps/README.md`, if the project keeps one;
-- afterwards: every file in `roadmaps/` is a waiting roadmap, and every folder in `backlog/` has its roadmap file.
+- afterwards: every file in `roadmaps/` is a waiting roadmap, and every folder in `backlog/` has its roadmap file;
+- right before the commit: `context_state.py write --staged` (the state goes into the same commit) and
+  `doctor.py`; a failure the close owns is fixed, any other is named in the report (§12).
 
 ## 6. `plan.md`
 
@@ -600,7 +608,7 @@ to file a gap) before deciding it is out of reach.
 - Review fixes: `fix(<change-id>): address impl review`.
 - Progress bookkeeping (when no later commit of the change carries it): `docs(<change-id>): progress p<N>`.
 - Archive: `chore(archive): close <change-id>`.
-- Roadmap stage updates: `docs(roadmap): <ID> <stage>`.
+- Roadmap stage updates: `docs(roadmap): <ID> <stage>` (they carry `context/state.json`, §12).
 - Lessons: `docs(lessons): L-<NNN> <title>`. Rule-file edits: `docs(rules): <what>`.
 - Merge of a worktree branch: `Merge <change-id> (<ID>): <outcome>`.
 
@@ -666,3 +674,92 @@ concepts, private data and design material, in one layout:
 `softure-evidence` (`scripts/evidence.py`) does the naming, the conversion, the store and the page:
 `save`, `list`, `render`, `check`, `prune`. Without a configured store it keeps a local copy, reports it
 as not durable, and the setup gap goes to the owner once.
+
+## 12. Project state (`context/state.json`) and the doctor
+
+An owner who runs several projects reads one file per repository instead of parsing the roadmap, the queued
+roadmaps, the change folders and the owner sections by hand. The same file and one check keep `context/`
+from drifting out of the contract unnoticed.
+
+### 12.1 `context/state.json`
+
+Written **only by scripts**, never by hand, always in the same commit as the markdown it reflects:
+
+| Writer | When |
+| --- | --- |
+| `wt-roadmap.py` | every mode (`open`, `stage`, `ready`, `done`, `done_code`), together with `roadmap.md` |
+| `softure-archive` | on the main branch, before its commit (with `--handoff` the branch leaves it alone; `wt-roadmap.py done` writes it after the merge) |
+| `softure-roadmap` | record, `--revise`, `--queue`, `--promote`, `--close`, before its commit |
+
+The skills run `python3 .claude/skills/softure-doctor/scripts/context_state.py write --staged`: it reads what is
+staged (so nobody's uncommitted edits leak in) and stages the result. By hand: `npx softure-skills state`.
+A project without the file gets it from the first of these runs; nothing has to be migrated.
+
+```jsonc
+{
+  "schema_version": 1,
+  "project": "Example clinic",         // workflow.json `project`, else the roadmap's `project`
+  "mode": "autonomous", "main_branch": "main",
+  "updated_at": "2026-11-20T09:00:00Z", // changes only when the content does
+  "active_roadmap": {                  // null when there is no roadmap.md
+    "slug": "search", "title": "…", "status": "ready", "version": "2", "path": "context/foundation/roadmap.md",
+    "done": 2, "total": 5,             // done = rows done or done_code (the report's X of N)
+    "items": [                         // rows not done yet
+      { "id": "SR-2", "change_id": "search-titles", "outcome": "…", "status": "in_progress",
+        "stage": "implement 2/3", "since": "2026-11-08", "detail": "…", "prerequisites": ["SR-1"], "mode": "autonomous" }
+    ]
+  },
+  "queued": [ { "slug": "payments", "path": "…", "status": "waiting", "start_condition": "<trigger>",
+                "done": 0, "total": 1, "items": [ { "id": "PY-1", "change_id": "…", "outcome": "…", "status": "blocked" } ] } ],
+  "open_changes": [ { "change_id": "search-titles", "title": "…", "status": "implementing", "roadmap_item": "SR-2",
+                      "updated": "2026-11-10", "stage": "implement 2/3" } ],
+  "owner_queue": [                     // everything that waits for the owner, oldest first
+    { "kind": "decision", "source": "context/foundation/roadmap.md#Owner decisions and checks", "item": "SR-5",
+      "since": "2026-11-10", "text": "**SR-5**: choose the ranking provider …" }
+  ],
+  "last_release": { "version": "v1.4.0", "date": "2026-10-02", "source": "context/foundation/archive/2026-09-30-roadmap.md" }
+}
+```
+
+The schema ships with the package: `skills/softure-doctor/references/state.schema.json`.
+
+**`owner_queue`** is the one list of what waits for the owner, from the main roadmap, the queued roadmaps and the
+archived roadmaps:
+
+| `kind` | Comes from |
+| --- | --- |
+| `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word); every queued roadmap (the word to start it, with its `trigger`) |
+| `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps |
+| `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry |
+| `secret` | a `step` whose text names a secret, key, token, credential or password |
+
+An archived roadmap contributes only its open checkboxes (its `## Before the next release` only until its
+`## Summary` records a release). `source` is the file, `#`, and the heading; `item` the roadmap ID the entry names;
+`since` the date in the entry, else the file's `updated`, and once written it is kept for that entry on every
+rewrite. Owner-word issues live on the forge, not here.
+
+`open_changes` and `updated_at` are refreshed on every write but never make the file stale: a change branch edits
+its own `change.md` without touching `state.json`, and stays green.
+
+### 12.2 `softure-doctor`
+
+`npx softure-skills doctor` (or `python3 .claude/skills/softure-doctor/scripts/doctor.py`) exits non-zero on:
+
+| Code | Drift |
+| --- | --- |
+| `roadmap-archived-not-removed` | `roadmap.md` is still there although the same roadmap (slug and version) is in `foundation/archive/` |
+| `roadmap-status-mismatch` | `roadmap.md` says `done` while rows are open, or `waiting` (a queued roadmap's status) |
+| `archived-change-status` | an archived `change.md` whose status is not `archived` |
+| `archived-change-progress` | an archived `plan.md` with unticked Automated items (open Manual items are legitimate) |
+| `archived-roadmap-open-items` | an archived roadmap with rows that are not `done`, `done_code`, dropped or carried |
+| `archived-roadmap-summary` | an archived roadmap whose `## Summary` merge column holds placeholders instead of SHAs |
+| `queued-roadmap-done` | a queued roadmap whose rows are all done, never archived |
+| `backlog-without-roadmap` | `backlog/roadmap-<slug>/` without `roadmaps/roadmap-<slug>.md` (or the promoted main roadmap) |
+| `index-missing-file` | a table row of a `README.md` or `INDEX.md` under `context/` that links or names a missing file |
+| `state-missing` | `context/state.json` is gone although git history holds it |
+| `state-stale` | `context/state.json` does not match the markdown |
+
+A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in their
+CI check**, documentation-only changes included; the installer prints the line (`npx softure-skills doctor`) until a
+workflow under `.github/workflows/` runs it. `softure-archive` and `softure-roadmap --close` run it before their commit
+and fix what they own.

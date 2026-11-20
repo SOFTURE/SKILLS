@@ -39,6 +39,9 @@ jobs:
           mkdir -p /tmp/consumer && echo '{}' > /tmp/consumer/package.json
           node scripts/install.mjs --target /tmp/consumer
           test -f /tmp/consumer/.claude/softure-skills.json
+          test -f /tmp/consumer/.claude/skills/softure-doctor/scripts/doctor.py
+          cp -r tests/fixtures/doctor/clean/context /tmp/consumer/context
+          (cd /tmp/consumer && node "$GITHUB_WORKSPACE/scripts/install.mjs" doctor)
           node scripts/uninstall.mjs --target /tmp/consumer
           test ! -f /tmp/consumer/.claude/softure-skills.json
       - name: 🏷️ Read version (and match it against the tag)

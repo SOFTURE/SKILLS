@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SOFTURE/SKILLS/skills/softure-doctor/references/state.schema.json",
+  "title": "context/state.json",
+  "description": "Machine-readable state of a project that follows the SOFTURE workflow (WORKFLOW.md §12). Written only by scripts.",
+  "type": "object",
+  "required": ["schema_version", "project", "mode", "main_branch", "updated_at", "active_roadmap", "queued",
+    "open_changes", "owner_queue", "last_release"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "enum": [1] },
+    "project": { "type": ["string", "null"], "description": "workflow.json `project`, else the roadmap's `project`" },
+    "mode": { "type": "string", "enum": ["manual", "autonomous"] },
+    "main_branch": { "type": ["string", "null"] },
+    "updated_at": { "type": "string", "description": "UTC ISO 8601; changes only when the content does" },
+    "active_roadmap": {
+      "type": ["object", "null"],
+      "required": ["slug", "title", "status", "version", "path", "done", "total", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "slug": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] },
+        "path": { "type": "string" },
+        "done": { "type": "integer", "description": "rows done or done_code" },
+        "total": { "type": "integer" },
+        "items": {
+          "type": "array",
+          "description": "rows not done yet",
+          "items": {
+            "type": "object",
+            "required": ["id", "change_id", "outcome", "status", "stage", "since", "detail", "prerequisites", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "change_id": { "type": ["string", "null"] },
+              "outcome": { "type": ["string", "null"] },
+              "status": { "type": "string" },
+              "stage": { "type": ["string", "null"] },
+              "since": { "type": ["string", "null"] },
+              "detail": { "type": ["string", "null"] },
+              "prerequisites": { "type": "array", "items": { "type": "string" } },
+              "mode": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "queued": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "title", "status", "path", "start_condition", "done", "total", "items"],
+        "additionalProperties": false,
+        "properties": {
+          "slug": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] },
+          "path": { "type": "string" },
+          "start_condition": { "type": ["string", "null"] },
+          "done": { "type": "integer" },
+          "total": { "type": "integer" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "change_id", "outcome", "status"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "change_id": { "type": ["string", "null"] },
+                "outcome": { "type": ["string", "null"] },
+                "status": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "open_changes": {
+      "type": "array",
+      "description": "folders in context/changes/ on the branch the file was written on; refreshed on every script run",
+      "items": {
+        "type": "object",
+        "required": ["change_id", "title", "status", "roadmap_item", "updated", "stage"],
+        "additionalProperties": false,
+        "properties": {
+          "change_id": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] },
+          "roadmap_item": { "type": ["string", "null"] },
+          "updated": { "type": ["string", "null"] },
+          "stage": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "owner_queue": {
+      "type": "array",
+      "description": "everything that waits for the owner, oldest first",
+      "items": {
+        "type": "object",
+        "required": ["kind", "source", "item", "since", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string", "enum": ["word", "decision", "step", "secret"] },
+          "source": { "type": "string", "description": "file, then `#` and the heading" },
+          "item": { "type": ["string", "null"], "description": "roadmap item ID, when the entry names one" },
+          "since": { "type": ["string", "null"], "description": "YYYY-MM-DD" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "last_release": {
+      "type": ["object", "null"],
+      "required": ["version", "date", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string" },
+        "date": { "type": ["string", "null"] },
+        "source": { "type": "string" }
+      }
+    }
+  }
+}

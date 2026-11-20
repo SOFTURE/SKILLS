@@ -28,6 +28,17 @@ What the installer does (idempotent; re-run on every `npm install`):
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
 `--no-gitignore` (commit the skills instead).
 
+**CI line.** Add one step to the project's CI check, documentation-only changes included:
+
+```bash
+npx softure-skills doctor
+```
+
+It fails on drift in `context/` (a roadmap left after its archive, archived changes not stamped,
+`## Summary` placeholders, a stale `context/state.json`, …; WORKFLOW §12). The installer prints the
+line until a workflow runs it. `npx softure-skills state` regenerates `context/state.json`, which the
+scripts otherwise write themselves.
+
 **Operating mode.** `context/workflow.json` → `mode` is `"manual"` (default) or `"autonomous"`, and the
 installer injects only that mode's section into the rules block:
 
@@ -95,6 +106,7 @@ operating modes.
 | | `softure-lesson` | numbered rule in `lessons.md` |
 | | `softure-rule-review` | audit of AGENTS.md / CLAUDE.md / skills |
 | | `softure-evidence` | screenshots and recordings in the evidence store (never git) + the evidence page |
+| | `softure-doctor` | `context/state.json` (machine-readable state, `owner_queue`) + the `context/` contract check |
 
 Every interactive skill accepts `--auto`: it decides instead of asking and records each
 decision in the artifact. The orchestrators always use it, and `mode: "autonomous"` implies it.

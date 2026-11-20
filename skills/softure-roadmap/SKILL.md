@@ -78,7 +78,9 @@ Read the PRD in full, not in excerpts.
   Then write `## Summary` (`| ID | Item | What changed | Merge |`, the merge SHA from
   `git log --merges --grep "<change-id>"` on `<main>`, plus the integration line), move the file to
   `foundation/archive/<YYYY-MM-DD>-roadmap.md`, clean up the promoted roadmap's backlog folder and
-  index row, and commit. With `integration.coveredByRelease` and "Release: at the end" the close does not
+  index row, run step 15 (state and doctor), and commit. A `## Summary` row never holds a placeholder
+  ("merge SHA after the PR", "this PR"): the close runs on `<main>` after the merges, so every SHA is
+  known; a carried or dropped row has `—`. With `integration.coveredByRelease` and "Release: at the end" the close does not
   wait for the release: the integration line reads `covered by the release on <sha> (coveredByRelease)`
   unless a green stored result exists. The archived file is what the release notes read (every release
   of this roadmap, retries and redeploys included); rows waiting for the release keep `done_code`, so
@@ -240,6 +242,15 @@ Overwriting a roadmap without archiving it is never an option. In `--auto`: revi
     prepared `change.md` as it is. Skip this step only on the owner's explicit word
     (`--no-open-changes`, recorded in the handoff); never skip it on your own, not even in `--auto`.
     `--open-changes` is still accepted and changes nothing.
+
+15. **State and doctor, before every commit of this skill** (record, `--revise`, `--queue`,
+    `--promote`, `--close`; WORKFLOW §12). Stage the files, run
+    `python3 .claude/skills/softure-doctor/scripts/context_state.py write --staged` (it reads the
+    index and stages `context/state.json`, so it rides in the same commit), then
+    `python3 .claude/skills/softure-doctor/scripts/doctor.py`. Fix what this run owns (the roadmap
+    files, their backlog folders and index rows, the `## Summary` SHAs) and re-run; name any other
+    failure in the handoff without touching it. In `--close` a failure this run owns blocks the
+    commit like a failing gate.
 
 A complete, realistic roadmap in this format, with a bad version and why it fails:
 [references/example-roadmap.md](references/example-roadmap.md) (read before the first roadmap in a

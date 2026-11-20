@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "project": "Example clinic",
+  "mode": "autonomous",
+  "main_branch": "main",
+  "updated_at": "2026-11-20T09:25:26Z",
+  "active_roadmap": {
+    "slug": "search",
+    "title": "Roadmap search: visitors find what they look for",
+    "status": "ready",
+    "version": "2",
+    "path": "context/foundation/roadmap.md",
+    "done": 2,
+    "total": 5,
+    "items": [
+      {
+        "id": "SR-2",
+        "change_id": "search-titles",
+        "outcome": "a title search finds the page",
+        "status": "in_progress",
+        "stage": "implement 2/3",
+        "since": "2026-11-08",
+        "detail": "implement 2/3, since 2026-11-08; cloud session, branch `claude/x` — do not take in another session",
+        "prerequisites": [
+          "SR-1"
+        ],
+        "mode": "autonomous"
+      },
+      {
+        "id": "SR-3",
+        "change_id": "search-filters",
+        "outcome": "results filter by service",
+        "status": "ready",
+        "stage": null,
+        "since": null,
+        "detail": null,
+        "prerequisites": [
+          "SR-2"
+        ],
+        "mode": "autonomous"
+      },
+      {
+        "id": "SR-5",
+        "change_id": "search-paid-api",
+        "outcome": "paid ranking improves results",
+        "status": "blocked",
+        "stage": null,
+        "since": null,
+        "detail": "provider account",
+        "prerequisites": [
+          "SR-2"
+        ],
+        "mode": "owner"
+      }
+    ]
+  },
+  "queued": [
+    {
+      "slug": "payments",
+      "title": "Roadmap payments: deposits at booking",
+      "status": "waiting",
+      "path": "context/foundation/roadmaps/roadmap-payments.md",
+      "start_condition": "the owner opens a payment provider account",
+      "done": 0,
+      "total": 1,
+      "items": [
+        {
+          "id": "PY-1",
+          "change_id": "deposit-at-booking",
+          "outcome": "a deposit is taken at booking",
+          "status": "blocked"
+        }
+      ]
+    }
+  ],
+  "open_changes": [
+    {
+      "change_id": "search-titles",
+      "title": "A title search finds the page",
+      "status": "implementing",
+      "roadmap_item": "SR-2",
+      "updated": "2026-11-10",
+      "stage": "implement 2/3"
+    }
+  ],
+  "owner_queue": [
+    {
+      "kind": "decision",
+      "source": "context/foundation/archive/2026-09-30-roadmap.md#Owner decisions and checks",
+      "item": "BK-2",
+      "since": "2026-09-30",
+      "text": "**BK-2**: decide whether the day view shows phone numbers."
+    },
+    {
+      "kind": "word",
+      "source": "context/foundation/roadmaps/roadmap-payments.md",
+      "item": null,
+      "since": "2026-10-15",
+      "text": "start queued roadmap payments: the owner opens a payment provider account"
+    },
+    {
+      "kind": "decision",
+      "source": "context/foundation/roadmaps/roadmap-payments.md#Owner decisions and checks",
+      "item": "PY-1",
+      "since": "2026-10-15",
+      "text": "**PY-1**: pick the payment provider. Gates PY-1."
+    },
+    {
+      "kind": "word",
+      "source": "context/foundation/roadmap.md#At a glance",
+      "item": null,
+      "since": "2026-11-09",
+      "text": "release: SR-4 merged and waiting for a release"
+    },
+    {
+      "kind": "secret",
+      "source": "context/foundation/roadmap.md#Owner decisions and checks",
+      "item": "SR-4",
+      "since": "2026-11-09",
+      "text": "**SR-4**: owner step: add the provider api key to the deploy settings (secret only the owner has). archive/2026-11-09-search-synonyms/change.md"
+    },
+    {
+      "kind": "step",
+      "source": "context/foundation/roadmap.md#Before the next release",
+      "item": "SR-1",
+      "since": "2026-11-10",
+      "text": "Set `SEARCH_INDEX_URL` in production (**SR-1**)"
+    },
+    {
+      "kind": "decision",
+      "source": "context/foundation/roadmap.md#Owner decisions and checks",
+      "item": "SR-5",
+      "since": "2026-11-10",
+      "text": "**SR-5**: choose the ranking provider and open the account. Gates SR-5."
+    }
+  ],
+  "last_release": {
+    "version": "v1.4.0",
+    "date": "2026-10-02",
+    "source": "context/foundation/archive/2026-09-30-roadmap.md"
+  }
+}

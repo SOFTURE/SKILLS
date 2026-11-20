@@ -36,7 +36,7 @@ re-running is always safe. Report what you found and what you completed.
 | Found | Do |
 |---|---|
 | `context/changes/<id>/change.md` | continue |
-| no folder in `changes/`, but `context/archive/*-<id>/` | already archived: report the path. If its roadmap row is not `done` / `done_code`, offer to finish only steps 3 to 8 on the archived folder |
+| no folder in `changes/`, but `context/archive/*-<id>/` | already archived: report the path. If its roadmap row is not `done` / `done_code`, offer to finish only steps 3 to 9 on the archived folder |
 | `status: archived`, folder still in `changes/` | an earlier run stopped after the stamp. An uncommitted diff of change.md limited to the stamp is that run's own and does not count as uncommitted work; resume at step 2 once the other checks pass |
 | `created` missing or not `YYYY-MM-DD` | stop: the archive folder name cannot be derived |
 | nothing | stop: name the folders that do exist |
@@ -119,13 +119,20 @@ hard stops. Sample reports: [references/example-archive.md](references/example-a
    hit to `archive/<created>-<id>`. Links inside the archived folder are relative and stay valid.
 6. **Verify** that the old folder is gone, the new one exists, the roadmap row has exactly one
    match, and no dangling `changes/<id>` links remain.
-7. **Commit** with `chore(archive): close <change-id>`, staging only the touched paths: the
-   archive folder, the roadmap (unless step 3 left it unstaged), and the files whose links you
-   fixed. Before committing, `git diff --cached --name-only` must list nothing else. Never
+7. **State and doctor** (WORKFLOW §12; skip both with `--handoff`: the branch never writes
+   `context/state.json`, `wt-roadmap.py done` does after the merge). Once the paths below are
+   staged, run `python3 .claude/skills/softure-doctor/scripts/context_state.py write --staged`
+   (it reads the index and stages `context/state.json`), then
+   `python3 .claude/skills/softure-doctor/scripts/doctor.py`. Fix what this archive owns (this
+   change's `change.md` stamp, its Progress, its index rows, the state) and re-run; name any other
+   failure in the report without touching it. A project without the scripts installed skips this.
+8. **Commit** with `chore(archive): close <change-id>`, staging only the touched paths: the
+   archive folder, the roadmap (unless step 3 left it unstaged), `context/state.json` (step 7), and
+   the files whose links you fixed. Before committing, `git diff --cached --name-only` must list nothing else. Never
    `--no-verify`; if a hook fails, fix the cause and commit again (a new commit, never an amend).
    In `--auto`, the commit body lists the soft warnings.
-8. **Report:** old and new path, the stamp, the roadmap transition (or "no matching row"), owner
-   checks added, links fixed, edits skipped or left unstaged, and the commit SHA. The commit is
+9. **Report:** old and new path, the stamp, the roadmap transition (or "no matching row"), owner
+   checks added, links fixed, edits skipped or left unstaged, the doctor result, and the commit SHA. The commit is
    local: never push from this skill.
 
 ## Without a plan
@@ -193,6 +200,8 @@ row by row during the merge. Do not touch rows of other items.
       with `--handoff`, `roadmap.md` untouched and `## Roadmap handoff` written instead.
 - [ ] Open Manual items listed for the owner (manual mode), or none left but `(owner only: …)` ones,
       written as owner steps (`--auto`); deploy prerequisites under `## Before the next release`.
+- [ ] `context/state.json` regenerated from the index and staged, the doctor green on what this
+      archive owns (not with `--handoff`).
 - [ ] No dangling links; one commit, conventional message, not pushed.
 
 ## Anti-patterns

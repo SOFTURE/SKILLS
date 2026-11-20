@@ -43,6 +43,10 @@ from HEAD plus one edit (hash-object -> update-index), so other sessions' uncomm
 the working file never ride along; the same edit is applied to the working file too, so it does
 not look like it reverts the commit.
 
+Every commit also carries `context/state.json` (WORKFLOW.md §12), regenerated from the same tree
+plus the new roadmap, so the machine-readable state never lags the markdown. A project without the
+file gets it on the first run.
+
 Always works on the main worktree (first entry of `git worktree list`), whichever worktree
 calls it. The main branch name comes from context/workflow.json (`mainBranch`).
 
@@ -76,7 +80,14 @@ sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/s
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wt_config import load_config, main_branch, main_root  # noqa: E402
 
+try:  # the state writer ships in the softure-doctor skill, installed next to this one
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "softure-doctor", "scripts"))
+    import context_state  # noqa: E402
+except ImportError:  # pragma: no cover - an install without softure-doctor still marks the roadmap
+    context_state = None
+
 ROADMAP = "context/foundation/roadmap.md"
+STATE = "context/state.json"
 COAUTHOR = "Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ROW_RE = re.compile(r"^(?P<head>\|.*\|\s*)(?P<status>[^|]*?)(?P<tail>\s*\|\s*)$")
@@ -256,6 +267,21 @@ def done_status(handoff: dict, mode: str, arg: str | None, today: str) -> str:
     return "done"
 
 
+def render_state(reader) -> str | None:
+    """`context/state.json` for the tree `reader` sees, or None when softure-doctor is not installed."""
+    if context_state is None:
+        print("note: softure-doctor is not installed next to softure-worktree; context/state.json not written",
+              file=sys.stderr)
+        return None
+    return context_state.render_state(reader)
+
+
+def print_state_diff(old: str | None, new: str | None, label: str) -> None:
+    if new is not None and old != new:
+        sys.stdout.writelines(difflib.unified_diff((old or "").splitlines(True), new.splitlines(True),
+                                                   f"{label}:{STATE}", f"commit:{STATE}"))
+
+
 def unchanged(old: str, new: str, target: str) -> bool:
     """A re-run (e.g. `done` after a retry) whose edit is already in place commits nothing."""
     if re.sub(r"(?m)^updated: .*$", "", old) != re.sub(r"(?m)^updated: .*$", "", new):
@@ -415,8 +441,11 @@ def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dr
         handoff, run_mode, run_arg = load_handoff(repo, base, mode, change_id, arg, verified)
         new = edit(old, run_mode, change_id, run_arg, repo_name, cloud_branch=branch if mode == "open" else None,
                    handoff=handoff)
+        state = render_state(context_state.GitReader(repo, base, {ROADMAP: new})) if context_state else None
         if dry:
             sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True), f"origin/{main}", "commit"))
+            print_state_diff(context_state.GitReader(repo, base).read(STATE) if context_state else None, state,
+                             f"origin/{main}")
             return
         if unchanged(old, new, f"origin/{main}"):
             return
@@ -432,6 +461,12 @@ def run_cloud(mode: str, change_id: str, arg: str | None, branch: str | None, dr
             git(repo, "read-tree", base, env=index_env)
             blob = git(repo, "hash-object", "-w", blob_path, env=index_env).strip()
             git(repo, "update-index", "--cacheinfo", f"100644,{blob},{ROADMAP}", env=index_env)
+            if state is not None:
+                state_path = os.path.join(tmpdir, "state.json")
+                with open(state_path, "w", encoding="utf-8") as fh:
+                    fh.write(state)
+                state_blob = git(repo, "hash-object", "-w", state_path, env=index_env).strip()
+                git(repo, "update-index", "--add", "--cacheinfo", f"100644,{state_blob},{STATE}", env=index_env)
             tree = git(repo, "write-tree", env=index_env).strip()
             sha = git(repo, "commit-tree", tree, "-p", base, "-m", msg, env=index_env).strip()
         push = push_roadmap_commit(repo, sha, main, env)
@@ -462,20 +497,37 @@ def run_cloud_branch(mode: str, change_id: str, arg: str | None, branch: str | N
     handoff, mode, arg = load_handoff(repo, "HEAD", mode, change_id, arg, verified)
     new = edit(old, mode, change_id, arg, repo_name, cloud_branch=branch if mode == "open" else None,
                handoff=handoff)
+    state = render_state(context_state.FsReader(repo, {ROADMAP: new})) if context_state else None
     if dry:
         sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True), current, "commit"))
+        print_state_diff(context_state.FsReader(repo).read(STATE) if context_state else None, state, current)
         return
     if unchanged(old, new, current):
         return
     with open(work_path, "w", encoding="utf-8") as fh:
         fh.write(new)
+    paths = [ROADMAP]
+    if state is not None:
+        with open(os.path.join(repo, STATE), "w", encoding="utf-8") as fh:
+            fh.write(state)
+        git(repo, "add", "--", STATE)
+        paths.append(STATE)
     msg = commit_message(old, mode, change_id, arg, f"cloud session, branch {branch}", new)
     session = os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID", "")
     if session.startswith("cse_"):
         msg += f"\nClaude-Session: https://claude.ai/code/session_{session[4:]}"
-    git(repo, "commit", "-q", "-m", msg, "--", ROADMAP)
+    git(repo, "commit", "-q", "-m", msg, "--", *paths)
     sha = git(repo, "rev-parse", "--short", "HEAD").strip()
     print(f"{sha} {msg.splitlines()[0]} -> {current} (not pushed; the branch carries the state)")
+
+
+def hash_text(repo: str, text: str) -> str:
+    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
+        tmp.write(text)
+    try:
+        return git(repo, "hash-object", "-w", tmp.name).strip()
+    finally:
+        os.unlink(tmp.name)
 
 
 def run_local(mode: str, change_id: str, arg: str | None, dry: bool, verified: str | None = None) -> None:
@@ -492,6 +544,9 @@ def run_local(mode: str, change_id: str, arg: str | None, dry: bool, verified: s
         handoff, mode, arg = load_handoff(main_wt, "HEAD", mode, change_id, arg, verified)
         new_head = edit(head_text, mode, change_id, arg, repo_name, handoff=handoff)
         sys.stdout.writelines(difflib.unified_diff(head_text.splitlines(True), new_head.splitlines(True), "HEAD", "commit"))
+        if context_state:
+            print_state_diff(context_state.GitReader(main_wt, "HEAD").read(STATE),
+                             render_state(context_state.GitReader(main_wt, "HEAD", {ROADMAP: new_head})), "HEAD")
         return
 
     # Several sessions commit stages on the main branch at once. Every attempt re-reads HEAD,
@@ -518,25 +573,31 @@ def run_local(mode: str, change_id: str, arg: str | None, dry: bool, verified: s
         new_work = new_head if work_text == head_text else edit(work_text, run_mode, change_id, run_arg, repo_name,
                                                                 handoff=handoff)
 
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
-            tmp.write(new_head)
-        blob = git(main_wt, "hash-object", "-w", tmp.name).strip()
-        os.unlink(tmp.name)
+        state = render_state(context_state.GitReader(main_wt, head_sha, {ROADMAP: new_head})) if context_state else None
+        blob = hash_text(main_wt, new_head)
+        state_blob = hash_text(main_wt, state) if state is not None else None
 
         try:
             git(main_wt, "update-index", "--cacheinfo", f"100644,{blob},{ROADMAP}")
+            if state_blob:
+                git(main_wt, "update-index", "--add", "--cacheinfo", f"100644,{state_blob},{STATE}")
             if git(main_wt, "rev-parse", "HEAD").strip() != head_sha:
                 raise subprocess.CalledProcessError(1, "rev-parse", stderr="HEAD moved")
             git(main_wt, "commit", "-q", "-m", msg)
             break
         except subprocess.CalledProcessError as exc:
             subprocess.run(["git", "-C", main_wt, "reset", "-q", "--", ROADMAP])
+            if state_blob:
+                subprocess.run(["git", "-C", main_wt, "reset", "-q", "--", STATE], capture_output=True)
             if attempt < 7:
                 time.sleep(2)
                 continue
             sys.exit(f"commit failed (index restored): {exc.stderr}")
     with open(work_path, "w", encoding="utf-8") as fh:
         fh.write(new_work)
+    if state is not None:
+        with open(os.path.join(main_wt, STATE), "w", encoding="utf-8") as fh:
+            fh.write(state)
     sha = git(main_wt, "rev-parse", "--short", "HEAD").strip()
     print(f"{sha} {msg.splitlines()[0]}")
     if work_text != head_text:
