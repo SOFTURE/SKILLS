@@ -59,7 +59,10 @@ usually fails on history. Put it right, in this order, one pass per repository:
 2. `npx softure-skills doctor --sweep --json`, worked by an agent with the `softure-doctor` skill
    ("Sweep history to zero"): every entry settled with its evidence (commit, release, file), never
    without, in one change, until the doctor exits 0. Entries classed `superseded` (later roadmaps,
-   releases or changes made them obsolete) are closed by the agent as obsolete, never forwarded.
+   releases or changes made them obsolete) are closed by the agent as obsolete, never forwarded; post-merge
+   steps (a release after the merge, `close #N`) are checked with the forge through `gh`, by the sweep itself
+   when it can reach it, else by the agent (class `forge`). A check carried to another roadmap (`→ roadmap-x`)
+   is ticked by `--fix`.
 3. The owner's short list: only real owner items (a decision about future work, a secret, account or
    connector, a step outside the repository), carried to the live roadmap or an `owner-word` issue.
 4. The `context-doctor` job above, once the doctor is at zero.

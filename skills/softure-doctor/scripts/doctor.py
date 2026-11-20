@@ -3,7 +3,8 @@
 
     doctor.py [--root <dir>] [--json]
     doctor.py --fix [--write] [--json]    mechanical repairs of history (dry run unless --write)
-    doctor.py --sweep [--json]            every remaining failure as a worklist with evidence (read-only)
+    doctor.py --sweep [--json] [--no-forge]  every remaining failure as a worklist with evidence (read-only;
+                                          asks the forge through `gh` about post-merge steps unless --no-forge)
     doctor.py --baseline                  last resort: accept today's failures in context/doctor-baseline.json
     npx softure-skills doctor [...]      (the same, from the installed package)
 
@@ -619,18 +620,19 @@ def run_baseline(reader, root: str, git_root: str | None) -> int:
     return 1 if change["refused"] else 0
 
 
-def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
+def run_sweep(reader, root: str, git_root: str | None, as_json: bool, use_forge: bool = True) -> int:
     """`--sweep`: the worklist of every failure with its evidence; exit 1 while anything is left."""
     import doctor_sweep
 
-    entries = doctor_sweep.sweep(reader, git_root)
+    entries = doctor_sweep.sweep(reader, git_root, doctor_sweep.Forge(git_root, enabled=use_forge))
     owner = [entry for entry in entries if entry["class"] == "owner"]
     superseded = [entry for entry in entries if entry["class"] == "superseded"]
-    with_evidence = len(entries) - len(owner) - len(superseded)
+    forge = [entry for entry in entries if entry["class"] == "forge"]
+    with_evidence = len(entries) - len(owner) - len(superseded) - len(forge)
     if as_json:
         print(json.dumps({"root": root, "entries": entries,
                           "summary": {"total": len(entries), "with_evidence": with_evidence,
-                                      "superseded": len(superseded), "owner": len(owner)}},
+                                      "superseded": len(superseded), "forge": len(forge), "owner": len(owner)}},
                          indent=2, ensure_ascii=False))
         return 1 if entries else 0
     if not entries:
@@ -643,13 +645,18 @@ def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
             print(f"    evidence {evidence['kind']} {evidence['ref']}: {evidence['note']}")
         if entry["class"] == "superseded":
             print("    superseded: later work made it obsolete; close it yourself, never forward it")
+        if entry["class"] == "forge":
+            print("    forge: check it with `gh` before anything goes to the owner")
+            for tried in entry["tried"]:
+                print(f"    tried: {tried}")
         if entry["owner"]:
             print(f"    owner ({entry['owner_reason']}): only the owner can settle it")
             for tried in entry["tried"]:
                 print(f"    tried: {tried}")
         print(f"    settle: {entry['settle']}")
     print(f"softure-doctor --sweep: {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} to settle, "
-          f"{with_evidence} with evidence, {len(superseded)} superseded, {len(owner)} for the owner")
+          f"{with_evidence} with evidence, {len(superseded)} superseded, {len(forge)} to check with the forge, "
+          f"{len(owner)} for the owner")
     return 1
 
 
@@ -717,13 +724,14 @@ def main(argv: list[str] | None = None) -> int:
     fix = _take(args, "--fix")
     write = _take(args, "--write")
     do_sweep = _take(args, "--sweep")
+    no_forge = _take(args, "--no-forge")
     do_baseline = _take(args, "--baseline")
     root = None
     if "--root" in args:
         k = args.index("--root")
         root = os.path.abspath(args[k + 1])
         del args[k:k + 2]
-    if args or (write and not fix) or sum((fix, do_sweep, do_baseline)) > 1:
+    if args or (write and not fix) or sum((fix, do_sweep, do_baseline)) > 1 or (no_forge and not do_sweep):
         print(__doc__, file=sys.stderr)
         return 2
     top = subprocess.run(["git", "-C", root or os.getcwd(), "rev-parse", "--show-toplevel"],
@@ -741,7 +749,7 @@ def main(argv: list[str] | None = None) -> int:
     if fix:
         return run_fix(reader, root, git_root, write, as_json)
     if do_sweep:
-        return run_sweep(reader, root, git_root, as_json)
+        return run_sweep(reader, root, git_root, as_json, use_forge=not no_forge)
     if do_baseline:
         return run_baseline(reader, root, git_root)
     findings = run_checks(reader, git_root)
