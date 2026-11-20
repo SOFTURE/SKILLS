@@ -46,6 +46,8 @@ gets a note, not a failure: the first run of `wt-roadmap.py`, `softure-archive` 
 creates it. Fix a stale or missing file with `npx softure-skills state` (or
 `python3 .claude/skills/softure-doctor/scripts/context_state.py write`) and commit it.
 
+Piped into a reader that stops early (`doctor --sweep | head`), it ends quietly with exit 141, no traceback.
+
 Importable: `from doctor import run_checks` (takes any reader of context_state).
 """
 from __future__ import annotations
@@ -60,7 +62,8 @@ sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/s
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_state import (  # noqa: E402
     ARCHIVE_ROADMAPS_DIR, CHANGES_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_SECTION, ROADMAP_PATH, STATE_PATH,
-    FsReader, frontmatter, open_checkboxes, pending_release_roadmap, roadmap_rows, sections, staleness,
+    FsReader, frontmatter, open_checkboxes, pending_release_roadmap, quiet_broken_pipe, roadmap_rows, sections,
+    staleness,
 )
 
 ARCHIVE_DIR = "context/archive"
@@ -672,4 +675,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(quiet_broken_pipe(main))

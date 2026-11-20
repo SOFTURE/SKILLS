@@ -581,6 +581,21 @@ def repo_root(start: str) -> str:
     return out.stdout.strip() if out.returncode == 0 else os.path.abspath(start)
 
 
+def quiet_broken_pipe(run) -> int:
+    """Run a CLI entry point; when stdout is closed early (`doctor --sweep | head`), stop quietly with 141.
+
+    141 is what a shell reports for a process ended by SIGPIPE; no traceback, no "Exception ignored".
+    """
+    try:
+        code = run()
+        sys.stdout.flush()
+        return code
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())  # the interpreter's final flush must not fail again
+        return 141
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     root = None
@@ -619,4 +634,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(quiet_broken_pipe(main))
