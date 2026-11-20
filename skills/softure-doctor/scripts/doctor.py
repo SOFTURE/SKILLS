@@ -2,7 +2,8 @@
 """softure-doctor: check the `context/` contract of a project (WORKFLOW.md §12) and exit non-zero on drift.
 
     doctor.py [--root <dir>] [--json]
-    npx softure-skills doctor            (the same, from the installed package)
+    doctor.py --fix [--write] [--json]    mechanical repairs of history (dry run unless --write)
+    npx softure-skills doctor [...]      (the same, from the installed package)
 
 Adopting projects run it in their CI check, documentation-only changes included (that is where the
 drift happens). `softure-archive` and `softure-roadmap --close` run it before their commit and fix
@@ -19,6 +20,10 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   index-missing-file              an index row (README.md / INDEX.md table under context/) links a missing file
   state-missing                   context/state.json is missing although the project has written it before
   state-stale                     context/state.json does not match the markdown
+
+`--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
+moved, found through git history) and prints every edit; see doctor_fix.py. It is a dry run unless
+`--write` is given, and it writes only under `context/`.
 
 A project that has never written `context/state.json` (it adopted the package before the file existed)
 gets a note, not a failure: the first run of `wt-roadmap.py`, `softure-archive` or `softure-roadmap`
@@ -211,13 +216,18 @@ def check_queued_and_backlog(reader) -> list[Finding]:
     return findings
 
 
-def check_indexes(reader) -> list[Finding]:
-    findings: list[Finding] = []
+def missing_index_targets(reader) -> list[dict]:
+    """Every link or backticked path in an index row (README.md / INDEX.md under context/) that does not exist.
+
+    Each entry: `path` (the index), `line` (1-based), `text` (the line), `kind` (`link` or `code`), `target`
+    (as written), `base` (the index folder) and `candidates` (the repository paths the target may mean).
+    """
+    out: list[dict] = []
     for path in _walk(reader, "context"):
         if os.path.basename(path) not in INDEX_NAMES:
             continue
         base = os.path.dirname(path)
-        for line in (reader.read(path) or "").splitlines():
+        for number, line in enumerate((reader.read(path) or "").splitlines(), start=1):
             if not line.strip().startswith("|"):
                 continue
             for target in LINK_RE.findall(line):
@@ -230,14 +240,25 @@ def check_indexes(reader) -> list[Finding]:
                 if resolved.startswith("..") or not resolved.startswith("context/"):
                     continue  # outside context/: not this check's business
                 if not reader.exists(resolved.rstrip("/")):
-                    findings.append(Finding("index-missing-file", path, f"row links `{target}`, which does not exist"))
+                    out.append({"path": path, "line": number, "text": line, "kind": "link", "target": target,
+                                "base": base, "candidates": [resolved.rstrip("/")]})
             for target in CODE_PATH_RE.findall(line):
                 # A path in backticks: relative to the index, to context/ or to the repository root.
                 candidates = [os.path.normpath(os.path.join(prefix, target)).replace(os.sep, "/").rstrip("/")
                               for prefix in (base, "context", ".")]
                 inside = [c for c in candidates if c.startswith("context/")]
                 if inside and not any(reader.exists(c) for c in inside):
-                    findings.append(Finding("index-missing-file", path, f"row names `{target}`, which does not exist"))
+                    out.append({"path": path, "line": number, "text": line, "kind": "code", "target": target,
+                                "base": base, "candidates": inside})
+    return out
+
+
+def check_indexes(reader) -> list[Finding]:
+    findings: list[Finding] = []
+    for missing in missing_index_targets(reader):
+        verb = "links" if missing["kind"] == "link" else "names"
+        findings.append(Finding("index-missing-file", missing["path"],
+                                f"row {verb} `{missing['target']}`, which does not exist"))
     return findings
 
 
@@ -294,19 +315,54 @@ def run_checks(reader, root: str | None = None) -> list[Finding]:
     return findings
 
 
+def _take(args: list[str], flag: str) -> bool:
+    if flag in args:
+        args.remove(flag)
+        return True
+    return False
+
+
+def run_fix(reader, root: str, git_root: str | None, write: bool, as_json: bool) -> int:
+    """`--fix`: print (and with `write` apply) the mechanical repairs; exit 0."""
+    import doctor_fix
+
+    plan = doctor_fix.plan_fixes(reader, git_root)
+    after = FsReader(root, plan["files"])
+    remaining = [f for f in run_checks(after, git_root) if f.severity == "fail"]
+    if write and plan["files"]:
+        doctor_fix.apply_fixes(root, plan["files"])
+    if as_json:
+        print(json.dumps({"root": root, "written": write, "edits": plan["edits"], "skipped": plan["skipped"],
+                          "remaining": [f.as_dict() for f in remaining]}, indent=2))
+        return 0
+    mode = "applied" if write else "dry run"
+    print(f"softure-doctor --fix ({mode}): {len(plan['edits'])} edit(s) in {len(plan['files'])} file(s)")
+    for edit in plan["edits"]:
+        line = f":{edit['line']}" if edit.get("line") else ""
+        print(f"edit {edit['path']}{line}: {edit['what']}")
+    for skip in plan["skipped"]:
+        print(f"skip {skip['path']}: `{skip['target']}`: {skip['why']}")
+    print(f"after these edits: {len(remaining)} failure(s) remain"
+          + (" (`doctor --sweep` lists them with evidence)" if remaining else ""))
+    if plan["files"] and not write:
+        print("run again with --write to apply")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "-h" in args or "--help" in args:
         print(__doc__)
         return 0
-    as_json = "--json" in args
-    args = [arg for arg in args if arg != "--json"]
+    as_json = _take(args, "--json")
+    fix = _take(args, "--fix")
+    write = _take(args, "--write")
     root = None
     if "--root" in args:
         k = args.index("--root")
         root = os.path.abspath(args[k + 1])
         del args[k:k + 2]
-    if args:
+    if args or (write and not fix):
         print(__doc__, file=sys.stderr)
         return 2
     top = subprocess.run(["git", "-C", root or os.getcwd(), "rev-parse", "--show-toplevel"],
@@ -321,6 +377,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"softure-doctor: no context/ directory in {root}, nothing to check")
         return 0
+    if fix:
+        return run_fix(reader, root, git_root, write, as_json)
     findings = run_checks(reader, git_root)
     failures = [f for f in findings if f.severity == "fail"]
     if as_json:
@@ -331,6 +389,9 @@ def main(argv: list[str] | None = None) -> int:
         print(finding)
     if failures:
         print(f"softure-doctor: {len(failures)} problem(s) in the context/ contract (WORKFLOW.md §12)")
+        mechanical = sum(1 for f in failures if f.code in ("archived-change-status", "index-missing-file"))
+        if mechanical:
+            print(f"softure-doctor: {mechanical} of them may be mechanical: `doctor --fix` shows the edits")
         return 1
     print("softure-doctor: context/ contract OK")
     return 0

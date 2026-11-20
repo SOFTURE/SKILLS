@@ -6,6 +6,10 @@
 `tests/fixtures/doctor/cases/<code>/` is one drift case: files laid over the clean tree (`_remove` lists
 paths to delete, `_keep_state` keeps the clean state.json instead of regenerating it). The doctor must
 fail with exactly that code on the case and pass on the clean tree.
+
+`tests/fixtures/doctor/fix/<case>/` holds one historical shape that `doctor --fix` repairs. Its optional
+`_history` file is replayed as commits before the overlay lands (`add <path>`, `mv <from> <to>`, `rm <path>`),
+so rename detection has a real history to read.
 """
 from __future__ import annotations
 
@@ -31,6 +35,7 @@ sys.path.insert(0, SCRIPTS)
 import context_state  # noqa: E402
 
 CASES = sorted(os.listdir(os.path.join(FIXTURES, "cases")))
+FIX_CASES = sorted(os.listdir(os.path.join(FIXTURES, "fix")))
 
 
 def validate(value, schema: dict, path: str = "$") -> list[str]:
@@ -94,8 +99,25 @@ class Project:
         with open(self.path(rel), "w", encoding="utf-8") as fh:
             fh.write(text)
 
-    def apply_case(self, case: str) -> None:
-        source = os.path.join(FIXTURES, "cases", case)
+    def replay_history(self, source: str) -> None:
+        history = os.path.join(source, "_history")
+        if not os.path.exists(history):
+            return
+        with open(history, encoding="utf-8") as fh:
+            steps = [line.split() for line in fh.read().splitlines() if line.strip()]
+        for step in steps:
+            if step[0] == "add":
+                self.write(step[1], f"# {os.path.basename(step[1])}\n\nContent of {step[1]}.\n")
+            elif step[0] == "mv":
+                os.makedirs(os.path.dirname(self.path(step[2])), exist_ok=True)
+                self.git("mv", step[1], step[2])
+            elif step[0] == "rm":
+                self.git("rm", "-q", step[1])
+            self.commit(" ".join(step))
+
+    def apply_case(self, case: str, group: str = "cases") -> None:
+        source = os.path.join(FIXTURES, group, case)
+        self.replay_history(source)
         for folder, _, files in os.walk(source):
             for name in files:
                 if name.startswith("_"):
@@ -115,10 +137,13 @@ class Project:
         return subprocess.run([sys.executable, os.path.join(SCRIPTS, "context_state.py"), *args, "--root", self.root],
                               env={**os.environ, **GIT_ENV}, capture_output=True, text=True)
 
-    def doctor(self) -> tuple[int, dict]:
-        result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "doctor.py"), "--root", self.root, "--json"],
-                                env={**os.environ, **GIT_ENV}, capture_output=True, text=True)
+    def doctor(self, *args: str) -> tuple[int, dict]:
+        result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "doctor.py"), "--root", self.root, "--json",
+                                 *args], env={**os.environ, **GIT_ENV}, capture_output=True, text=True)
         return result.returncode, json.loads(result.stdout)
+
+    def codes(self) -> set[str]:
+        return {failure["code"] for failure in self.doctor()[1]["failures"]}
 
 
 class DoctorTest(unittest.TestCase):
@@ -165,6 +190,91 @@ class DoctorTest(unittest.TestCase):
         shutil.rmtree(self.project.path("context"))
         code, _ = self.project.doctor()
         self.assertEqual(code, 0)
+
+
+class FixTest(unittest.TestCase):
+    """`doctor --fix`: the mechanical repairs, dry run by default, idempotent after `--write`."""
+
+    def test_each_fix_case_is_repaired_and_a_second_run_changes_nothing(self) -> None:
+        for case in FIX_CASES:
+            with self.subTest(case=case):
+                project = Project()
+                try:
+                    project.apply_case(case, "fix")
+                    project.commit(case)
+                    self.assertTrue(project.codes(), "the case must fail before the fix")
+                    before = project.git("status", "--porcelain")
+                    code, dry = project.doctor("--fix")
+                    self.assertEqual(code, 0)
+                    self.assertFalse(dry["written"])
+                    self.assertTrue(dry["edits"], dry)
+                    self.assertEqual(dry["remaining"], [], dry)
+                    self.assertEqual(project.git("status", "--porcelain"), before, "a dry run writes nothing")
+                    code, applied = project.doctor("--fix", "--write")
+                    self.assertEqual(applied["edits"], dry["edits"])
+                    self.assertEqual(project.codes(), set())
+                    changed = project.git("status", "--porcelain").split()
+                    self.assertTrue(all(path.startswith("context/") for path in changed if "/" in path), changed)
+                    _, again = project.doctor("--fix", "--write")
+                    self.assertEqual(again["edits"], [])
+                finally:
+                    project.cleanup()
+
+    def test_legacy_status_is_kept(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("legacy-status", "fix")
+            project.doctor("--fix", "--write")
+            root = "context/archive"
+            for name in os.listdir(project.path(root)):
+                meta = context_state.frontmatter(project.read(f"{root}/{name}/change.md"))
+                self.assertEqual(meta["status"], "archived")
+                if name.endswith("-no-status"):
+                    self.assertNotIn("legacy_status", meta)
+                elif name.startswith("2026-08"):
+                    self.assertEqual(meta["legacy_status"], name.split("-old-", 1)[1])
+        finally:
+            project.cleanup()
+
+    def test_moved_links_follow_git_history(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("index-moved", "fix")
+            project.commit("index")
+            project.doctor("--fix", "--write")
+            index = project.read("context/archive/2026-09-01-staff-day-view/INDEX.md")
+            self.assertIn("| [research](research.md) |", index)
+            self.assertIn("| `frame.md` |", index)
+        finally:
+            project.cleanup()
+
+    def test_deleted_file_is_marked_with_the_last_commit_that_had_it(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("index-gone", "fix")
+            project.commit("index")
+            last = project.git("rev-parse", "--short", "HEAD~2").strip()  # before `rm`
+            project.doctor("--fix", "--write")
+            index = project.read("context/archive/2026-09-01-staff-day-view/INDEX.md")
+            self.assertIn(f"draft (moved, not found; last seen in {last}: ../../changes/staff-day-view/draft.md)", index)
+        finally:
+            project.cleanup()
+
+    def test_judgement_cases_and_live_indexes_are_left_alone(self) -> None:
+        project = Project()
+        try:
+            for case in ("archived-change-progress", "archived-roadmap-open-items", "index-missing-file"):
+                project.apply_case(case)
+            project.apply_case("legacy-status", "fix")
+            project.commit("history")
+            code, report = project.doctor("--fix", "--write")
+            self.assertEqual({failure["code"] for failure in report["remaining"]},
+                             {"archived-change-progress", "archived-roadmap-open-items", "index-missing-file"})
+            self.assertTrue(any(skip["path"] == "context/foundation/roadmaps/README.md" for skip in report["skipped"]))
+            self.assertEqual(project.codes(), {"archived-change-progress", "archived-roadmap-open-items",
+                                               "index-missing-file"})
+        finally:
+            project.cleanup()
 
 
 class StateTest(unittest.TestCase):

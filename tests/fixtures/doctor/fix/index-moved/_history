@@ -1,0 +1,5 @@
+add context/changes/staff-day-view/research.md
+add context/changes/staff-day-view/frame.md
+mv context/changes/staff-day-view/research.md context/changes/staff-day-view/notes/research.md
+mv context/changes/staff-day-view/notes/research.md context/archive/2026-09-01-staff-day-view/research.md
+mv context/changes/staff-day-view/frame.md context/archive/2026-09-01-staff-day-view/frame.md
