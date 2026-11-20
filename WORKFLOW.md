@@ -723,7 +723,7 @@ A project without the file gets it from the first of these runs; nothing has to 
 ```jsonc
 {
   "schema_version": 1,
-  "project": "Example clinic",         // workflow.json `project`, else the roadmap's `project`
+  "project": "Example clinic",         // workflow.json `project`, else the roadmap's, else the repository name; never null
   "mode": "autonomous", "main_branch": "main",
   "updated_at": "2026-11-20T09:00:00Z", // changes only when the content does
   "active_roadmap": {                  // null when there is no roadmap.md

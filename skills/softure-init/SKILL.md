@@ -53,6 +53,10 @@ start any work: no change, PRD or roadmap is created here.
    - Non-JS stacks: `*.sln`/`*.csproj` -> `dotnet build` / `dotnet test`; `pyproject.toml` ->
      `ruff check` / `pytest`; `go.mod` -> `go vet ./...` / `go test ./...`. Use them only if the
      tool's config is actually present.
+   - Project name (`project`): the name the project calls itself, from the README's first heading, else
+     `package.json` -> `name` (without the scope), else the repository name. It names the project in
+     `context/state.json` and every report, between roadmaps too. Interactive: ask once, with the
+     detected name as the recommended answer. An existing `project` is never changed here.
    - Main branch: `git symbolic-ref refs/remotes/origin/HEAD`, falling back to whichever of
      `main`/`master` exists locally.
    - Migrations: look for `drizzle/`, `migrations/`, `prisma/migrations/`, `db/migrate/` and
@@ -120,6 +124,7 @@ Required keys and the ones init writes by default:
 
 ```json
 {
+  "project": "Example clinic",
   "mode": "manual",
   "language": "en",
   "chatLanguage": "pl",

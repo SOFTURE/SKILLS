@@ -283,6 +283,9 @@ function install(options) {
   const prefix = options.isDryRun ? "[softure-skills] (dry run)" : "[softure-skills]";
   for (const action of actions) console.log(`${prefix} ${action}`);
   console.log(`${prefix} ${PACKAGE.name}@${PACKAGE.version} -> ${projectRoot}`);
+  if (fs.existsSync(path.join(projectRoot, WORKFLOW_CONFIG_PATH)) && !workflowConfig.project) {
+    console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json falls back to the repository name; softure-init asks for it)`);
+  }
   if (!hasDoctorInCi(projectRoot)) {
     console.log(`${prefix} CI: add \`${CI_LINE}\` to the project's CI check, documentation-only changes included, once it exits 0 (rollout: doctor --fix, doctor --sweep; WORKFLOW.md §12.4)`);
   }
