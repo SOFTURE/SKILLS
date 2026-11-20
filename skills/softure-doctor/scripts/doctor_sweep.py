@@ -45,7 +45,8 @@ LIMIT = 3
 SETTLE = {
     "archived-change-progress": "tick it with the SHA that did it (`- [x] <text> — <sha>`), or, when the work was "
                                 "never done, `- [x] ~~<text>~~ — dropped: <reason>`",
-    "archived-roadmap-summary": "put the merge SHA into the row's Merge cell (`—` only for a carried or dropped row)",
+    "archived-roadmap-summary": "put the merge SHA into the row's Merge cell (a release tag where the roadmap records "
+                                "a release instead; `carried`, `dropped` or `— <reason>` for a row with no merge)",
     "archived-roadmap-open-items": "set the row's status to `done` when the evidence shows it shipped, "
                                    "`carried (to <path>)` when a later roadmap took it, or `dropped (<reason>)`",
     "archived-roadmap-open-checks": "tick it with its evidence (`— done: <sha | release | path>`), as obsolete "
@@ -250,26 +251,11 @@ def _summary_entries(reader, git: Git, path: str) -> list[dict]:
 
     text = reader.read(path) or ""
     rows = _roadmap_rows_by_id(text)
-    bad = {entry.split(":", 1)[0] for entry in doctor.summary_placeholders(text)}
     entries = []
-    in_summary = False
-    header = None
-    for number, line in enumerate(_lines(text), start=1):
-        if line.startswith("## "):
-            in_summary = line[3:].strip() == "Summary"
-            header = None
+    for row in doctor.summary_rows(text):
+        if row["ok"]:
             continue
-        if not in_summary or not line.strip().startswith("|"):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if header is None:
-            header = [cell.lower() for cell in cells]
-            continue
-        if cells[0] not in bad:
-            continue
-        index = header.index("merge") if "merge" in header else len(cells) - 1
-        cell = cells[index] if index < len(cells) else ""
-        item = cells[0]
+        item, cell = row["item"], row["cell"]
         change_id = (rows.get(item) or {}).get("change_id")
         evidence = _commit_evidence(git.merges_for(change_id), "merge of the item's change")
         folder = _archived_change_folder(reader, change_id)
@@ -277,7 +263,7 @@ def _summary_entries(reader, git: Git, path: str) -> list[dict]:
             shas = SHA_TAIL_RE.findall(reader.read(f"{folder}/plan.md") or "")
             if shas:
                 evidence.append(_evidence("commit", shas[-1], f"last SHA in {folder}/plan.md (not a merge; prefer the merge)"))
-        entries.append(_entry("archived-roadmap-summary", path, number, line, f"{item}: {cell}", evidence,
+        entries.append(_entry("archived-roadmap-summary", path, row["line"], row["text"], f"{item}: {cell}", evidence,
                               cell=cell, item=item, change_id=change_id))
     return entries
 

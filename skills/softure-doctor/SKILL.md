@@ -57,7 +57,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `archived-change-progress` | the change was archived with open Automated items: tick them with their SHA when the work is on the main branch, or mark them `~~dropped~~ — dropped: <reason>`. An item struck through or carrying a dropped/cancelled/not-applicable note is already dropped and never counts (`--fix` normalises it) |
 | `archived-roadmap-open-items` | rows of an archived roadmap end `done`, `done_code`, dropped or carried (with where they went) |
 | `archived-roadmap-open-checks` | an archived roadmap still holds unticked owner entries: tick each with its evidence (`— done: <sha / release / path>`), as obsolete (`— obsolete: <reason>`), or carry it to a live roadmap or an `owner-word` issue and tick it with where it went |
-| `archived-roadmap-summary` | put the merge SHA (`git log --merges --grep "<change-id>"`) into each `## Summary` row |
+| `archived-roadmap-summary` | put the merge SHA (`git log --merges --grep "<change-id>"`) into the row's merge cell. Only the item table (the one with a merge column) is read; a SHA, a release tag (where the roadmap records a release instead of a merge), `carried`, `dropped` and `— <reason>` pass |
 | `queued-roadmap-done` | archive the finished queued roadmap to `foundation/archive/` |
 | `backlog-without-roadmap` | move live entries to a queued roadmap, then remove the folder |
 | `index-missing-file` | a real link (a markdown link, or a cell that is only a path in a file column) points at a missing file: fix or drop the row; a path mentioned in a description cell never fails |
@@ -104,7 +104,8 @@ Work the list in one change per repository (`docs(context): settle history to ze
    it proves. **Settle with evidence, never without:** write the proof into the line itself.
    - Progress item: `- [x] <text> — <sha>` when that commit did it; `- [x] ~~<text>~~ — dropped: <reason>`
      when the evidence shows it was never done and is no longer wanted.
-   - Summary placeholder: the merge SHA in the `Merge` cell.
+   - Summary placeholder: the merge SHA in the `Merge` cell (a release tag, `carried`, `dropped` or
+     `— <reason>` where there is no merge).
    - Open row: `done` (it shipped), `carried (to <path>)` (a later roadmap took it), `dropped (<reason>)`.
    - Open check: `- [x] <text> — done: <sha | release | path>`, `- [x] <text> — obsolete: <reason, with
      the evidence that made it obsolete>`, or carried (below).
