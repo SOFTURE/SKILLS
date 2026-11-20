@@ -763,3 +763,22 @@ A project that has never written `state.json` gets a note, not a failure. **Adop
 CI check**, documentation-only changes included; the installer prints the line (`npx softure-skills doctor`) until a
 workflow under `.github/workflows/` runs it. `softure-archive` and `softure-roadmap --close` run it before their commit
 and fix what they own.
+
+### 12.3 Portfolio: many projects at once
+
+`npx softure-skills portfolio` reads the state of several projects and writes nothing anywhere (a remote is read
+through a shallow, sparse clone into a temporary folder; a local checkout at `origin/<mainBranch>` without a fetch).
+
+```bash
+npx softure-skills portfolio acme/shop ~/code/api      # or list them in ~/.config/softure/portfolio.json
+npx softure-skills portfolio --owner                   # only the owner queue, oldest first
+npx softure-skills portfolio --json                    # the same data for another tool
+```
+
+The config file lives outside every project (`--config <file>`, `$SOFTURE_PORTFOLIO`, default
+`~/.config/softure/portfolio.json`): `{ "projects": [ { "name": "shop", "repo": "acme/shop", "branch": "main" } ] }`,
+where `repo` is `owner/name`, a git URL or a local path. One row per project:
+`project | active roadmap X/N | queued | open changes | owner queue | last release | doctor`. The doctor runs on the
+same tree; a project without `state.json` yet gets one built in memory (marked `*`). `--source api` reads only
+`state.json` through `gh api` (no doctor). Last release: `state.json` → `last_release`, else the highest `v*` tag
+(the latest GitHub release with `--source api`).

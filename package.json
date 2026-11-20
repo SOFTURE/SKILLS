@@ -15,6 +15,7 @@
     "ONBOARD.md",
     "scripts/install.mjs",
     "scripts/uninstall.mjs",
+    "scripts/portfolio.py",
     "README.md"
   ],
   "bin": {

@@ -1,0 +1,115 @@
+"""Tests for scripts/portfolio.py (`softure-skills portfolio`).
+
+    python3 -m unittest discover -s tests
+
+Projects are throwaway git repositories built from tests/fixtures/doctor: one local checkout read at its
+main branch, one read through a clone of a bare "remote", one without state.json. Nothing in them may
+change.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPT = os.path.join(ROOT, "scripts", "portfolio.py")
+CLEAN = os.path.join(ROOT, "tests", "fixtures", "doctor", "clean", "context")
+GIT_ENV = {
+    "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@example.com",
+    "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.com",
+    "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_ALLOW_PROTOCOL": "file",
+}
+
+
+def git(cwd: str, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, env={**os.environ, **GIT_ENV}, check=True,
+                          capture_output=True, text=True).stdout
+
+
+def snapshot(path: str) -> str:
+    return git(path, "status", "--porcelain", "--ignored") + git(path, "rev-parse", "HEAD")
+
+
+class PortfolioTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        base = self._tmp.name
+        self.alpha = self.make_repo(os.path.join(base, "alpha"))
+        self.beta = self.make_repo(os.path.join(base, "beta"), drop_state=True, drift=True)
+        self.remote = os.path.join(base, "gamma.git")
+        source = self.make_repo(os.path.join(base, "gamma-src"))
+        git(base, "clone", "-q", "--bare", source, self.remote)
+        git(source, "tag", "v1.2.0")
+        git(source, "push", "-q", self.remote, "v1.2.0")
+        # A work-in-progress edit in a checkout must not be read: the main branch is.
+        with open(os.path.join(self.alpha, "context", "foundation", "roadmap.md"), "a", encoding="utf-8") as fh:
+            fh.write("\n| **SR-9** | `wip` | uncommitted | — | autonomous | ready |\n")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def make_repo(self, path: str, drop_state: bool = False, drift: bool = False) -> str:
+        os.makedirs(path)
+        shutil.copytree(CLEAN, os.path.join(path, "context"))
+        if drop_state:
+            os.remove(os.path.join(path, "context", "state.json"))
+        if drift:
+            change = os.path.join(path, "context", "archive", "2026-09-01-staff-day-view", "change.md")
+            with open(change, encoding="utf-8") as fh:
+                text = fh.read()
+            with open(change, "w", encoding="utf-8") as fh:
+                fh.write(text.replace("status: archived", "status: implemented"))
+        git(path, "init", "-q", "-b", "main")
+        git(path, "add", "-A")
+        git(path, "commit", "-q", "-m", "init")
+        return path
+
+    def run_portfolio(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, SCRIPT, *args], env={**os.environ, **GIT_ENV},
+                              capture_output=True, text=True)
+
+    def test_table_has_one_row_per_project(self) -> None:
+        before = snapshot(self.alpha)
+        result = self.run_portfolio(self.alpha, self.beta, f"file://{self.remote}")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines[0], "| project | active roadmap X/N | queued | open changes | owner queue | "
+                                   "last release | doctor |")
+        self.assertIn("| alpha | search 2/5 | 1 | 1 | 7 | v1.4.0 | ok |", lines)
+        self.assertIn("| beta* | search 2/5 | 1 | 1 | 7 | v1.4.0 | 1 failing |", lines)
+        self.assertTrue(any(line.startswith("| gamma | search 2/5 |") for line in lines), result.stdout)
+        self.assertIn("no context/state.json", result.stdout)
+        self.assertEqual(snapshot(self.alpha), before)
+
+    def test_owner_lists_every_project_oldest_first(self) -> None:
+        result = self.run_portfolio(self.alpha, self.beta, "--owner", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        queue = json.loads(result.stdout)["owner_queue"]
+        self.assertEqual(len(queue), 14)
+        self.assertEqual({entry["project"] for entry in queue}, {"alpha", "beta"})
+        self.assertEqual([entry["since"] for entry in queue], sorted(entry["since"] for entry in queue))
+        text = self.run_portfolio(self.alpha, "--owner").stdout
+        self.assertTrue(text.startswith("| since | project | kind | what | source |"))
+
+    def test_json_and_config_file(self) -> None:
+        config = os.path.join(self._tmp.name, "portfolio.json")
+        with open(config, "w", encoding="utf-8") as fh:
+            json.dump({"projects": [{"name": "shop", "repo": self.alpha, "branch": "main"},
+                                    {"repo": os.path.join(self._tmp.name, "missing")}]}, fh)
+        result = self.run_portfolio("--config", config, "--json")
+        self.assertEqual(result.returncode, 1)  # the missing project is reported, the rest still printed
+        projects = json.loads(result.stdout)["projects"]
+        self.assertEqual(projects[0]["name"], "shop")
+        self.assertEqual(projects[0]["state"]["active_roadmap"]["total"], 5)
+        self.assertEqual(projects[0]["doctor"], [])
+        self.assertTrue(projects[1]["error"])
+
+
+if __name__ == "__main__":
+    unittest.main()
