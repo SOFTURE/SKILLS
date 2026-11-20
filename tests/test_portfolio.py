@@ -81,8 +81,8 @@ class PortfolioTest(unittest.TestCase):
         lines = result.stdout.splitlines()
         self.assertEqual(lines[0], "| project | active roadmap X/N | queued | open changes | owner queue | "
                                    "last release | doctor |")
-        self.assertIn("| alpha | search 2/5 | 1 | 1 | 7 | v1.4.0 | ok |", lines)
-        self.assertIn("| beta* | search 2/5 | 1 | 1 | 7 | v1.4.0 | 1 failing |", lines)
+        self.assertIn("| alpha | search 2/5 | 1 | 1 | 6 | v1.4.0 | ok |", lines)
+        self.assertIn("| beta* | search 2/5 | 1 | 1 | 6 | v1.4.0 | 1 failing |", lines)
         self.assertTrue(any(line.startswith("| gamma | search 2/5 |") for line in lines), result.stdout)
         self.assertIn("no context/state.json", result.stdout)
         self.assertEqual(snapshot(self.alpha), before)
@@ -91,7 +91,7 @@ class PortfolioTest(unittest.TestCase):
         result = self.run_portfolio(self.alpha, self.beta, "--owner", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         queue = json.loads(result.stdout)["owner_queue"]
-        self.assertEqual(len(queue), 14)
+        self.assertEqual(len(queue), 12)
         self.assertEqual({entry["project"] for entry in queue}, {"alpha", "beta"})
         self.assertEqual([entry["since"] for entry in queue], sorted(entry["since"] for entry in queue))
         text = self.run_portfolio(self.alpha, "--owner").stdout

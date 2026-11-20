@@ -71,10 +71,17 @@ Read the PRD in full, not in excerpts.
   roadmap, `git mv` the queued file to `roadmap.md`, set `status: ready`, and take its ready entries
   (`git mv …/change.md context/changes/<id>/backlog-input.md`, then the `softure-new` format).
   Never promote on your own initiative, not even in `--auto`.
-- **`--close`**: the main roadmap is realised; archive it per WORKFLOW §5.2. Check the three gates
+- **`--close`**: the main roadmap is realised; archive it per WORKFLOW §5.2. Check the four gates
   first and report every failing one at once: rows not `done` / `done_code` and not carried over,
   leftover folders in `context/changes/` (archive each through `softure-archive`, a change without a
-  plan included, before continuing), and the full integration result on `<main>` when configured.
+  plan included, before continuing), the full integration result on `<main>` when configured, and
+  open checks: the close **refuses** to archive while a `- [ ]` is left under `## Owner decisions and
+  checks`. Settle each one first: tick it with its evidence (`— done: <sha | release | path>`), tick it
+  as obsolete with the reason (`— obsolete: <reason>`), or carry it to the next or a queued roadmap's
+  owner section (or an `owner-word` issue) and tick it with where it went (`— carried to <path | #N>`).
+  An archived roadmap with an open check is the doctor's `archived-roadmap-open-checks` and never an
+  owner-queue entry, so nothing that waits for the owner may stay behind in it. Open
+  `## Before the next release` steps stay: they wait for the release the close comes before.
   Then write `## Summary` (`| ID | Item | What changed | Merge |`, the merge SHA from
   `git log --merges --grep "<change-id>"` on `<main>`, plus the integration line), move the file to
   `foundation/archive/<YYYY-MM-DD>-roadmap.md`, clean up the promoted roadmap's backlog folder and
