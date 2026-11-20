@@ -782,7 +782,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `archived-change-status` | an archived `change.md` whose status is not `archived` |
 | `archived-change-progress` | an archived `plan.md` with unticked Automated items (open Manual items are legitimate; an item struck through or carrying a dropped/cancelled/not-applicable note is dropped, not open) |
 | `archived-roadmap-open-items` | an archived roadmap with rows that are not `done`, `done_code`, dropped or carried |
-| `archived-roadmap-summary` | an archived roadmap whose `## Summary` merge column holds placeholders instead of SHAs |
+| `archived-roadmap-summary` | an archived roadmap whose `## Summary` item table (the table with a merge column; other tables there are ignored) holds a placeholder in the merge column; a SHA, a release tag, `carried`, `dropped` and `— <reason>` pass |
 | `archived-roadmap-open-checks` | an archived roadmap with an unticked `## Owner decisions and checks` entry, or an unticked `## Before the next release` step once its release is recorded or a later roadmap was closed |
 | `queued-roadmap-done` | a queued roadmap whose rows are all done, never archived |
 | `backlog-without-roadmap` | `backlog/roadmap-<slug>/` without `roadmaps/roadmap-<slug>.md` (or the promoted main roadmap) |

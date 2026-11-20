@@ -17,7 +17,8 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   archived-change-progress        an archived plan.md with unticked Automated items in `## Progress` (an item
                                   struck through or noted dropped/cancelled/not applicable is dropped, not open)
   archived-roadmap-open-items     an archived roadmap with rows that are not done, done_code, dropped or carried
-  archived-roadmap-summary        an archived roadmap whose `## Summary` merge column holds placeholders, not SHAs
+  archived-roadmap-summary        an archived roadmap whose `## Summary` item table holds a placeholder in its merge
+                                  column (a SHA, a release tag, carried, dropped or a dash with a reason pass)
   archived-roadmap-open-checks    an archived roadmap with unticked owner decisions or checks (or pre-release
                                   steps, once its release is recorded or a later roadmap was closed)
   queued-roadmap-done             a queued roadmap in foundation/roadmaps/ whose rows are all done
@@ -68,6 +69,8 @@ BACKLOG_DIR = "context/backlog"
 CLOSED_STATUSES = ("done", "done_code", "dropped", "carried")
 SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
 EMPTY_MERGE = {"—", "-", "–", "n/a", "none", "no merge", "not merged"}
+RELEASE_TAG_RE = re.compile(r"(?<![\w.])v?\d+\.\d+\.\d+(?:-[\w.]+)?(?![\w.])")
+MERGE_COLUMN_RE = re.compile(r"\bmerge")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 INDEX_NAMES = ("README.md", "INDEX.md")
 _PATH = r"(?:\.{1,2}/)?(?:[\w.-]+/)*[\w.-]+\.md|(?:\.{1,2}/)?(?:[\w.-]+/)+"
@@ -233,31 +236,56 @@ def check_archived_roadmaps(reader) -> list[Finding]:
         bad = summary_placeholders(text)
         if bad:
             findings.append(Finding("archived-roadmap-summary", path,
-                                    "## Summary merge column holds placeholders instead of merge SHAs: "
+                                    "## Summary merge column holds placeholders instead of merge SHAs or outcomes: "
                                     + "; ".join(bad[:4])))
     return findings
 
 
-def summary_placeholders(text: str) -> list[str]:
-    """Rows of the `## Summary` table whose `Merge` cell holds no SHA (and is not an explicit dash)."""
-    lines = sections(text).get("Summary", [])
-    header = None
-    bad = []
-    for line in lines:
+def summary_rows(text: str) -> list[dict]:
+    """Rows of the item table under `## Summary`: the table whose header has a merge column.
+
+    Other tables under `## Summary` (finding numbers, test counts) are not the item table and are skipped.
+    Each row: `line` (1-based in `text`), `text`, `item` (first cell), `cell` (the merge cell) and `ok`.
+    """
+    rows: list[dict] = []
+    in_summary = False
+    header: list[str] | None = None
+    merge = None
+    for number, line in enumerate((text or "").split("\n"), start=1):
+        if line.startswith("## "):
+            in_summary = line[3:].strip() == "Summary"
+            header = None
+            continue
+        if not in_summary:
+            continue
         if not line.strip().startswith("|"):
+            header = None
             continue
-        parts = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = _table_cells(line)
         if header is None:
-            header = [cell.lower() for cell in parts]
+            header = [cell.strip("*` ").lower() for cell in cells]
+            merge = next((index for index, name in enumerate(header) if MERGE_COLUMN_RE.search(name)), None)
             continue
-        if all(re.fullmatch(r":?-{3,}:?", cell) for cell in parts if cell):
+        if merge is None or _is_separator(cells):
             continue
-        index = header.index("merge") if "merge" in header else len(parts) - 1
-        cell = parts[index] if index < len(parts) else ""
-        if SHA_RE.search(cell) or cell.strip("`* ").lower() in EMPTY_MERGE:
-            continue
-        bad.append(f"{parts[0]}: \"{cell}\"")
-    return bad
+        cell = cells[merge] if merge < len(cells) else ""
+        rows.append({"line": number, "text": line, "item": cells[0], "cell": cell, "ok": merge_cell_ok(cell)})
+    return rows
+
+
+def merge_cell_ok(cell: str) -> bool:
+    """A merge cell records an outcome: a SHA, a release tag, carried/dropped, or a dash (with or without a reason)."""
+    value = cell.strip("`* ").lower()
+    if SHA_RE.search(cell) or RELEASE_TAG_RE.search(cell):
+        return True
+    if value in EMPTY_MERGE or value[:1] in ("—", "–", "-"):
+        return True
+    return bool(re.match(r"(?:carried|dropped|obsolete|superseded|cancell?ed|not merged|no merge)\b", value))
+
+
+def summary_placeholders(text: str) -> list[str]:
+    """Item-table rows of `## Summary` whose merge cell is a placeholder, not an outcome."""
+    return [f"{row['item']}: \"{row['cell']}\"" for row in summary_rows(text) if not row["ok"]]
 
 
 def check_queued_and_backlog(reader) -> list[Finding]:

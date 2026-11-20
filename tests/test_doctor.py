@@ -401,10 +401,10 @@ class MeasureTest(unittest.TestCase):
     """
 
     EXPECTED = {
-        "failures": 5,
+        "failures": 4,
         "fix_edits": 4,
-        "after_fix": 3,
-        "sweep": {"total": 10, "with_evidence": 0, "owner": 10},
+        "after_fix": 2,
+        "sweep": {"total": 5, "with_evidence": 0, "owner": 5},
     }
 
     def measure(self, project: Project) -> dict:
@@ -475,6 +475,19 @@ class MeasureTest(unittest.TestCase):
         for text in ("1.3 Handle cancelled bookings", "1.6 `npm test` green", "1.7 Show dropped calls — 9b03e77x",
                      "1.8 Mark obsolete slots"):
             self.assertIsNone(doctor.dropped_item(text), text)
+
+    def test_summary_reads_only_the_item_tables_merge_column(self) -> None:
+        import doctor
+        text = "\n".join([
+            "## Summary", "",
+            "| ID | Item | What changed | Merge |", "| --- | --- | --- | --- |",
+            "| A-1 | one | x | 4f2a9c1 |", "| A-2 | two | x | carried |", "| A-3 | three | x | v1.4.0 |",
+            "| A-4 | four | x | — (done on main, no PR) |", "| A-5 | five | x | dropped (no longer wanted) |",
+            "| A-6 | six | x | merge SHA after the PR |", "| A-7 | seven | x | TBD |", "",
+            "| Finding | Severity |", "| --- | --- |", "| 1 | high |", "",
+            "Release: v1.4.0 (2026-10-02)",
+        ])
+        self.assertEqual(doctor.summary_placeholders(text), ['A-6: "merge SHA after the PR"', 'A-7: "TBD"'])
 
     def test_shallow_clone_marks_what_it_can_see(self) -> None:
         project = Project()
