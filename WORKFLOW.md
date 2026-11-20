@@ -778,6 +778,17 @@ its own `change.md` without touching `state.json`, and stays green.
 | `state-missing` | `context/state.json` is gone although git history holds it |
 | `state-stale` | `context/state.json` does not match the markdown |
 
+**Mechanical repairs.** `npx softure-skills doctor --fix` prints the edits that need no judgement, and the failures
+left after them; `--fix --write` applies them, only under `context/`, and a second run changes nothing:
+
+- an archived change's `status` becomes `archived`; the old value is kept as `legacy_status` in its front matter;
+- an index row inside `context/archive/` or `context/foundation/archive/` that links a missing file is rewritten to
+  the file's current path when git history shows where it moved (rename detection, followed across moves);
+  otherwise it is marked `(moved, not found; last seen in <sha>: <path>)` with the last commit that had the file.
+
+A row whose target was never in git history, a live index, and a checkout without full history are left alone and
+named. Everything else is a judgement case.
+
 A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in their
 CI check**, documentation-only changes included; the installer prints the line (`npx softure-skills doctor`) until a
 workflow under `.github/workflows/` runs it. `softure-archive` and `softure-roadmap --close` run it before their commit

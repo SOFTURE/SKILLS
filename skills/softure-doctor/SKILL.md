@@ -9,7 +9,7 @@ description: >
   without their roadmap, index rows pointing at missing files, and a missing or stale state.json.
   Use in CI, before an archive or roadmap commit, or when the user says "check the context",
   "run the doctor", "what waits for me", "refresh the state".
-argument-hint: "[doctor | state write|print|check] [--root <dir>] [--json] [--staged]"
+argument-hint: "[doctor [--fix [--write]] | state write|print|check] [--root <dir>] [--json] [--staged]"
 allowed-tools:
   - Read
   - Bash
@@ -23,6 +23,7 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 | Command | Does |
 |---|---|
 | `python3 <S>/doctor.py [--json]` | every check; exit 1 on a failure. Same as `npx softure-skills doctor` |
+| `python3 <S>/doctor.py --fix [--write]` | the mechanical repairs of history, printed edit by edit; a dry run unless `--write` |
 | `python3 <S>/context_state.py write` | regenerate `context/state.json` from the working tree |
 | `python3 <S>/context_state.py write --staged` | regenerate it from what is staged, and stage it (use right before a commit) |
 | `python3 <S>/context_state.py print` / `check` | show it / exit 1 when it is missing or stale |
@@ -56,13 +57,29 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `index-missing-file` | fix or drop the index row |
 | `state-missing` / `state-stale` | `context_state.py write`, commit `context/state.json` |
 
+## Mechanical repairs: `--fix`
+
+`doctor.py --fix` prints every edit it would make and the failures left after them; `--fix --write`
+applies them. It writes only under `context/`, and a second run changes nothing. Two shapes are
+mechanical:
+
+- `archived-change-status`: the archived `change.md` gets `status: archived`, and the old value is kept
+  as `legacy_status` in its front matter (`implemented`, `done`, `impl_reviewed`, … stay readable);
+- `index-missing-file` in an index inside an archive folder: the link is rewritten to the file's current
+  path when git history shows where it moved (renames followed across several moves); a file that was
+  deleted, not moved, is marked `(moved, not found; last seen in <sha>: <path>)`.
+
+It skips, and names, every row it cannot settle from history (a live index, a target that was never
+in git, a shallow checkout). Those and every other failure are judgement cases.
+
 A project that has never written `context/state.json` gets a `note`, not a failure, until the first
 script run creates it.
 
 ## Rules
 
 - `context/state.json` is written by scripts only. Never edit it by hand; regenerate it.
-- The doctor never edits anything. A skill that runs it fixes only the files it owns in that run.
+- The doctor never edits anything, except `--fix --write`, which is run on purpose and edits only the
+  two mechanical shapes above. A skill that runs it fixes only the files it owns in that run.
 - `open_changes` and `updated_at` are refreshed on every write and never make the file stale, so a
   change branch that edits its own `change.md` keeps a green doctor.
 - Owner-word issues (label `owner-word`, WORKFLOW §8.6) live on the forge, not in `state.json`;
