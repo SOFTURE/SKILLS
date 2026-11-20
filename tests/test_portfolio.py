@@ -4,7 +4,7 @@
 
 Projects are throwaway git repositories built from tests/fixtures/doctor: one local checkout read at its
 main branch, one read through a clone of a bare "remote", one without state.json. Nothing in them may
-change.
+change. `SOFTURE_GH` points at a fake `gh` that knows one GitHub repository, `acme/shop`, with a release.
 """
 from __future__ import annotations
 
@@ -27,6 +27,19 @@ GIT_ENV = {
 }
 
 
+FAKE_GH = """#!/usr/bin/env python3
+import sys
+args = " ".join(sys.argv[1:])
+if "repos/acme/shop/releases/latest" in args:
+    print('{"tag_name": "v1.6.0", "published_at": "2026-11-20T08:00:00Z"}')
+elif "repos/acme/shop/contents/context/state.json" in args or "repos/acme/old/contents/context/state.json" in args:
+    sys.stdout.write(open(sys.argv[0] + ".state.json").read())
+else:
+    sys.stderr.write("gh: Not Found (HTTP 404)\\n")
+    sys.exit(1)
+"""
+
+
 def git(cwd: str, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, env={**os.environ, **GIT_ENV}, check=True,
                           capture_output=True, text=True).stdout
@@ -40,6 +53,11 @@ class PortfolioTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         base = self._tmp.name
+        self.gh = os.path.join(base, "gh")
+        with open(self.gh, "w", encoding="utf-8") as fh:
+            fh.write(FAKE_GH)
+        os.chmod(self.gh, 0o755)
+        shutil.copyfile(os.path.join(CLEAN, "state.json"), self.gh + ".state.json")
         self.alpha = self.make_repo(os.path.join(base, "alpha"))
         self.beta = self.make_repo(os.path.join(base, "beta"), drop_state=True, drift=True)
         self.remote = os.path.join(base, "gamma.git")
@@ -71,7 +89,7 @@ class PortfolioTest(unittest.TestCase):
         return path
 
     def run_portfolio(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, SCRIPT, *args], env={**os.environ, **GIT_ENV},
+        return subprocess.run([sys.executable, SCRIPT, *args], env={**os.environ, **GIT_ENV, "SOFTURE_GH": self.gh},
                               capture_output=True, text=True)
 
     def test_table_has_one_row_per_project(self) -> None:
@@ -81,9 +99,9 @@ class PortfolioTest(unittest.TestCase):
         lines = result.stdout.splitlines()
         self.assertEqual(lines[0], "| project | active roadmap X/N | queued | open changes | owner queue | "
                                    "last release | doctor |")
-        self.assertIn("| alpha | search 2/5 | 1 | 1 | 6 | v1.4.0 | ok |", lines)
-        self.assertIn("| beta* | search 2/5 | 1 | 1 | 6 | v1.4.0 | 1 failing |", lines)
-        self.assertTrue(any(line.startswith("| gamma | search 2/5 |") for line in lines), result.stdout)
+        self.assertIn("| alpha | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | ok |", lines)
+        self.assertIn("| beta* | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | 1 failing |", lines)
+        self.assertIn("| gamma | search 2/5 | 1 | 1 | 6 | v1.2.0 | ok |", lines, "a tag beats the roadmap value")
         self.assertIn("no context/state.json", result.stdout)
         self.assertEqual(snapshot(self.alpha), before)
 
@@ -109,6 +127,24 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual(projects[0]["state"]["active_roadmap"]["total"], 5)
         self.assertEqual(projects[0]["doctor"], [])
         self.assertTrue(projects[1]["error"])
+
+
+    def test_last_release_comes_from_the_forge(self) -> None:
+        git(self.alpha, "remote", "add", "origin", "https://github.com/acme/shop.git")
+        result = self.run_portfolio(self.alpha, "--json")
+        row = json.loads(result.stdout)["projects"][0]
+        self.assertEqual((row["last_release"], row["last_release_date"], row["last_release_source"]),
+                         ("v1.6.0", "2026-11-20", "release"))
+        self.assertIn("| v1.6.0 (2026-11-20) |", self.run_portfolio(self.alpha).stdout)
+
+    def test_api_source_reads_the_release_and_labels_the_roadmap_value(self) -> None:
+        result = self.run_portfolio("acme/shop", "acme/old", "--source", "api", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = {row["name"]: row for row in json.loads(result.stdout)["projects"]}
+        self.assertEqual((rows["shop"]["last_release"], rows["shop"]["last_release_source"]), ("v1.6.0", "release"))
+        self.assertEqual((rows["old"]["last_release"], rows["old"]["last_release_source"]), ("v1.4.0", "roadmap"))
+        table = self.run_portfolio("acme/old", "--source", "api").stdout
+        self.assertIn("| v1.4.0 (roadmap, 2026-10-02) | n/a |", table)
 
 
 if __name__ == "__main__":

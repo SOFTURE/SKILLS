@@ -54,7 +54,9 @@ listed repository (arguments, or `~/.config/softure/portfolio.json` outside any 
 ```
 
 `--owner` prints only what waits for the owner across all projects, oldest first; `--json` gives the same
-data to another tool; `--source api` reads through the GitHub API instead of git. See WORKFLOW §12.3.
+data to another tool; `--source api` reads through the GitHub API instead of git. The last release comes
+from the forge (the latest GitHub release through `gh`, else the highest `v*` tag); a value only a roadmap
+recorded is labelled `(roadmap)`. See WORKFLOW §12.3.
 
 **Operating mode.** `context/workflow.json` → `mode` is `"manual"` (default) or `"autonomous"`, and the
 installer injects only that mode's section into the rules block:

@@ -742,7 +742,8 @@ A project without the file gets it from the first of these runs; nothing has to 
     { "kind": "decision", "source": "context/foundation/roadmap.md#Owner decisions and checks", "item": "SR-5",
       "since": "2026-11-10", "text": "**SR-5**: choose the ranking provider …" }
   ],
-  "last_release": { "version": "v1.4.0", "date": "2026-10-02", "source": "context/foundation/archive/2026-09-30-roadmap.md" }
+  "last_release": { "version": "v1.4.0", "date": "2026-10-02",   // as a closed roadmap recorded it (§5.2); the
+                   "source": "context/foundation/archive/2026-09-30-roadmap.md" }   // portfolio asks the forge first
 }
 ```
 
@@ -842,5 +843,8 @@ The config file lives outside every project (`--config <file>`, `$SOFTURE_PORTFO
 where `repo` is `owner/name`, a git URL or a local path. One row per project:
 `project | active roadmap X/N | queued | open changes | owner queue | last release | doctor`. The doctor runs on the
 same tree; a project without `state.json` yet gets one built in memory (marked `*`). `--source api` reads only
-`state.json` through `gh api` (no doctor). Last release: `state.json` → `last_release`, else the highest `v*` tag
-(the latest GitHub release with `--source api`).
+`state.json` through `gh api` (no doctor). **Last release comes from the forge** when it can: the latest GitHub
+release through `gh api` (both modes, for a GitHub repository; a local checkout counts when its `origin` is on GitHub),
+else the highest `v*` tag (git mode), else `state.json` → `last_release`, which only records what a closed roadmap
+wrote and is shown labelled: `v1.4.0 (roadmap, 2026-10-02)`. `--json` gives `last_release`, `last_release_date` and
+`last_release_source` (`release`, `tag` or `roadmap`).
