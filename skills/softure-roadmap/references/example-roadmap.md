@@ -150,6 +150,36 @@ What makes it good:
 - mail is adopted from a module rather than built;
 - no estimates, no dates other than the framing date, no implementation steps.
 
+## The same roadmap with sizes (optional)
+
+Only when the owner asks for sizes (here: "the first usable slice now, the rest after it") or
+`workflow.json` sets `roadmap.sizes: true`. The table, the statuses and the first two fields of each
+item stay as they are; three things are added.
+
+Under `## Order`, after `### Lanes`:
+
+```markdown
+**Sizes:** relative to each other, never hours or dates. S: one or two phases, no migration, one
+surface. M: up to four phases or one migration. L: four phases with a migration and open unknowns.
+
+### Slices
+| Slice | Items | Size |
+| --- | --- | --- |
+| **1. First usable: a visitor books online** | BK-1, BK-2 | 1 M, 1 L |
+| 2. Clients and staff manage bookings | BK-3, BK-4, BK-5 | 2 S, 1 M |
+| 3. Deposits and sharing | BK-6, BK-7 | 1 S, 1 M |
+```
+
+In each item block, after `Touches (estimate)`:
+
+```markdown
+- **Touches (estimate):** `lib/availability/**`, `drizzle/` (one migration), owner settings form.
+- **Size:** M
+```
+
+Every item has a size and sits in exactly one slice, each slice's sum counts its items' sizes, and
+nothing is in hours, days or dates.
+
 ## A bad version of the same roadmap
 
 ```markdown

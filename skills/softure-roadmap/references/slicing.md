@@ -18,8 +18,17 @@ An item is the right size when:
 - it has at most three unknowns; more means research would be a project of its own;
 - it can merge without a feature flag, or the flag is part of the item.
 
-Size is expressed by these signals, never in hours, days, points or t-shirt sizes. Agent execution
-is not linear in calendar time, and an estimate in the roadmap gets read as a promise.
+Size is expressed by these signals, never in hours, days or points. Agent execution is not linear
+in calendar time, and an estimate in the roadmap gets read as a promise.
+
+**Relative sizes, on request.** When the owner funds the roadmap in slices and asks for sizes (or
+`workflow.json` sets `roadmap.sizes: true`), give each item `S`, `M` or `L` from the same signals,
+relative to the other items of this roadmap, and define them once under `## Order`. A starting
+point: `S` = one or two phases, no migration, one surface; `M` = up to four phases or one migration;
+`L` = at the limits above (four phases, a migration, three unknowns); anything bigger is split, not
+sized `XL`. Then group the items into `### Slices` (WORKFLOW §5): the first usable slice is the
+smallest set that someone can use on its own, each later slice adds one more usable step, and each
+slice shows its size sum as counts (`2 S, 1 M`).
 
 ## When an item is too big: split patterns
 
@@ -115,4 +124,4 @@ risk is `capacity`, look harder for parallel lanes: they are the owner's best le
 | "Change the button colour on the invoice page" | too small, no outcome | fold into the item whose screen it is |
 | "Set up the API layer" | generic foundation, no `Unlocks` | "(foundation) invoice numbering is gap-free per year; unlocks IN-2, IN-4" |
 | "Add analytics dashboard" (not in PRD) | invented scope | owner question or backlog entry |
-| "Wiki search (2 days, M)" | estimate and size label | drop the estimate; split by data subset if it is big |
+| "Wiki search (2 days, M)" | a time estimate, and a size in the title | drop the estimate; a size goes only in the optional `Size` field, on request; split by data subset if it is big |
