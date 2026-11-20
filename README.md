@@ -40,6 +40,10 @@ It fails on drift in `context/` (a roadmap left after its archive, archived chan
 line until a workflow runs it. `npx softure-skills state` regenerates `context/state.json`, which the
 scripts otherwise write themselves.
 
+`npx softure-skills doctor --baseline` exists only as a last resort, for a project that cannot finish
+the history sweep at once: it accepts today's failures in `context/doctor-baseline.json`, the check
+then fails on anything new, and the file only shrinks. The recommended path is the sweep to zero.
+
 ## Many projects at once
 
 `npx softure-skills portfolio` is read-only: it reads `context/state.json` from the main branch of every

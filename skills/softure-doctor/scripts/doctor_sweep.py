@@ -366,7 +366,7 @@ def sweep(reader, root: str | None) -> list[dict]:
     git = Git(root)
     entries: list[dict] = []
     indexes_done = False
-    for failure in doctor.run_checks(reader, root):
+    for failure in doctor.run_checks(reader, root, baseline=False):
         if failure.severity != "fail":
             continue
         if failure.code == "index-missing-file":

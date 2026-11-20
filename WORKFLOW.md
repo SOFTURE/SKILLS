@@ -788,6 +788,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `index-missing-file` | a table row of a `README.md` or `INDEX.md` under `context/` that links or names a missing file |
 | `state-missing` | `context/state.json` is gone although git history holds it |
 | `state-stale` | `context/state.json` does not match the markdown |
+| `baseline-stale` | `context/doctor-baseline.json` lists a failure that no longer occurs (remove it), or is unreadable |
 
 **Mechanical repairs.** `npx softure-skills doctor --fix` prints the edits that need no judgement, and the failures
 left after them; `--fix --write` applies them, only under `context/`, and a second run changes nothing:
@@ -811,6 +812,14 @@ and later roadmaps that mention the item. An entry with no evidence is marked `o
 never without; what only the owner can settle (a real open decision, a step outside the repository) is carried to the
 live roadmap's `## Owner decisions and checks` or an `owner-word` issue and collected in one short list for the owner;
 nothing else is left open.
+
+**Baseline: a last resort.** For a project that cannot finish the sweep at once, `doctor --baseline` writes the failures
+that remain to `context/doctor-baseline.json` (`{ "note", "created", "entries": [ { "code", "path", "message" } ] }`).
+The check then reports those as `baselined` and fails only on a new failure (a code and path not in the file) and on an
+entry that was fixed but not removed (`baseline-stale`). The file only shrinks: running `--baseline` again drops the
+fixed entries, never adds one (it names them and exits 1), and removes the file once it is empty. State findings are
+never baselined; `--fix` and `--sweep` ignore it. It is the owner's call, recorded in the commit; the recommended path
+is the sweep to zero.
 
 A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in their
 CI check**, documentation-only changes included; the installer prints the line (`npx softure-skills doctor`) until a
