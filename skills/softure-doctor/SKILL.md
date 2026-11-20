@@ -54,7 +54,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `roadmap-archived-not-removed` | the close moved a copy and left `roadmap.md`: remove it (promote the next one only on the owner's word) |
 | `roadmap-status-mismatch` | set `status` to match the rows (`done` only when every row is closed; `waiting` belongs to queued roadmaps) |
 | `archived-change-status` | stamp the archived `change.md` `status: archived` (and `archived_at`) |
-| `archived-change-progress` | the change was archived with open Automated items: tick them with their SHA when the work is on the main branch, or mark them `~~dropped~~ — dropped: <reason>` |
+| `archived-change-progress` | the change was archived with open Automated items: tick them with their SHA when the work is on the main branch, or mark them `~~dropped~~ — dropped: <reason>`. An item struck through or carrying a dropped/cancelled/not-applicable note is already dropped and never counts (`--fix` normalises it) |
 | `archived-roadmap-open-items` | rows of an archived roadmap end `done`, `done_code`, dropped or carried (with where they went) |
 | `archived-roadmap-open-checks` | an archived roadmap still holds unticked owner entries: tick each with its evidence (`— done: <sha / release / path>`), as obsolete (`— obsolete: <reason>`), or carry it to a live roadmap or an `owner-word` issue and tick it with where it went |
 | `archived-roadmap-summary` | put the merge SHA (`git log --merges --grep "<change-id>"`) into each `## Summary` row |
@@ -67,14 +67,16 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 ## Mechanical repairs: `--fix`
 
 `doctor.py --fix` prints every edit it would make and the failures left after them; `--fix --write`
-applies them. It writes only under `context/`, and a second run changes nothing. Two shapes are
+applies them. It writes only under `context/`, and a second run changes nothing. Three shapes are
 mechanical:
 
 - `archived-change-status`: the archived `change.md` gets `status: archived`, and the old value is kept
   as `legacy_status` in its front matter (`implemented`, `done`, `impl_reviewed`, … stay readable);
 - `index-missing-file` in an index inside an archive folder: the link is rewritten to the file's current
   path when git history shows where it moved (renames followed across several moves); a file deleted on
-  purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit.
+  purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit;
+- a dropped Progress item of an archived plan (unticked, but struck through or carrying an explicit
+  dropped/cancelled/not-applicable note) is normalised to `- [x] ~~<item>~~ — dropped: <note>`.
 
 It skips, and names, every row it cannot settle from history (a live index, a target whose move or
 deletion the history does not show). A shallow clone works on the commits it holds and names what lies
@@ -138,7 +140,7 @@ script run creates it.
 - `context/state.json` is written by scripts only. Never edit it by hand; regenerate it.
 - Never tick, fill or close anything in the sweep without the evidence written into the line.
 - The doctor never edits anything, except `--fix --write`, which is run on purpose and edits only the
-  two mechanical shapes above. A skill that runs it fixes only the files it owns in that run.
+  mechanical shapes above. A skill that runs it fixes only the files it owns in that run.
 - `open_changes`, `updated_at` and owner-queue entries from open changes are refreshed on every write
   and never make the file stale, so a change branch that edits its own `change.md` keeps a green doctor.
 - `owner_queue` reads only what is live (WORKFLOW §12.1): an unticked entry left in an archived roadmap

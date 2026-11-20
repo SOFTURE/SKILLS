@@ -402,9 +402,9 @@ class MeasureTest(unittest.TestCase):
 
     EXPECTED = {
         "failures": 5,
-        "fix_edits": 2,
+        "fix_edits": 4,
         "after_fix": 3,
-        "sweep": {"total": 12, "with_evidence": 0, "owner": 12},
+        "sweep": {"total": 10, "with_evidence": 0, "owner": 10},
     }
 
     def measure(self, project: Project) -> dict:
@@ -443,6 +443,39 @@ class MeasureTest(unittest.TestCase):
         finally:
             project.cleanup()
 
+    def test_dropped_progress_items_are_not_open_and_fix_normalises_them(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("adopter", "measure")
+            project.commit("adopter")
+            plan = "context/archive/2026-07-01-booking-page/plan.md"
+            _, report = project.doctor()
+            message = next(f["message"] for f in report["failures"] if f["code"] == "archived-change-progress")
+            self.assertTrue(message.startswith("1 unticked"), message)
+            project.doctor("--fix", "--write")
+            text = project.read(plan)
+            self.assertIn("- [x] ~~1.1 A one-column layout~~ — dropped: cancelled, replaced by 1.4\n", text)
+            self.assertIn("- [x] ~~1.5 Inline field errors~~ — dropped: the redesign moved errors to a summary\n", text)
+            self.assertIn("- [ ] 1.3 `npm test` green\n", text)
+            _, again = project.doctor("--fix")
+            self.assertFalse([e for e in again["edits"] if e["path"] == plan], again["edits"])
+        finally:
+            project.cleanup()
+
+    def test_dropped_item_reads_only_explicit_notes(self) -> None:
+        import doctor
+        dropped = {
+            "~~1.1 A one-column layout~~ — cancelled, replaced by 1.12": "~~1.1 A one-column layout~~ — dropped: cancelled, replaced by 1.12",
+            "~~2.3 Export to CSV~~": "~~2.3 Export to CSV~~ — dropped: struck through, no reason recorded",
+            "1.4 SMS fallback (not applicable)": "~~1.4 SMS fallback~~ — dropped: not applicable",
+            "1.5 Inline errors - dropped: moved to a summary": "~~1.5 Inline errors~~ — dropped: moved to a summary",
+        }
+        for text, expected in dropped.items():
+            self.assertEqual(doctor.dropped_line(text), expected)
+        for text in ("1.3 Handle cancelled bookings", "1.6 `npm test` green", "1.7 Show dropped calls — 9b03e77x",
+                     "1.8 Mark obsolete slots"):
+            self.assertIsNone(doctor.dropped_item(text), text)
+
     def test_shallow_clone_marks_what_it_can_see(self) -> None:
         project = Project()
         clone = tempfile.TemporaryDirectory()
@@ -454,7 +487,8 @@ class MeasureTest(unittest.TestCase):
             shallow = Project.__new__(Project)
             shallow.root = clone.name + "/s"
             _, fix = shallow.doctor("--fix")
-            self.assertEqual([edit["what"].split(" marked")[0] for edit in fix["edits"]], ["`old-notes.md`"])
+            index_edits = [edit for edit in fix["edits"] if edit["code"] == "index-missing-file"]
+            self.assertEqual([edit["what"].split(" marked")[0] for edit in index_edits], ["`old-notes.md`"])
             self.assertTrue(any("shallow" in skip["why"] for skip in fix["skipped"]), fix["skipped"])
         finally:
             clone.cleanup()

@@ -4,7 +4,7 @@
     doctor.py --fix [--write] [--json] [--root <dir>]
     npx softure-skills doctor --fix [--write]
 
-Only two kinds of failure are mechanical, and only files under `context/` are edited:
+Three shapes are mechanical, and only files under `context/` are edited:
 
   archived-change-status   an archived change.md gets `status: archived`; the old value is kept as
                            `legacy_status` in its front matter (a missing status gets none)
@@ -13,6 +13,10 @@ Only two kinds of failure are mechanical, and only files under `context/` are ed
                            file's current path when git history shows where it moved (rename detection,
                            followed across several moves); a file that was deleted on purpose (git shows
                            the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit
+
+  dropped Progress item    an unticked item of an archived plan's `## Progress` that is struck through or
+                           carries a dropped/cancelled/not-applicable note is normalised to
+                           `- [x] ~~<item>~~ — dropped: <note>` (the doctor already reads it as dropped)
 
 Everything else (an index row whose target is not in the history this checkout holds, a live index)
 is a judgement case: `doctor.py --sweep` lists it with evidence. A shallow clone works: what it cannot
@@ -194,6 +198,28 @@ def plan_fixes(reader, root: str | None) -> dict:
         if fixed:
             files[rel] = fixed[0]
             edits.append({"code": "archived-change-status", "path": rel, "what": fixed[1]})
+
+    for name, is_dir in reader.listdir(doctor.ARCHIVE_DIR):
+        if not is_dir:
+            continue
+        rel = f"{doctor.ARCHIVE_DIR}/{name}/plan.md"
+        text = reader.read(rel)
+        if text is None:
+            continue
+        lines = text.split("\n")
+        in_progress = False
+        for index, line in enumerate(lines):
+            if line.startswith("## "):
+                in_progress = line[3:].strip() == "Progress"
+                continue
+            box = re.match(r"^(\s*)- \[ \] (.+)$", line) if in_progress else None
+            normalised = doctor.dropped_line(box.group(2)) if box else None
+            if normalised:
+                lines[index] = f"{box.group(1)}- [x] {normalised}"
+                edits.append({"code": "archived-change-progress", "path": rel, "line": index + 1,
+                              "what": f"dropped item normalised: {normalised}"})
+        if lines != text.split("\n"):
+            files[rel] = "\n".join(lines)
 
     history = History(root)
     for missing in doctor.missing_index_targets(reader):

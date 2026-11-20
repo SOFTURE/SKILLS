@@ -14,7 +14,8 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   roadmap-archived-not-removed    roadmap.md is still there although the same roadmap is in foundation/archive/
   roadmap-status-mismatch         roadmap.md `status` contradicts its rows (done with open rows; waiting)
   archived-change-status          an archived change.md whose status is not `archived`
-  archived-change-progress        an archived plan.md with unticked Automated items in `## Progress`
+  archived-change-progress        an archived plan.md with unticked Automated items in `## Progress` (an item
+                                  struck through or noted dropped/cancelled/not applicable is dropped, not open)
   archived-roadmap-open-items     an archived roadmap with rows that are not done, done_code, dropped or carried
   archived-roadmap-summary        an archived roadmap whose `## Summary` merge column holds placeholders, not SHAs
   archived-roadmap-open-checks    an archived roadmap with unticked owner decisions or checks (or pre-release
@@ -29,7 +30,7 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   baseline-stale                  context/doctor-baseline.json lists a failure that is fixed (remove it), or is unreadable
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
-moved or was deleted on purpose, found through git history) and prints every edit; see doctor_fix.py. It is a dry run unless
+moved or was deleted on purpose, found through git history; a dropped Progress item, normalised) and prints every edit; see doctor_fix.py. It is a dry run unless
 `--write` is given, and it writes only under `context/`. `--sweep` lists every remaining failure with
 the evidence an agent needs to settle it from the repository alone; see doctor_sweep.py.
 
@@ -148,10 +149,45 @@ def check_archived_changes(reader) -> list[Finding]:
     return findings
 
 
-def unticked_automated(plan: str) -> list[str]:
-    """Open `- [ ]` items of `## Progress` that are not under a `#### Manual` heading.
+DROP_WORDS = r"(?:dropped|cancell?ed|not applicable|n/a|obsolete|won't do|wontfix|skipped|replaced by)"
+DROP_NOTE_RE = re.compile(r"\s+(?:—|–|--?)\s+(?P<note>" + DROP_WORDS + r"\b.*)$", re.IGNORECASE)
+DROP_PAREN_RE = re.compile(r"\s*\((?P<note>" + DROP_WORDS + r"\b[^)]*)\)\s*$", re.IGNORECASE)
+STRUCK_RE = re.compile(r"^~~(?P<body>.+?)~~(?P<rest>.*)$")
 
-    Open Manual items are legitimate in an archived plan (manual mode carries them to the owner).
+
+def dropped_item(text: str) -> tuple[str, str] | None:
+    """(item, note) when a checkbox text says the item was dropped; None otherwise.
+
+    Dropped by its own text: struck through (`~~1.1 ...~~`, with or without a note after it), or carrying an
+    explicit note after a dash or in parentheses (`— cancelled, replaced by 1.12`, `(not applicable)`).
+    """
+    text = text.strip()
+    struck = STRUCK_RE.match(text)
+    if struck:
+        rest = re.sub(r"^\s*(?:—|–|--?|:)?\s*", "", struck.group("rest")).strip()
+        return struck.group("body").strip(), rest or "struck through, no reason recorded"
+    for pattern in (DROP_NOTE_RE, DROP_PAREN_RE):
+        found = pattern.search(text)
+        if found and found.start() > 0:
+            return text[:found.start()].strip(), found.group("note").strip()
+    return None
+
+
+def dropped_line(text: str) -> str | None:
+    """The normalised `~~<item>~~ — dropped: <note>` for a dropped checkbox text; None when it is not dropped."""
+    found = dropped_item(text)
+    if not found:
+        return None
+    item, note = found
+    note = re.sub(r"^dropped\s*:?\s*", "", note, flags=re.IGNORECASE) or "no reason recorded"
+    return f"~~{item}~~ — dropped: {note}"
+
+
+def unticked_automated(plan: str) -> list[str]:
+    """Open `- [ ]` items of `## Progress` that are not under a `#### Manual` heading and not dropped.
+
+    Open Manual items are legitimate in an archived plan (manual mode carries them to the owner). An item
+    struck through or carrying a dropped/cancelled/not-applicable note is dropped by its own text.
     """
     progress = sections(plan).get("Progress", [])
     open_items = []
@@ -164,7 +200,7 @@ def unticked_automated(plan: str) -> list[str]:
             manual = False
             continue
         match = re.match(r"^\s*- \[ \] (.+)$", line)
-        if match and not manual:
+        if match and not manual and not dropped_item(match.group(1)):
             open_items.append(match.group(1).strip())
     return open_items
 
