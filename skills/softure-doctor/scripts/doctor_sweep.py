@@ -28,6 +28,12 @@ Every entry has a `class`:
                item ID or file area appears in a later archived change; for a Progress item, a later
                phase of the same plan is ticked (or a later archived change has the item's area). The
                agent closes it as `obsolete: superseded by <ref>` itself, never forwards it
+  forge        a post-merge step the history cannot prove (a release after the merge, `close #N`, the
+               Dependabot pull requests) while the forge cannot be reached from here: an agent with `gh`
+               checks it before anything goes to the owner. With the forge reachable (`gh` and a GitHub
+               remote), the sweep asks it itself: a release published on or after the merge date, the
+               state of each `#N`, open Dependabot pull requests; when every check holds the entry is
+               `evidence` with those pointers (`--no-forge` skips the forge)
   owner        only the owner can settle it: a decision about future work, a secret, account or connector,
                or a step outside the repository whose effect the agent cannot see (`owner_reason` says
                which; `unsettled` when nothing at all was found), with `tried`: what the sweep looked for
@@ -409,7 +415,9 @@ def _progress_entries(reader, git: Git, path: str) -> list[dict]:
         if git.shallow:
             tried.append("the history is a shallow clone; `git fetch --deepen <n>` may find more")
         entries.append(_entry("archived-change-progress", path, number, line, subject, evidence,
-                              superseded=superseded, tried=tried, owner_text=subject))
+                              superseded=superseded, tried=tried, owner_text=subject,
+                              merged_on=merges[0]["date"] if merges else (change.get("archived_at") or change.get("updated")
+                                                                         or since)))
     return entries
 
 
@@ -490,7 +498,8 @@ def _open_check_entries(reader, git: Git, path: str) -> list[dict]:
         entries.append(_entry("archived-roadmap-open-checks", path, number, line, box.group("text").strip(),
                               evidence, superseded=superseded, tried=tried,
                               owner_text=None if carried else box.group("text"), item=item, change_id=change_id,
-                              section=section, settle_override=CARRIED_SETTLE if carried else None))
+                              section=section, settle_override=CARRIED_SETTLE if carried else None,
+                              merged_on=closed_on))
     return entries
 
 
@@ -526,11 +535,15 @@ def _file_entry(failure, reader) -> dict:
     return _entry(failure.code, failure.path, None, "", failure.message, evidence)
 
 
-def sweep(reader, root: str | None) -> list[dict]:
-    """Every failure the doctor reports on `reader`, as worklist entries with evidence."""
+def sweep(reader, root: str | None, forge: "Forge | None" = None) -> list[dict]:
+    """Every failure the doctor reports on `reader`, as worklist entries with evidence.
+
+    `forge` (default: `Forge(root)`, through `gh`) is asked about post-merge steps that the history cannot prove.
+    """
     import doctor
 
     git = Git(root)
+    forge = forge if forge is not None else Forge(root)
     entries: list[dict] = []
     indexes_done = False
     for failure in doctor.run_checks(reader, root, baseline=False):
@@ -550,4 +563,134 @@ def sweep(reader, root: str | None) -> list[dict]:
             entries += _open_check_entries(reader, git, failure.path)
         else:
             entries.append(_file_entry(failure, reader))
+    for entry in entries:
+        _forge_step(entry, forge)
     return entries
+
+
+# ---------------------------------------------------------------- forge
+
+
+class Forge:
+    """Read-only questions to the repository's forge through `gh` (`$SOFTURE_GH` names another binary).
+
+    `{owner}/{repo}` is resolved by `gh` from the checkout's remote. `reachable` is False without `gh`, without a
+    GitHub remote, without credentials, or when `enabled` is False (`--no-forge`); every answer is then None.
+    """
+
+    def __init__(self, root: str | None, enabled: bool = True) -> None:
+        self.root = root
+        self.enabled = enabled and bool(root)
+        self._reachable: bool | None = None
+        self._releases: list[dict] | None = None
+
+    def _api(self, path: str):
+        import json
+
+        try:
+            out = subprocess.run([os.environ.get("SOFTURE_GH", "gh"), "api", path], cwd=self.root,
+                                 capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if out.returncode != 0:
+            return None
+        try:
+            return json.loads(out.stdout)
+        except ValueError:
+            return None
+
+    @property
+    def reachable(self) -> bool:
+        if self._reachable is None:
+            self._reachable = self.enabled and isinstance(self._api("repos/{owner}/{repo}"), dict)
+        return self._reachable
+
+    def releases(self) -> list[dict]:
+        if self._releases is None:
+            data = self._api("repos/{owner}/{repo}/releases?per_page=100") if self.reachable else None
+            self._releases = sorted((release for release in data or [] if isinstance(release, dict)
+                                     and not release.get("draft") and release.get("published_at")),
+                                    key=lambda release: release["published_at"])
+        return self._releases
+
+    def release_after(self, day: str | None) -> dict | None:
+        """The first published release on or after `day`."""
+        return next((release for release in self.releases() if release["published_at"][:10] >= (day or "")), None)
+
+    def issue(self, number: str) -> dict | None:
+        data = self._api(f"repos/{{owner}}/{{repo}}/issues/{number}") if self.reachable else None
+        return data if isinstance(data, dict) else None
+
+    def open_dependabot_before(self, day: str | None) -> list[dict] | None:
+        data = self._api("repos/{owner}/{repo}/pulls?state=open&per_page=100") if self.reachable else None
+        if not isinstance(data, list):
+            return None
+        return [pull for pull in data if "dependabot" in ((pull.get("user") or {}).get("login") or "")
+                and (pull.get("created_at") or "")[:10] <= (day or "9999")]
+
+
+RELEASE_STEP_RE = re.compile(r"\b(?:release|released|publish|published)\b", re.IGNORECASE)
+ISSUE_REF_RE = re.compile(r"(?<![\w/&])#(\d+)\b")
+DEPENDABOT_RE = re.compile(r"\bdependabot\b", re.IGNORECASE)
+FORGE_SETTLE = ("check it with the forge before anything goes to the owner (`gh release list`, `gh issue view <N>`, "
+                "`gh pr list --author app/dependabot`), then tick it with what the forge shows")
+
+
+def forge_checks(text: str) -> list[tuple[str, str | None]]:
+    """What the forge can prove for a post-merge step: ("release", None), ("issue", "<N>"), ("dependabot", None)."""
+    checks: list[tuple[str, str | None]] = []
+    if RELEASE_STEP_RE.search(text or ""):
+        checks.append(("release", None))
+    checks += [("issue", number) for number in dict.fromkeys(ISSUE_REF_RE.findall(text or ""))]
+    if DEPENDABOT_RE.search(text or ""):
+        checks.append(("dependabot", None))
+    return checks
+
+
+def _forge_step(entry: dict, forge: Forge) -> None:
+    """Settle a post-merge step the history cannot prove with the forge: `evidence`, else `forge` when unreachable.
+
+    Only entries the sweep would hand to the owner as `unsettled` or `outside` are asked about; a decision or a
+    secret stays the owner's. Every check the line names must hold for `evidence`.
+    """
+    if entry["class"] != "owner" or entry.get("owner_reason") not in ("unsettled", "outside"):
+        return
+    checks = forge_checks(entry.get("subject") or entry.get("text") or "")
+    if not checks:
+        return
+    day = entry.get("merged_on")
+    if not forge.reachable:
+        entry.update({"class": "forge", "owner": False, "owner_reason": None, "settle": FORGE_SETTLE,
+                      "tried": entry.get("tried", []) + ["the forge: not reachable here (no `gh`, no GitHub remote or "
+                                                          "no credentials); an agent with `gh` checks it"]})
+        return
+    found: list[dict] = []
+    missing: list[str] = []
+    for kind, value in checks:
+        if kind == "release":
+            release = forge.release_after(day)
+            if release:
+                found.append(_evidence("release", release.get("tag_name") or "?",
+                                       f"published {release['published_at'][:10]}, on or after the merge ({day})"))
+            else:
+                missing.append(f"a release published on or after {day}: none")
+        elif kind == "issue":
+            issue = forge.issue(value)
+            pull = (issue or {}).get("pull_request") or {}
+            if issue and issue.get("state") == "closed":
+                what = "pull request merged" if pull.get("merged_at") else ("pull request closed" if pull else "closed")
+                found.append(_evidence("issue", f"#{value}", f"{what} {(issue.get('closed_at') or '')[:10]}".strip()))
+            else:
+                missing.append(f"#{value}: {issue.get('state') if issue else 'not found'}")
+        else:
+            pulls = forge.open_dependabot_before(day)
+            if pulls == []:
+                found.append(_evidence("forge", "dependabot", f"no open Dependabot pull request opened by {day}"))
+            else:
+                missing.append(f"open Dependabot pull requests opened by {day}: "
+                               + (", ".join(f"#{pull.get('number')}" for pull in pulls) if pulls else "unknown"))
+    if not missing:
+        entry.update({"class": "evidence", "owner": False, "owner_reason": None, "evidence": found, "tried": [],
+                      "settle": SETTLE.get(entry["code"], "fix the file it names")})
+    else:
+        entry["tried"] = entry.get("tried", []) + [f"the forge: {note}" for note in missing]

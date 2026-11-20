@@ -863,7 +863,12 @@ and later roadmaps that mention the item. Each entry has a class. `evidence`: th
 no direct evidence, but later work made it obsolete (for an owner check or open row of an archived roadmap, a later
 roadmap was closed and a release shipped after it, or the same item ID or file area appears in a later archived change;
 for a Progress item, a later phase of the same plan is ticked); its evidence names that roadmap, release or change, and
-the agent closes it as `obsolete: superseded by <ref>` itself, never forwards it. `owner`: only for what is still
+the agent closes it as `obsolete: superseded by <ref>` itself, never forwards it. Post-merge steps that git history
+cannot prove (a release after the merge, `close #N`, the Dependabot pull requests) are asked of the forge through `gh`
+when it is reachable (a GitHub remote and credentials): a release published on or after the merge date, the state of
+each `#N`, the open Dependabot pull requests; when every check holds the entry is `evidence` with those pointers.
+`forge`: the same steps when the forge cannot be reached from where the sweep runs (or with `--no-forge`); an agent
+checks them with `gh` before anything goes to the owner. `owner`: only for what is still
 meaningful today, a decision about future work, a secret, account or connector, or a step outside the repository whose
 effect the agent cannot see; the entry says which (`owner_reason`) and what the sweep looked for (`tried`). The
 `softure-doctor` skill ("Sweep history to zero") tells an agent how to work it: every entry is settled with its evidence

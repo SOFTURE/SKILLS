@@ -16,6 +16,9 @@ so rename detection has a real history to read.
 evidence comes from (`commit <path> <message>` writes the file and commits it with that message, `tag <name>`;
 `add` and `rm` take an optional commit message after the path).
 
+`tests/fixtures/doctor/forge/post-merge/` holds post-merge Progress items (a release, `close #N`, the Dependabot pull
+requests, a monitoring rule) that only the forge can prove; `ForgeTest` runs the sweep with a stubbed `gh` and without.
+
 `tests/fixtures/doctor/state/<case>/` holds one shape of `context/` that an outside reader of `state.json` must get
 right (a project between roadmaps, an idle placeholder roadmap, owner entries reworded or moved after the clean
 state.json was written); `StateTest` checks what `write` produces from it.
@@ -42,6 +45,7 @@ GIT_ENV = {
     "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@example.com",
     "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.com",
     "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+    "SOFTURE_GH": os.path.join(os.sep, "nonexistent", "gh"),  # no forge unless a test stubs one
 }
 sys.dont_write_bytecode = True  # the package ships skills/, so no __pycache__ may land there
 sys.path.insert(0, SCRIPTS)
@@ -414,7 +418,7 @@ class MeasureTest(unittest.TestCase):
         "failures": 4,
         "fix_edits": 5,
         "after_fix": 2,
-        "sweep": {"total": 5, "with_evidence": 0, "superseded": 3, "owner": 2},
+        "sweep": {"total": 5, "with_evidence": 0, "superseded": 3, "forge": 0, "owner": 2},
     }
 
     def measure(self, project: Project) -> dict:
@@ -693,6 +697,85 @@ class CarriedTest(unittest.TestCase):
         self.assertEqual(self.project.codes(), {"archived-roadmap-open-checks", "archived-roadmap-open-items"})
         for entry in self.project.doctor("--sweep")[1]["entries"]:
             self.assertFalse(any("carry marker" in evidence["note"] for evidence in entry["evidence"]), entry)
+
+
+FAKE_GH = """#!/usr/bin/env python3
+import json, os, sys
+path = sys.argv[-1]
+answers = json.load(open(os.environ["FAKE_GH_ANSWERS"]))
+for prefix, answer in answers.items():
+    if path.startswith(prefix):
+        print(json.dumps(answer))
+        sys.exit(0)
+sys.stderr.write("gh: Not Found (HTTP 404)\\n")
+sys.exit(1)
+"""
+
+
+class ForgeTest(unittest.TestCase):
+    """`--sweep` asks the forge about post-merge steps (fixture `forge/post-merge`, a stubbed `gh`)."""
+
+    PLAN = "context/archive/2026-10-05-search-reindex/plan.md"
+
+    def setUp(self) -> None:
+        self.project = Project()
+        self.project.apply_case("post-merge", "forge")
+        self.project.commit("post-merge")
+        self.gh = os.path.join(self.project.root, ".git", "fake-gh")
+        with open(self.gh, "w", encoding="utf-8") as fh:
+            fh.write(FAKE_GH)
+        os.chmod(self.gh, 0o755)
+        self.answers = os.path.join(self.project.root, ".git", "fake-gh.json")
+
+    def tearDown(self) -> None:
+        self.project.cleanup()
+
+    def sweep(self, answers: dict | None, *args: str) -> dict:
+        env = {**os.environ, **GIT_ENV}
+        if answers is not None:
+            with open(self.answers, "w", encoding="utf-8") as fh:
+                json.dump(answers, fh)
+            env.update({"SOFTURE_GH": self.gh, "FAKE_GH_ANSWERS": self.answers})
+        result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "doctor.py"), "--root", self.project.root,
+                                 "--json", "--sweep", *args], env=env, capture_output=True, text=True)
+        report = json.loads(result.stdout)
+        return {entry["subject"].split(" ", 1)[0]: entry for entry in report["entries"] if entry["path"] == self.PLAN}
+
+    FORGE = {
+        "repos/{owner}/{repo}/releases": [
+            {"tag_name": "v1.4.9", "published_at": "2026-10-01T10:00:00Z"},
+            {"tag_name": "v1.5.0", "published_at": "2026-10-07T10:00:00Z"},
+        ],
+        "repos/{owner}/{repo}/issues/12": {"number": 12, "state": "closed", "closed_at": "2026-10-06T09:00:00Z"},
+        "repos/{owner}/{repo}/pulls": [
+            {"number": 30, "user": {"login": "dependabot[bot]"}, "created_at": "2026-11-02T00:00:00Z"},
+        ],
+        "repos/{owner}/{repo}": {"full_name": "acme/clinic-site"},
+    }
+
+    def test_a_later_release_and_closed_issues_are_evidence(self) -> None:
+        entries = self.sweep(self.FORGE)
+        release = entries["1.2"]
+        self.assertEqual(release["class"], "evidence")
+        self.assertEqual(release["evidence"][0]["ref"], "v1.5.0", "the first release after the merge, not before")
+        self.assertEqual((entries["1.3"]["class"], entries["1.3"]["evidence"][0]["ref"]), ("evidence", "#12"))
+        self.assertEqual(entries["1.4"]["class"], "evidence", "the only open Dependabot PR is newer than the merge")
+        self.assertEqual(entries["1.5"]["class"], "owner", "the forge cannot prove a Grafana rule")
+
+    def test_what_the_forge_does_not_show_stays_open(self) -> None:
+        answers = {**self.FORGE, "repos/{owner}/{repo}/releases": [{"tag_name": "v1.4.9",
+                                                                     "published_at": "2026-10-01T10:00:00Z"}],
+                   "repos/{owner}/{repo}/issues/12": {"number": 12, "state": "open"}}
+        entries = self.sweep(answers)
+        self.assertEqual(entries["1.2"]["class"], "owner")
+        self.assertTrue(any("a release published on or after 2026-10-05: none" in tried for tried in entries["1.2"]["tried"]))
+        self.assertEqual(entries["1.3"]["class"], "owner")
+
+    def test_without_a_forge_post_merge_steps_are_the_forge_class(self) -> None:
+        for entries in (self.sweep(None), self.sweep(self.FORGE, "--no-forge")):
+            self.assertEqual({key: entries[key]["class"] for key in ("1.2", "1.3", "1.4", "1.5")},
+                             {"1.2": "forge", "1.3": "forge", "1.4": "forge", "1.5": "owner"})
+            self.assertFalse(entries["1.2"]["owner"])
 
 
 class CiReportTest(unittest.TestCase):
