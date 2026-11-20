@@ -39,6 +39,18 @@ It fails on drift in `context/` (a roadmap left after its archive, archived chan
 line until a workflow runs it. `npx softure-skills state` regenerates `context/state.json`, which the
 scripts otherwise write themselves.
 
+## Many projects at once
+
+`npx softure-skills portfolio` is read-only: it reads `context/state.json` from the main branch of every
+listed repository (arguments, or `~/.config/softure/portfolio.json` outside any project) and prints one table:
+
+```
+| project | active roadmap X/N | queued | open changes | owner queue | last release | doctor |
+```
+
+`--owner` prints only what waits for the owner across all projects, oldest first; `--json` gives the same
+data to another tool; `--source api` reads through the GitHub API instead of git. See WORKFLOW §12.3.
+
 **Operating mode.** `context/workflow.json` → `mode` is `"manual"` (default) or `"autonomous"`, and the
 installer injects only that mode's section into the rules block:
 

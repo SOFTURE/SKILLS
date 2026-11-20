@@ -17,6 +17,7 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, "skills", "softure-worktree", "scripts", "wt-roadmap.py")
+sys.dont_write_bytecode = True  # the package ships skills/, so no __pycache__ may land there
 sys.path.insert(0, os.path.join(ROOT, "skills", "softure-doctor", "scripts"))
 import context_state  # noqa: E402
 GIT_ENV = {

@@ -26,6 +26,7 @@ GIT_ENV = {
     "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.com",
     "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
 }
+sys.dont_write_bytecode = True  # the package ships skills/, so no __pycache__ may land there
 sys.path.insert(0, SCRIPTS)
 import context_state  # noqa: E402
 

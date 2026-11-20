@@ -10,6 +10,7 @@
 // Subcommands (run from the project root; Python 3, like the other scripts):
 //   softure-skills doctor [--json]          check the context/ contract (WORKFLOW.md §12); exit 1 on drift
 //   softure-skills state [write|print|check] regenerate context/state.json (default: write)
+//   softure-skills portfolio [<repo> ...] [--owner] [--json]   read-only table across many repositories
 //
 // Per-project choices live in context/workflow.json -> "install" (all optional):
 //   "gitignore": false              commit the installed skills instead of ignoring them
@@ -42,6 +43,7 @@ const DOCTOR_SCRIPTS = path.join(PACKAGE_ROOT, "skills", "softure-doctor", "scri
 const SUBCOMMANDS = {
   doctor: [path.join(DOCTOR_SCRIPTS, "doctor.py"), []],
   state: [path.join(DOCTOR_SCRIPTS, "context_state.py"), ["write"]],
+  portfolio: [path.join(PACKAGE_ROOT, "scripts", "portfolio.py"), []],
 };
 const CI_LINE = "npx softure-skills doctor";
 
