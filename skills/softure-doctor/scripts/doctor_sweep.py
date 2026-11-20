@@ -17,9 +17,20 @@ evidence found in the repository, and how to settle it:
                                 the roadmap was closed
   anything else                 the file to fix (and `--fix` for the mechanical shapes)
 
-An entry with no evidence at all carries `"owner": true`: only the owner can settle it, and it goes to
-the owner's list (WORKFLOW §12.4). The skill section "Sweep history to zero" tells an agent how to work
-the list: settle every entry with its evidence, never without.
+Every entry has a `class`:
+
+  evidence     the repository holds evidence that settles it (above); the agent settles it with that proof
+  superseded   no direct evidence, but later work made it obsolete: for an owner check or open row of an
+               archived roadmap, a later roadmap was closed and a release shipped after it, or the same
+               item ID or file area appears in a later archived change; for a Progress item, a later
+               phase of the same plan is ticked (or a later archived change has the item's area). The
+               agent closes it as `obsolete: superseded by <ref>` itself, never forwards it
+  owner        only the owner can settle it: a decision about future work, a secret, account or connector,
+               or a step outside the repository whose effect the agent cannot see (`owner_reason` says
+               which; `unsettled` when nothing at all was found), with `tried`: what the sweep looked for
+
+`"owner": true` marks the owner class. The skill section "Sweep history to zero" tells an agent how to
+work the list: settle every entry with its evidence, never without.
 
 Importable: `from doctor_sweep import sweep`.
 """
@@ -33,14 +44,25 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_state import (  # noqa: E402
-    ARCHIVE_ROADMAPS_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_SECTION, ROADMAP_PATH, CHECKBOX_RE,
-    ITEM_REF_RE, archived_roadmap_files, frontmatter, pending_release_roadmap, roadmap_rows, sections,
+    ARCHIVE_ROADMAPS_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_LINE_RE, RELEASE_SECTION, ROADMAP_PATH, CHECKBOX_RE,
+    ITEM_REF_RE, SECRET_RE, archived_roadmap_files, frontmatter, pending_release_roadmap, roadmap_rows, sections,
 )
 
 SHA_TAIL_RE = re.compile(r"\b([0-9a-f]{7,40})\b")
 PATH_RE = re.compile(r"`((?:[\w.-]+/)+[\w.-]+\.\w+|[\w.-]+\.(?:ts|tsx|js|jsx|mjs|py|cs|go|rs|java|kt|rb|php|sql|css|scss|html|json|yml|yaml|sh))`")
 SEMVER_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+")
+AREA_RE = re.compile(r"`((?:\.{0,2}/)?(?:[\w.@-]+/)+[\w.@-]*)`")
 LIMIT = 3
+
+# What only the owner can settle (WORKFLOW §12.4); everything else is the agent's.
+OWNER_KINDS = (
+    ("decision", re.compile(r"\b(?:decide|decision|choose|agree on|sign[- ]off)\b", re.IGNORECASE)),
+    ("secret", re.compile(SECRET_RE.pattern + r"|\b(?:accounts?|connectors?|oauth|dns|domains?|certificates?|billing"
+                          r"|subscriptions?|licen[cs]es?)\b|`[A-Z][A-Z0-9]*_[A-Z0-9_]+`", re.IGNORECASE)),
+    ("outside", re.compile(r"\b(?:in production|on production|production (?:environment|settings?)|in staging"
+                           r"|app store|play store|real (?:phone|device)|with the (?:client|customer|vendor)"
+                           r"|support ticket|by (?:e-?mail|phone) to)\b", re.IGNORECASE)),
+)
 
 SETTLE = {
     "archived-change-progress": "tick it with the SHA that did it (`- [x] <text> — <sha>`), or, when the work was "
@@ -52,6 +74,18 @@ SETTLE = {
     "archived-roadmap-open-checks": "tick it with its evidence (`— done: <sha | release | path>`), as obsolete "
                                     "(`— obsolete: <reason>`), or carry it to a live roadmap or an owner-word issue "
                                     "and tick it with where it went (`— carried to <path | #N>`)",
+}
+
+SETTLE_SUPERSEDED = {
+    "archived-change-progress": "close it yourself: `- [x] <text> — obsolete: superseded by <ref>` (never forward it)",
+    "archived-roadmap-open-items": "set the row's status to `dropped (obsolete: superseded by <ref>)` (never forward it)",
+    "archived-roadmap-open-checks": "close it yourself: `- [x] <text> — obsolete: superseded by <ref>` "
+                                    "(never forward it to the owner)",
+}
+
+SETTLE_OWNER = {
+    "archived-roadmap-open-checks": "the owner's: carry it to the live roadmap's `## Owner decisions and checks` (or "
+                                    "an owner-word issue) and tick it `— carried to <path | #N>`",
     "archived-change-status": "mechanical: `doctor --fix --write`",
     "index-missing-file": "point the row at the file's current path, or drop the row",
     "roadmap-archived-not-removed": "remove roadmap.md (the close moved it)",
@@ -69,9 +103,11 @@ class Git:
     def __init__(self, root: str | None) -> None:
         self.root = root
         self.usable = False
+        self.shallow = False
         if root:
             probe = self._run("rev-parse", "--is-shallow-repository")
-            self.usable = probe.returncode == 0 and probe.stdout.strip() == "false"
+            self.usable = probe.returncode == 0
+            self.shallow = probe.stdout.strip() == "true"
 
     def _run(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(["git", "-C", self.root or ".", *args], capture_output=True, text=True)
@@ -106,15 +142,15 @@ class Git:
         tags = [tag for tag in out.stdout.split() if SEMVER_TAG_RE.match(tag)]
         return tags[0] if tags else None
 
-    def release_after(self, day: str | None) -> dict | None:
-        """The first release tag created on or after `day`."""
+    def release_after(self, day: str | None, strict: bool = False) -> dict | None:
+        """The first release tag created on or after `day` (after it, with `strict`)."""
         if not self.usable or not day:
             return None
         out = self._run("for-each-ref", "--sort=creatordate", "--format=%(refname:short)\t%(creatordate:short)",
                         "refs/tags")
         for line in out.stdout.splitlines():
             tag, _, date = line.partition("\t")
-            if SEMVER_TAG_RE.match(tag) and date >= day:
+            if SEMVER_TAG_RE.match(tag) and (date > day if strict else date >= day):
                 return {"tag": tag, "date": date}
         return None
 
@@ -179,10 +215,109 @@ def _item_evidence(reader, git: Git, path: str, item: str | None, change_id: str
     return evidence
 
 
+def owner_kind(text: str) -> str | None:
+    """`decision`, `secret` or `outside` when the line is something only the owner can settle; None otherwise."""
+    for kind, pattern in OWNER_KINDS:
+        if pattern.search(text or ""):
+            return kind
+    return None
+
+
 def _entry(code: str, path: str, line: int | None, text: str, subject: str, evidence: list[dict],
+           superseded: list[dict] | None = None, tried: list[str] | None = None, owner_text: str | None = None,
            **extra) -> dict:
+    """One worklist entry, classed `evidence`, `superseded` or `owner` (in that order of proof).
+
+    `owner_text` (the line, for checks and Progress items) lets a decision, a secret or a step outside the
+    repository stay the owner's even when later work exists; anything else without direct evidence is
+    superseded when later work made it obsolete, and the owner's (`unsettled`) only when nothing was found.
+    """
+    kind = owner_kind(owner_text) if owner_text is not None else None
+    if evidence:
+        klass, reason, settle = "evidence", None, SETTLE.get(code, "fix the file it names")
+    elif kind:
+        klass, reason, settle = "owner", kind, SETTLE_OWNER.get(code, SETTLE.get(code, "fix the file it names"))
+    elif superseded:
+        klass, reason, settle = "superseded", None, SETTLE_SUPERSEDED.get(code, SETTLE.get(code, "fix the file it names"))
+        evidence = superseded
+    else:
+        klass, reason, settle = "owner", "unsettled", SETTLE.get(code, "fix the file it names")
     return {"code": code, "path": path, "line": line, "text": text, "subject": subject, "evidence": evidence,
-            "owner": not evidence, "settle": SETTLE.get(code, "fix the file it names"), **extra}
+            "class": klass, "owner": klass == "owner", "owner_reason": reason,
+            "tried": [] if klass == "evidence" else (tried or []), "settle": settle, **extra}
+
+
+# ---------------------------------------------------------------- superseded
+
+
+def _areas(text: str) -> list[str]:
+    """File areas a line names: the folder of each backticked path (`src/booking/page.tsx` -> `src/booking/`)."""
+    areas = []
+    for path in AREA_RE.findall(text or "") + PATH_RE.findall(text or ""):
+        folder = path if path.endswith("/") else (os.path.dirname(path) + "/" if "/" in path else "")
+        if folder and folder not in areas and folder.strip("./"):
+            areas.append(folder.lstrip("./") if folder.startswith("./") else folder)
+    return areas
+
+
+def _later_changes(reader, day: str | None, needles: list[str], exclude: str | None = None) -> list[dict]:
+    """Archived changes dated after `day` whose change.md or plan.md names an item ID, change ID or file area."""
+    needles = [needle for needle in needles if needle]
+    if not day or not needles:
+        return []
+    found = []
+    for name, is_dir in sorted(reader.listdir("context/archive")):
+        date = re.match(r"^(\d{4}-\d{2}-\d{2})-", name)
+        folder = f"context/archive/{name}"
+        if not is_dir or not date or date.group(1) <= day or folder == exclude:
+            continue
+        for rel in ("change.md", "plan.md"):
+            text = reader.read(f"{folder}/{rel}") or ""
+            hit = next((needle for needle in needles
+                        if re.search(r"(?<![\w-])" + re.escape(needle) + (r"" if needle.endswith("/") else r"(?![\w-])"),
+                                     text)), None)
+            if hit:
+                found.append(_evidence("file", f"{folder}/", f"a later archived change on the same "
+                                                            f"{'area' if hit.endswith('/') else 'item'} (`{hit}`)"))
+                break
+        if found:
+            break
+    return found
+
+
+def _later_release(reader, git: Git, day: str, later: list[str]) -> dict | None:
+    """The first release after `day`: a release tag, else a `Release:` line of a later archived roadmap."""
+    tag = git.release_after(day, strict=True)
+    if tag:
+        return _evidence("release", tag["tag"], f"released {tag['date']}, after {day}")
+    for path in later:
+        for line in sections(reader.read(path) or "").get("Summary", []):
+            match = RELEASE_LINE_RE.match(line.strip())
+            if match and (match.group("date") or "9999") > day:
+                return _evidence("release", match.group("version"), f"released {match.group('date') or 'later'}, "
+                                                                     f"recorded in {path}")
+    return None
+
+
+def _superseded_roadmap_entry(reader, git: Git, path: str, text: str, needles: list[str]) -> tuple[list, list]:
+    """(superseded evidence, what was tried) for an open check or row of the archived roadmap `path`."""
+    closed_on = _date_of(path, frontmatter(reader.read(path) or "")) or ""
+    later = [p for p in archived_roadmap_files(reader) if p > path and roadmap_rows(reader.read(p) or "")]
+    tried = []
+    evidence: list[dict] = []
+    release = _later_release(reader, git, closed_on, later) if later else None
+    if later and release:
+        evidence = [_evidence("file", later[0], f"a later roadmap, closed after {closed_on}"), release]
+    tried.append(f"a later closed roadmap: {later[0] if later else 'none'}; a release after {closed_on}: "
+                 f"{release['ref'] if release else 'none'}")
+    areas = _areas(text)
+    if not evidence:
+        evidence = _later_changes(reader, closed_on, needles + areas)
+        tried.append(f"later archived changes naming {', '.join(f'`{n}`' for n in needles + areas) or 'its item or area'}: "
+                     + ("found" if evidence else "none"))
+    if git.shallow:
+        tried.append("the history is a shallow clone; `git fetch --deepen <n>` may find more")
+    return evidence, tried
 
 
 # ---------------------------------------------------------------- per failure code
@@ -212,6 +347,8 @@ def _progress_entries(reader, git: Git, path: str) -> list[dict]:
     in_progress = False
     phase = None
     phase_shas: dict[str, list[str]] = {}
+    phase_marks: dict[str, list[bool]] = {}
+    phase_lines: dict[str, int] = {}
     pending: list[tuple[int, str, str, str]] = []
     for number, line in enumerate(_lines(text), start=1):
         if line.startswith("## "):
@@ -222,10 +359,12 @@ def _progress_entries(reader, git: Git, path: str) -> list[dict]:
         heading = re.match(r"^### Phase (\d+)", line)
         if heading:
             phase = heading.group(1)
+            phase_lines.setdefault(phase, number)
             continue
         box = CHECKBOX_RE.match(line)
         if not box:
             continue
+        phase_marks.setdefault(phase or "", []).append(box.group("mark") != " ")
         if box.group("mark") != " ":
             tail = line.rsplit(" — ", 1)[-1] if " — " in line else ""
             phase_shas.setdefault(phase or "", []).extend(SHA_TAIL_RE.findall(tail))
@@ -238,7 +377,20 @@ def _progress_entries(reader, git: Git, path: str) -> list[dict]:
         files = sorted(set(phase_files.get(phase, [])))
         evidence += _commit_evidence(git.touching(files, since), f"touched {', '.join(files)} after {since}")
         evidence += _commit_evidence(merges, "merge of the change")
-        entries.append(_entry("archived-change-progress", path, number, line, subject, evidence))
+        later = [p for p, marks in phase_marks.items() if p.isdigit() and phase.isdigit() and int(p) > int(phase)
+                 and marks and all(marks)]
+        superseded = [_evidence("file", f"{path}:{phase_lines[p]}", f"phase {p}, later in the same plan, is ticked")
+                      for p in sorted(later, key=int)[:1]]
+        tried = [f"commits citing or touching phase {phase or '?'} and merges naming `{change_id}`: none",
+                 f"a later phase of the plan, all ticked: {'phase ' + later[0] if later else 'none'}"]
+        if not superseded:
+            superseded = _later_changes(reader, since, _areas(subject), exclude=folder)
+            tried.append(f"later archived changes on its area ({', '.join(_areas(subject)) or 'no area named'}): "
+                         + ("found" if superseded else "none"))
+        if git.shallow:
+            tried.append("the history is a shallow clone; `git fetch --deepen <n>` may find more")
+        entries.append(_entry("archived-change-progress", path, number, line, subject, evidence,
+                              superseded=superseded, tried=tried, owner_text=subject))
     return entries
 
 
@@ -281,8 +433,11 @@ def _open_item_entries(reader, git: Git, path: str) -> list[dict]:
         row = rows.pop(match.group(1))
         status = [cell.strip() for cell in line.strip().strip("|").split("|")][-1]
         evidence = _item_evidence(reader, git, path, row["id"], row["change_id"])
+        superseded, tried = ([], []) if evidence else _superseded_roadmap_entry(
+            reader, git, path, line, [row["id"], row["change_id"]])
         entries.append(_entry("archived-roadmap-open-items", path, number, line, f"{row['id']} ({row['status']})",
-                              evidence, item=row["id"], change_id=row["change_id"], status=status))
+                              evidence, superseded=superseded, tried=tried, item=row["id"],
+                              change_id=row["change_id"], status=status))
     return entries
 
 
@@ -308,8 +463,11 @@ def _open_check_entries(reader, git: Git, path: str) -> list[dict]:
         evidence = _item_evidence(reader, git, path, item, change_id) if item else []
         if release and section == RELEASE_SECTION:
             evidence.append(_evidence("release", release["tag"], f"released {release['date']}, after the close"))
+        superseded, tried = ([], []) if evidence else _superseded_roadmap_entry(
+            reader, git, path, line, [item, change_id] if item else [])
         entries.append(_entry("archived-roadmap-open-checks", path, number, line, box.group("text").strip(),
-                              evidence, item=item, change_id=change_id, section=section))
+                              evidence, superseded=superseded, tried=tried, owner_text=box.group("text"),
+                              item=item, change_id=change_id, section=section))
     return entries
 
 

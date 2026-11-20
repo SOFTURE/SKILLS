@@ -304,7 +304,12 @@ def settle(project: Project, entry: dict) -> None:
     assert lines[index] == entry["text"], (lines[index], entry["text"])
     text = entry["text"]
     commits = [evidence["ref"] for evidence in entry["evidence"] if evidence["kind"] == "commit"]
-    if entry["code"] == "archived-change-progress":
+    if entry["class"] == "superseded" and entry["code"] == "archived-roadmap-open-items":
+        lines[index] = text.replace(entry["status"], f"dropped (obsolete: superseded by {entry['evidence'][0]['ref']})")
+    elif entry["class"] == "superseded":
+        refs = " and ".join(evidence["ref"] for evidence in entry["evidence"])
+        lines[index] = text.replace("- [ ] ", "- [x] ", 1) + f" — obsolete: superseded by {refs}"
+    elif entry["code"] == "archived-change-progress":
         lines[index] = text.replace("- [ ] ", "- [x] ", 1) + f" — {commits[0]}"
     elif entry["code"] == "archived-roadmap-summary":
         lines[index] = text.replace(entry["cell"], commits[0])
@@ -404,7 +409,7 @@ class MeasureTest(unittest.TestCase):
         "failures": 4,
         "fix_edits": 4,
         "after_fix": 2,
-        "sweep": {"total": 5, "with_evidence": 0, "owner": 5},
+        "sweep": {"total": 5, "with_evidence": 0, "superseded": 3, "owner": 2},
     }
 
     def measure(self, project: Project) -> dict:
@@ -475,6 +480,46 @@ class MeasureTest(unittest.TestCase):
         for text in ("1.3 Handle cancelled bookings", "1.6 `npm test` green", "1.7 Show dropped calls — 9b03e77x",
                      "1.8 Mark obsolete slots"):
             self.assertIsNone(doctor.dropped_item(text), text)
+
+    def test_superseded_checks_carry_their_evidence_and_owner_keeps_only_its_kinds(self) -> None:
+        project = Project()
+        try:
+            project.apply_case("adopter", "measure")
+            project.commit("adopter")
+            project.doctor("--fix", "--write")
+            entries = project.doctor("--sweep")[1]["entries"]
+            by_subject = {entry["subject"].split(" ", 2)[1] if entry["subject"].startswith("1.") else
+                          entry["subject"].split(" ")[0]: entry for entry in entries}
+            screenshots = by_subject["Review"]
+            self.assertEqual(screenshots["class"], "superseded")
+            self.assertEqual([(e["kind"], e["ref"]) for e in screenshots["evidence"]],
+                             [("file", "context/foundation/archive/2026-08-20-roadmap.md"), ("release", "v1.0.0")])
+            self.assertEqual(by_subject["After"]["class"], "superseded")
+            self.assertEqual(by_subject["`npm"]["class"], "superseded")
+            self.assertIn("phase 2", by_subject["`npm"]["evidence"][0]["note"])
+            owner = sorted((entry["owner_reason"], entry["subject"]) for entry in entries if entry["owner"])
+            self.assertEqual([reason for reason, _ in owner], ["decision", "secret"], owner)
+            self.assertTrue(all(entry["tried"] for entry in entries if entry["owner"]))
+            for entry in entries:
+                settle(project, entry)
+            project.state("write")
+            self.assertEqual(project.codes(), set())
+        finally:
+            project.cleanup()
+
+    def test_owner_kinds(self) -> None:
+        import doctor_sweep
+        cases = {
+            "Decide whether reminders also go out by email.": "decision",
+            "Set `SMS_SENDER` in production (**RM-1**)": "secret",
+            "Connect the calendar connector for the clinic account": "secret",
+            "Check that a reminder arrives on a real phone": "outside",
+            "Review the screenshots of the booking page": None,
+            "After the v1.0.0 release, re-run the booking smoke test.": None,
+            "`npm test` green": None,
+        }
+        for text, kind in cases.items():
+            self.assertEqual(doctor_sweep.owner_kind(text), kind, text)
 
     def test_summary_reads_only_the_item_tables_merge_column(self) -> None:
         import doctor

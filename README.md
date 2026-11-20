@@ -48,9 +48,10 @@ usually fails on history. Put it right, in this order, one pass per repository:
    statuses, with the old value kept as `legacy_status`; archive index links to moved files). Commit.
 2. `npx softure-skills doctor --sweep --json`, worked by an agent with the `softure-doctor` skill
    ("Sweep history to zero"): every entry settled with its evidence (commit, release, file), never
-   without, in one change, until the doctor exits 0.
-3. The owner's short list: only real owner items (an open decision, a step outside the repository),
-   carried to the live roadmap or an `owner-word` issue.
+   without, in one change, until the doctor exits 0. Entries classed `superseded` (later roadmaps,
+   releases or changes made them obsolete) are closed by the agent as obsolete, never forwarded.
+3. The owner's short list: only real owner items (a decision about future work, a secret, account or
+   connector, a step outside the repository), carried to the live roadmap or an `owner-word` issue.
 4. The CI line above, once the doctor is at zero.
 
 `npx softure-skills doctor --baseline` exists only as a last resort, for a project that cannot finish
