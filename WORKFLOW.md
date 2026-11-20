@@ -376,6 +376,12 @@ the end", otherwise by the owner). Gates, all checked on `<main>` and reported t
    when one exists; otherwise the summary records `integration: covered by the release on <sha>
    (coveredByRelease)`. The release's integration result gates the deploy, not the archive; its reds become new
    roadmap rows as usual.
+4. no open `- [ ]` under `## Owner decisions and checks`: the close **refuses** to archive with one. Each entry is
+   ticked with its evidence (`— done: <sha | release | path>`), ticked as obsolete (`— obsolete: <reason>`), or
+   carried to the next or a queued roadmap's owner section, or an `owner-word` issue (§8.6), and ticked with where it
+   went (`— carried to <path | #N>`). An archived roadmap holds no owner entry: the owner queue never reads one
+   (§12.1), and the doctor fails on it (`archived-roadmap-open-checks`). Open `## Before the next release` steps
+   stay: they wait for the release, which comes after the close.
 
 **Close before the release.** The release reads the roadmap to list what ships, so the archived file is the single
 stable input for every release of that roadmap: the first attempt, a retry after a failed release, a redeploy or a
@@ -742,18 +748,22 @@ A project without the file gets it from the first of these runs; nothing has to 
 
 The schema ships with the package: `skills/softure-doctor/references/state.schema.json`.
 
-**`owner_queue`** is the one list of what waits for the owner, from the main roadmap, the queued roadmaps and the
-archived roadmaps:
+**`owner_queue`** is the one list of what waits for the owner, built only from what is live: the main roadmap, the
+queued roadmaps, the open changes, and the pre-release steps of the newest closed roadmap until its release is
+recorded:
 
 | `kind` | Comes from |
 | --- | --- |
 | `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word); every queued roadmap (the word to start it, with its `trigger`) |
 | `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps |
-| `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry |
+| `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry; `**Owner step:**` / `**Owner check:**` lines of an open change's `## Roadmap handoff` |
 | `secret` | a `step` whose text names a secret, key, token, credential or password |
 
-An archived roadmap contributes only its open checkboxes (its `## Before the next release` only until its
-`## Summary` records a release). `source` is the file, `#`, and the heading; `item` the roadmap ID the entry names;
+An archived roadmap contributes nothing, with one exception: the newest one, while its `## Summary` records no
+`Release:` line, contributes its open `## Before the next release` steps (the close comes before the release, §5.2).
+An unticked entry in any other archived roadmap, and any unticked `## Owner decisions and checks` entry in an archived
+roadmap, is history to settle (the doctor's `archived-roadmap-open-checks`), not something that waits for the owner.
+Entries from open changes are refreshed on every write and never make the file stale, like `open_changes`. `source` is the file, `#`, and the heading; `item` the roadmap ID the entry names;
 `since` the date in the entry, else the file's `updated`, and once written it is kept for that entry on every
 rewrite. Owner-word issues (§8.6) live on the forge, not here.
 
@@ -772,6 +782,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `archived-change-progress` | an archived `plan.md` with unticked Automated items (open Manual items are legitimate) |
 | `archived-roadmap-open-items` | an archived roadmap with rows that are not `done`, `done_code`, dropped or carried |
 | `archived-roadmap-summary` | an archived roadmap whose `## Summary` merge column holds placeholders instead of SHAs |
+| `archived-roadmap-open-checks` | an archived roadmap with an unticked `## Owner decisions and checks` entry, or an unticked `## Before the next release` step once its release is recorded or a later roadmap was closed |
 | `queued-roadmap-done` | a queued roadmap whose rows are all done, never archived |
 | `backlog-without-roadmap` | `backlog/roadmap-<slug>/` without `roadmaps/roadmap-<slug>.md` (or the promoted main roadmap) |
 | `index-missing-file` | a table row of a `README.md` or `INDEX.md` under `context/` that links or names a missing file |

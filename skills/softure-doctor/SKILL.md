@@ -3,7 +3,7 @@ name: softure-doctor
 description: >
   Check a project's context/ contract and keep its machine-readable state current: regenerate
   context/state.json (active roadmap, queued roadmaps, open changes, and one owner_queue of
-  everything that waits for the owner) and fail on drift: a roadmap left after its archive, archived
+  everything live that waits for the owner) and fail on drift: a roadmap left after its archive, archived
   changes that are not stamped or have unticked Automated items, Summary placeholders instead of
   merge SHAs, archived roadmaps with open rows, queued roadmaps that are fully done, backlog folders
   without their roadmap, index rows pointing at missing files, and a missing or stale state.json.
@@ -51,6 +51,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `archived-change-status` | stamp the archived `change.md` `status: archived` (and `archived_at`) |
 | `archived-change-progress` | the change was archived with open Automated items: tick them with their SHA when the work is on the main branch, or mark them `~~dropped~~ — dropped: <reason>` |
 | `archived-roadmap-open-items` | rows of an archived roadmap end `done`, `done_code`, dropped or carried (with where they went) |
+| `archived-roadmap-open-checks` | an archived roadmap still holds unticked owner entries: tick each with its evidence (`— done: <sha / release / path>`), as obsolete (`— obsolete: <reason>`), or carry it to a live roadmap or an `owner-word` issue and tick it with where it went |
 | `archived-roadmap-summary` | put the merge SHA (`git log --merges --grep "<change-id>"`) into each `## Summary` row |
 | `queued-roadmap-done` | archive the finished queued roadmap to `foundation/archive/` |
 | `backlog-without-roadmap` | move live entries to a queued roadmap, then remove the folder |
@@ -80,7 +81,9 @@ script run creates it.
 - `context/state.json` is written by scripts only. Never edit it by hand; regenerate it.
 - The doctor never edits anything, except `--fix --write`, which is run on purpose and edits only the
   two mechanical shapes above. A skill that runs it fixes only the files it owns in that run.
-- `open_changes` and `updated_at` are refreshed on every write and never make the file stale, so a
-  change branch that edits its own `change.md` keeps a green doctor.
+- `open_changes`, `updated_at` and owner-queue entries from open changes are refreshed on every write
+  and never make the file stale, so a change branch that edits its own `change.md` keeps a green doctor.
+- `owner_queue` reads only what is live (WORKFLOW §12.1): an unticked entry left in an archived roadmap
+  is a failure to settle, not something that waits for the owner.
 - Owner-word issues (label `owner-word`, WORKFLOW §8.6) live on the forge, not in `state.json`;
   an aggregator reads both.

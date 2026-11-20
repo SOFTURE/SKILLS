@@ -15,6 +15,8 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
   archived-change-progress        an archived plan.md with unticked Automated items in `## Progress`
   archived-roadmap-open-items     an archived roadmap with rows that are not done, done_code, dropped or carried
   archived-roadmap-summary        an archived roadmap whose `## Summary` merge column holds placeholders, not SHAs
+  archived-roadmap-open-checks    an archived roadmap with unticked owner decisions or checks (or pre-release
+                                  steps, once its release is recorded or a later roadmap was closed)
   queued-roadmap-done             a queued roadmap in foundation/roadmaps/ whose rows are all done
   backlog-without-roadmap         a backlog/roadmap-<slug>/ folder without its queued (or promoted) roadmap
   index-missing-file              an index row (README.md / INDEX.md table under context/) links a missing file
@@ -43,8 +45,8 @@ import sys
 sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/skills
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_state import (  # noqa: E402
-    ARCHIVE_ROADMAPS_DIR, CHANGES_DIR, QUEUED_DIR, ROADMAP_PATH, STATE_PATH, FsReader, frontmatter,
-    roadmap_rows, sections, staleness,
+    ARCHIVE_ROADMAPS_DIR, CHANGES_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_SECTION, ROADMAP_PATH, STATE_PATH,
+    FsReader, frontmatter, open_checkboxes, pending_release_roadmap, roadmap_rows, sections, staleness,
 )
 
 ARCHIVE_DIR = "context/archive"
@@ -152,8 +154,18 @@ def unticked_automated(plan: str) -> list[str]:
     return open_items
 
 
+def open_checks(text: str, include_release: bool = True) -> list[str]:
+    """Unticked entries of an archived roadmap's owner section (and its pre-release section)."""
+    parts = sections(text)
+    found = open_checkboxes(parts.get(OWNER_SECTION, []))
+    if include_release:
+        found += open_checkboxes(parts.get(RELEASE_SECTION, []))
+    return found
+
+
 def check_archived_roadmaps(reader) -> list[Finding]:
     findings: list[Finding] = []
+    pending = pending_release_roadmap(reader)
     for path in _archived_roadmaps(reader):
         text = reader.read(path) or ""
         open_rows = [f"{row['id']} ({row['status']})" for row in roadmap_rows(text)
@@ -161,6 +173,12 @@ def check_archived_roadmaps(reader) -> list[Finding]:
         if open_rows:
             findings.append(Finding("archived-roadmap-open-items", path,
                                     f"rows not done, done_code, dropped or carried: {', '.join(open_rows)}"))
+        checks = open_checks(text, include_release=path != pending)
+        if checks:
+            listed = "; ".join(checks[:3]) + ("; …" if len(checks) > 3 else "")
+            findings.append(Finding("archived-roadmap-open-checks", path,
+                                    f"{len(checks)} unticked owner entr{'y' if len(checks) == 1 else 'ies'} in an "
+                                    f"archived roadmap (settle, mark obsolete or carry over): {listed}"))
         bad = summary_placeholders(text)
         if bad:
             findings.append(Finding("archived-roadmap-summary", path,

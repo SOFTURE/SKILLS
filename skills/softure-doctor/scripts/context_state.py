@@ -12,7 +12,10 @@ the working tree, so someone else's uncommitted edits never leak into the file, 
 
 Everything in the file is derived from the markdown under `context/` (and `context/workflow.json`):
 the active roadmap, the queued roadmaps, the change folders, and one `owner_queue` that lists every
-entry that waits for the owner. The schema ships next to this script
+entry that waits for the owner. The queue is built only from what is live: the active roadmap, the
+queued roadmaps, the open changes, and the pre-release steps of the newest closed roadmap until its
+release is recorded. An unticked entry left in any other archived roadmap is history to settle
+(the doctor's `archived-roadmap-open-checks`), never an owner-queue item. The schema ships next to this script
 (`../references/state.schema.json`). A reader needs this one file per repository instead of parsing
 the markdown.
 
@@ -41,6 +44,10 @@ ARCHIVE_ROADMAPS_DIR = "context/foundation/archive"
 CHANGES_DIR = "context/changes"
 # Fields a script rewrites without the markdown changing: never a reason to call the file stale.
 VOLATILE_FIELDS = ("updated_at", "open_changes")
+# Owner-queue entries from these sources are refreshed like open_changes: a change branch edits them.
+VOLATILE_SOURCES = ("context/changes/",)
+HANDOFF_SECTION = "Roadmap handoff"
+HANDOFF_OWNER_RE = re.compile(r"^- \*\*Owner (?P<what>step|check):\*\*\s*(?P<text>.+)$")
 
 ROW_RE = re.compile(r"^\|\s*\*\*(?P<id>[A-Z]+-\d+)\*\*\s*\|")
 ID_RE = re.compile(r"\b[A-Z]+-\d+\b")
@@ -290,15 +297,15 @@ def _today() -> str:
 
 def _owner_entries(path: str, text: str, rows: list[dict], fallback_since: str,
                    archived: bool = False) -> list[dict]:
-    """Every open entry of one roadmap file that waits for the owner.
+    """Every open entry of one live roadmap file that waits for the owner.
 
-    An archived roadmap keeps its `done_code` rows as a record for the release notes, so only its open
-    checkboxes count, and its `## Before the next release` only until its `## Summary` records a release.
+    With `archived` (only the newest closed roadmap whose `## Summary` records no release yet), just its
+    open `## Before the next release` steps count: the close comes before the release (WORKFLOW §5.2).
     """
     entries: list[dict] = []
     parts = sections(text)
     ids_with_entry: set[str] = set()
-    for line in open_checkboxes(parts.get(OWNER_SECTION, [])):
+    for line in ([] if archived else open_checkboxes(parts.get(OWNER_SECTION, []))):
         ref = ITEM_REF_RE.search(line)
         item = ref.group("id") if ref else None
         lowered = line.lower()
@@ -312,8 +319,7 @@ def _owner_entries(path: str, text: str, rows: list[dict], fallback_since: str,
             ids_with_entry.add(item)
         entries.append({"kind": kind, "source": f"{path}#{OWNER_SECTION}", "item": item,
                         "since": _date_in(line) or fallback_since, "text": line})
-    released = archived and any(RELEASE_LINE_RE.match(line.strip()) for line in parts.get("Summary", []))
-    for line in ([] if released else open_checkboxes(parts.get(RELEASE_SECTION, []))):
+    for line in open_checkboxes(parts.get(RELEASE_SECTION, [])):
         ref = ITEM_REF_RE.search(line)
         entries.append({"kind": "secret" if SECRET_RE.search(line) else "step",
                         "source": f"{path}#{RELEASE_SECTION}", "item": ref.group("id") if ref else None,
@@ -339,6 +345,38 @@ def _owner_entries(path: str, text: str, rows: list[dict], fallback_since: str,
     return entries
 
 
+def released(text: str) -> bool:
+    """Whether an archived roadmap's `## Summary` records the release that shipped it."""
+    return any(RELEASE_LINE_RE.match(line.strip()) for line in sections(text).get("Summary", []))
+
+
+def archived_roadmap_files(reader) -> list[str]:
+    """Archived roadmaps (`<date>-roadmap*.md` in foundation/archive/), oldest first."""
+    return _roadmap_files(reader, ARCHIVE_ROADMAPS_DIR, r"^\d{4}-\d{2}-\d{2}-roadmap.*\.md$")
+
+
+def pending_release_roadmap(reader) -> str | None:
+    """The newest archived roadmap when its release is not recorded yet: its pre-release steps are live."""
+    paths = [path for path in archived_roadmap_files(reader) if roadmap_rows(reader.read(path) or "")]
+    if not paths:
+        return None
+    newest = paths[-1]
+    return None if released(reader.read(newest) or "") else newest
+
+
+def _handoff_entries(path: str, text: str, item: str | None, since: str) -> list[dict]:
+    """Owner steps and checks an open change records in its `## Roadmap handoff` (WORKFLOW §4)."""
+    entries = []
+    for line in sections(text).get(HANDOFF_SECTION, []):
+        match = HANDOFF_OWNER_RE.match(line.strip())
+        if match:
+            body = match.group("text").strip()
+            entries.append({"kind": "secret" if SECRET_RE.search(body) else "step",
+                            "source": f"{path}#{HANDOFF_SECTION}", "item": item,
+                            "since": _date_in(body) or since, "text": f"owner {match.group('what')}: {body}"})
+    return entries
+
+
 def _date_in(text: str) -> str | None:
     match = DATE_RE.search(text)
     return match.group(1) if match else None
@@ -354,7 +392,7 @@ def _roadmap_files(reader, directory: str, pattern: str) -> list[str]:
 
 
 def _last_release(reader) -> dict | None:
-    for path in reversed(_roadmap_files(reader, ARCHIVE_ROADMAPS_DIR, r"^\d{4}-\d{2}-\d{2}-roadmap.*\.md$")):
+    for path in reversed(archived_roadmap_files(reader)):
         text = reader.read(path) or ""
         for line in reversed(sections(text).get("Summary", [])):
             match = RELEASE_LINE_RE.match(line.strip())
@@ -421,11 +459,12 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
                             "text": f"start queued roadmap {slug}" + (f": {condition}" if condition else "")})
         owner_queue += _owner_entries(path, text, rows, meta.get("updated") or today)
 
-    for path in _roadmap_files(reader, ARCHIVE_ROADMAPS_DIR, r"^\d{4}-\d{2}-\d{2}-roadmap.*\.md$"):
-        text = reader.read(path) or ""
+    pending = pending_release_roadmap(reader)
+    if pending:
+        text = reader.read(pending) or ""
         meta = frontmatter(text)
-        owner_queue += _owner_entries(path, text, roadmap_rows(text), meta.get("updated") or path.split("/")[-1][:10],
-                                      archived=True)
+        owner_queue += _owner_entries(pending, text, roadmap_rows(text),
+                                      meta.get("updated") or pending.split("/")[-1][:10], archived=True)
 
     open_changes = []
     for name, is_dir in reader.listdir(CHANGES_DIR):
@@ -445,6 +484,8 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
             "updated": meta.get("updated"),
             "stage": (row["stage"] or row["status"]) if row else None,
         })
+        owner_queue += _handoff_entries(f"{CHANGES_DIR}/{name}/change.md", text, meta.get("roadmap_item"),
+                                        meta.get("updated") or today)
 
     previous = {_entry_key(entry): entry.get("since") for entry in (prior or {}).get("owner_queue", [])}
     for entry in owner_queue:
@@ -480,10 +521,13 @@ def _entry_key(entry: dict) -> tuple:
 
 
 def comparable(state: dict | None) -> dict | None:
-    """The state without the fields a rewrite may change on its own (see VOLATILE_FIELDS)."""
+    """The state without what a rewrite may change on its own (VOLATILE_FIELDS, VOLATILE_SOURCES)."""
     if state is None:
         return None
-    return {key: value for key, value in state.items() if key not in VOLATILE_FIELDS}
+    kept = {key: value for key, value in state.items() if key not in VOLATILE_FIELDS}
+    kept["owner_queue"] = [entry for entry in kept.get("owner_queue") or []
+                           if not str(entry.get("source", "")).startswith(VOLATILE_SOURCES)]
+    return kept
 
 
 def serialize(state: dict) -> str:

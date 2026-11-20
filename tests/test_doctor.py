@@ -159,7 +159,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_each_case_fails_with_its_code(self) -> None:
-        self.assertEqual(len(CASES), 11)
+        self.assertEqual(len(CASES), 12)
         for case in CASES:
             with self.subTest(case=case):
                 project = Project()
@@ -302,7 +302,8 @@ class StateTest(unittest.TestCase):
         self.assertIn(("secret", "SR-4"), kinds)
         self.assertIn(("step", "SR-1"), kinds)
         self.assertIn(("decision", "PY-1"), kinds)
-        self.assertIn(("decision", "BK-2"), kinds)
+        self.assertNotIn(("decision", "BK-2"), kinds, "a ticked entry of an archived roadmap is not waiting")
+        self.assertFalse(any("/archive/" in entry["source"] for entry in queue))
         self.assertTrue(any(entry["kind"] == "word" and entry["text"].startswith("release: SR-4") for entry in queue))
         self.assertTrue(any(entry["kind"] == "word" and "payments" in entry["text"] for entry in queue))
         self.assertFalse(any("Run the reindex" in entry["text"] for entry in queue), "ticked lines are not waiting")
@@ -342,7 +343,11 @@ class StateTest(unittest.TestCase):
                   .replace("(implement 2/3, since 2026-11-08; cloud session, branch `claude/x` — do not take in "
                            "another session)", "done")
                   .replace("**in_progress** done", "done")
-                  .replace("| owner | blocked (provider account) |", "| owner | carried (to roadmaps/roadmap-payments.md) |"))
+                  .replace("| owner | blocked (provider account) |", "| owner | carried (to roadmaps/roadmap-payments.md) |")
+                  .replace("- [ ] **SR-5**: choose the ranking provider and open the account. Gates SR-5.",
+                           "- [x] **SR-5**: choose the ranking provider and open the account. Gates SR-5. "
+                           "Carried to roadmaps/roadmap-payments.md.")
+                  .replace("- [ ] **SR-4**: owner step:", "- [x] **SR-4**: owner step:"))
         closed += ("\n## Summary\n\n| ID | Item | What changed | Merge |\n| --- | --- | --- | --- |\n"
                    "| SR-1 | Index | indexed | 1a2b3c4 |\n| SR-2 | Titles | titles | 2b3c4d5 |\n"
                    "| SR-3 | Filters | filters | 3c4d5e6 |\n| SR-4 | Synonyms | synonyms | 4d5e6f7 |\n"
@@ -356,8 +361,43 @@ class StateTest(unittest.TestCase):
         state = self.state()
         self.assertIsNone(state["active_roadmap"])
         self.assertEqual(state["open_changes"], [])
-        self.assertTrue(any(entry["source"].startswith("context/foundation/archive/2026-11-20-roadmap.md")
-                            for entry in state["owner_queue"]))
+        pending = [entry for entry in state["owner_queue"]
+                   if entry["source"].startswith("context/foundation/archive/2026-11-20-roadmap.md")]
+        self.assertEqual([entry["source"].split("#")[1] for entry in pending], ["Before the next release"],
+                         "until its release is recorded, the closed roadmap's pre-release steps wait for the owner")
+        # Once the release is recorded, an unticked pre-release step is history to settle, not a queue entry.
+        self.project.write("context/foundation/archive/2026-11-20-roadmap.md", closed + "Release: v1.5.0 (2026-11-21)\n")
+        self.project.state("write")
+        self.assertFalse(any("/archive/" in entry["source"] for entry in self.state()["owner_queue"]))
+        self.assertEqual(self.project.codes(), {"archived-roadmap-open-checks"})
+
+    def test_close_with_open_checks_fails_and_queues_nothing(self) -> None:
+        """An archived roadmap with unticked checks is a doctor failure and never an owner-queue entry."""
+        self.project.apply_case("archived-roadmap-open-checks")
+        for rel in ("context/foundation/roadmap.md", "context/foundation/roadmaps/roadmap-payments.md",
+                    "context/foundation/roadmaps/README.md"):
+            os.remove(self.project.path(rel))
+        shutil.rmtree(self.project.path("context/changes/search-titles"))
+        shutil.rmtree(self.project.path("context/backlog"))
+        self.project.state("write")
+        self.assertEqual(self.state()["owner_queue"], [])
+        self.assertEqual(self.project.codes(), {"archived-roadmap-open-checks"})
+
+    def test_roadmap_close_refuses_open_checks(self) -> None:
+        with open(os.path.join(ROOT, "skills", "softure-roadmap", "SKILL.md"), encoding="utf-8") as fh:
+            skill = fh.read()
+        close = skill[skill.index("- **`--close`**"):skill.index("## Existing roadmap")]
+        self.assertIn("archived-roadmap-open-checks", close)
+        self.assertIn("refuses", close)
+
+    def test_open_change_handoff_steps_are_queued_but_never_stale(self) -> None:
+        rel = "context/changes/search-titles/change.md"
+        self.project.write(rel, self.project.read(rel) + "\n## Roadmap handoff\n- **Status:** done\n"
+                           "- **Owner step:** rotate the search api key (secret only the owner has)\n")
+        self.assertEqual(self.project.codes(), set(), "a change branch writing its handoff stays green")
+        self.project.state("write")
+        entries = [entry for entry in self.state()["owner_queue"] if entry["source"].startswith(rel)]
+        self.assertEqual([(entry["kind"], entry["item"]) for entry in entries], [("secret", "SR-2")])
 
     def test_git_reader_sees_the_commit_plus_overrides(self) -> None:
         reader = context_state.GitReader(self.project.root, "HEAD",

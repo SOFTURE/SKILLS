@@ -3,7 +3,7 @@
   "project": "Example clinic",
   "mode": "autonomous",
   "main_branch": "main",
-  "updated_at": "2026-11-20T09:25:26Z",
+  "updated_at": "2026-11-20T11:05:05Z",
   "active_roadmap": {
     "slug": "search",
     "title": "Roadmap search: visitors find what they look for",
@@ -84,13 +84,6 @@
     }
   ],
   "owner_queue": [
-    {
-      "kind": "decision",
-      "source": "context/foundation/archive/2026-09-30-roadmap.md#Owner decisions and checks",
-      "item": "BK-2",
-      "since": "2026-09-30",
-      "text": "**BK-2**: decide whether the day view shows phone numbers."
-    },
     {
       "kind": "word",
       "source": "context/foundation/roadmaps/roadmap-payments.md",
