@@ -15,6 +15,9 @@ evidence found in the repository, and how to settle it:
                                 contains it, and later roadmaps that mention the item
   archived-roadmap-open-checks  the same for the item the check names, plus the first release after
                                 the roadmap was closed
+  carried entries               an open check or row whose text carries a carry marker (`→ roadmap-<slug>`,
+                                `carried to <roadmap>`) naming a roadmap that exists: that roadmap is the
+                                evidence, and `--fix` ticks it (a marker whose roadmap is gone stays as it was)
   anything else                 the file to fix (and `--fix` for the mechanical shapes)
 
 Every entry has a `class`:
@@ -215,6 +218,19 @@ def _item_evidence(reader, git: Git, path: str, item: str | None, change_id: str
     return evidence
 
 
+CARRIED_SETTLE = "mechanical: `doctor --fix --write` ticks it `— carried to <path>` (the row: `carried (to <path>)`)"
+
+
+def _carried(reader, text: str) -> list[dict]:
+    """Evidence when `text` carries a carry marker whose roadmap exists; [] otherwise (a missing target stays open)."""
+    import doctor
+
+    target = doctor.carry_target(text)
+    found = doctor.resolve_carry(reader, target)
+    return [_evidence("file", found, f"the carry marker `{target}` names this roadmap, which took the entry over")] \
+        if found else []
+
+
 def owner_kind(text: str) -> str | None:
     """`decision`, `secret` or `outside` when the line is something only the owner can settle; None otherwise."""
     for kind, pattern in OWNER_KINDS:
@@ -242,6 +258,9 @@ def _entry(code: str, path: str, line: int | None, text: str, subject: str, evid
         evidence = superseded
     else:
         klass, reason, settle = "owner", "unsettled", SETTLE.get(code, "fix the file it names")
+    override = extra.pop("settle_override", None)
+    if override and klass == "evidence":
+        settle = override
     return {"code": code, "path": path, "line": line, "text": text, "subject": subject, "evidence": evidence,
             "class": klass, "owner": klass == "owner", "owner_reason": reason,
             "tried": [] if klass == "evidence" else (tried or []), "settle": settle, **extra}
@@ -432,12 +451,14 @@ def _open_item_entries(reader, git: Git, path: str) -> list[dict]:
             continue
         row = rows.pop(match.group(1))
         status = [cell.strip() for cell in line.strip().strip("|").split("|")][-1]
-        evidence = _item_evidence(reader, git, path, row["id"], row["change_id"])
+        carried = _carried(reader, status)
+        evidence = carried or _item_evidence(reader, git, path, row["id"], row["change_id"])
         superseded, tried = ([], []) if evidence else _superseded_roadmap_entry(
             reader, git, path, line, [row["id"], row["change_id"]])
         entries.append(_entry("archived-roadmap-open-items", path, number, line, f"{row['id']} ({row['status']})",
                               evidence, superseded=superseded, tried=tried, item=row["id"],
-                              change_id=row["change_id"], status=status))
+                              change_id=row["change_id"], status=status, settle_override=CARRIED_SETTLE
+                              if carried else None))
     return entries
 
 
@@ -460,14 +481,16 @@ def _open_check_entries(reader, git: Git, path: str) -> list[dict]:
         ref = ITEM_REF_RE.search(line)
         item = ref.group("id") if ref else None
         change_id = (rows.get(item) or {}).get("change_id") if item else None
-        evidence = _item_evidence(reader, git, path, item, change_id) if item else []
+        carried = _carried(reader, line)
+        evidence = carried or (_item_evidence(reader, git, path, item, change_id) if item else [])
         if release and section == RELEASE_SECTION:
             evidence.append(_evidence("release", release["tag"], f"released {release['date']}, after the close"))
         superseded, tried = ([], []) if evidence else _superseded_roadmap_entry(
             reader, git, path, line, [item, change_id] if item else [])
         entries.append(_entry("archived-roadmap-open-checks", path, number, line, box.group("text").strip(),
-                              evidence, superseded=superseded, tried=tried, owner_text=box.group("text"),
-                              item=item, change_id=change_id, section=section))
+                              evidence, superseded=superseded, tried=tried,
+                              owner_text=None if carried else box.group("text"), item=item, change_id=change_id,
+                              section=section, settle_override=CARRIED_SETTLE if carried else None))
     return entries
 
 

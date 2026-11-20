@@ -7,7 +7,8 @@
 paths to delete, `_keep_state` keeps the clean state.json instead of regenerating it). The doctor must
 fail with exactly that code on the case and pass on the clean tree.
 
-`tests/fixtures/doctor/fix/<case>/` holds one historical shape that `doctor --fix` repairs. Its optional
+`tests/fixtures/doctor/fix/<case>/` holds one historical shape that `doctor --fix` repairs (`carried`: a check and a
+row of an archived roadmap whose carry marker names an existing roadmap; `CarriedTest` also runs the sweep on it). Its optional
 `_history` file is replayed as commits before the overlay lands (`add <path>`, `mv <from> <to>`, `rm <path>`),
 so rename detection has a real history to read.
 
@@ -411,7 +412,7 @@ class MeasureTest(unittest.TestCase):
 
     EXPECTED = {
         "failures": 4,
-        "fix_edits": 4,
+        "fix_edits": 5,
         "after_fix": 2,
         "sweep": {"total": 5, "with_evidence": 0, "superseded": 3, "owner": 2},
     }
@@ -648,6 +649,50 @@ class BaselineTest(unittest.TestCase):
         status, report = self.project.doctor("--sweep")
         self.assertEqual(status, 1)
         self.assertEqual({entry["code"] for entry in report["entries"]}, {"archived-change-progress", "index-missing-file"})
+
+
+class CarriedTest(unittest.TestCase):
+    """A check or row of an archived roadmap whose carry marker names an existing roadmap (fix/carried)."""
+
+    ROADMAP = "context/foundation/archive/2026-07-15-roadmap.md"
+    TARGET = "roadmaps/roadmap-payments.md"
+
+    def setUp(self) -> None:
+        self.project = Project()
+        self.project.apply_case("carried", "fix")
+        self.project.commit("carried")
+
+    def tearDown(self) -> None:
+        self.project.cleanup()
+
+    def test_the_sweep_takes_the_named_roadmap_as_evidence(self) -> None:
+        entries = self.project.doctor("--sweep")[1]["entries"]
+        carried = [entry for entry in entries if entry["path"] == self.ROADMAP]
+        self.assertEqual({entry["code"] for entry in carried},
+                         {"archived-roadmap-open-checks", "archived-roadmap-open-items"})
+        for entry in carried:
+            self.assertEqual(entry["class"], "evidence", entry)
+            self.assertEqual(entry["evidence"][0]["ref"], "context/foundation/" + self.TARGET)
+            self.assertIn("--fix --write", entry["settle"])
+
+    def test_fix_ticks_the_check_and_closes_the_row(self) -> None:
+        self.project.doctor("--fix", "--write")
+        text = self.project.read(self.ROADMAP)
+        self.assertIn('- [x] **→ roadmap-payments ("Carried over from the intake roadmap").** Pick the payment '
+                      f"provider for deposits. — carried to {self.TARGET}", text)
+        self.assertIn(f"| owner | carried (to {self.TARGET}) |", text)
+        self.assertIn(f"- **Status:** carried (to {self.TARGET})", text)
+        self.assertEqual(self.project.codes(), set())
+
+    def test_a_marker_without_its_roadmap_stays_a_failure(self) -> None:
+        self.project.write(self.ROADMAP, self.project.read(self.ROADMAP).replace("roadmap-payments", "roadmap-nowhere"))
+        self.project.commit("gone")
+        code, report = self.project.doctor("--fix", "--write")
+        self.assertEqual(report["edits"], [])
+        self.assertTrue(any("roadmap-nowhere" in skip["why"] for skip in report["skipped"]))
+        self.assertEqual(self.project.codes(), {"archived-roadmap-open-checks", "archived-roadmap-open-items"})
+        for entry in self.project.doctor("--sweep")[1]["entries"]:
+            self.assertFalse(any("carry marker" in evidence["note"] for evidence in entry["evidence"]), entry)
 
 
 class CiReportTest(unittest.TestCase):

@@ -844,7 +844,11 @@ left after them; `--fix --write` applies them, only under `context/`, and a seco
   the file's current path when git history shows where it moved (rename detection, followed across moves); a file
   deleted on purpose (git shows the deletion, no rename) is marked `(removed in <sha>)` with the deleting commit;
 - an unticked Progress item of an archived plan that is struck through or carries a dropped/cancelled/not-applicable
-  note is normalised to `- [x] ~~<item>~~ — dropped: <note>`.
+  note is normalised to `- [x] ~~<item>~~ — dropped: <note>`;
+- an unticked owner check or pre-release step of an archived roadmap, or an open row, whose text carries a carry
+  marker (`→ roadmap-<slug>`, `carried to <roadmap>`) naming a roadmap that exists (queued, archived or the live one)
+  is ticked `- [x] <text> — carried to <path>` (a row becomes `carried (to <path>)`); the sweep shows such an entry
+  with that roadmap as its evidence. A marker whose roadmap does not exist stays a failure.
 
 A row whose move or deletion the history does not show, and a live index, are left alone and named. A shallow clone
 works on the commits it holds and names what lies past its edge. Everything else is a judgement case.
