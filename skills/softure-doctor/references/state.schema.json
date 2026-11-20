@@ -8,7 +8,7 @@
     "open_changes", "owner_queue", "last_release"],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "integer", "enum": [1] },
+    "schema_version": { "type": "integer", "enum": [1, 2], "description": "2 adds owner_queue[].id; a reader of version 1 files treats id as absent" },
     "project": { "type": "string", "description": "workflow.json `project`, else the active roadmap's `project`, else the repository name (origin's URL, else the folder); never null" },
     "mode": { "type": "string", "enum": ["manual", "autonomous"] },
     "main_branch": { "type": ["string", "null"] },
@@ -104,6 +104,7 @@
         "required": ["kind", "source", "item", "since", "text"],
         "additionalProperties": false,
         "properties": {
+          "id": { "type": "string", "description": "stable id of the entry (schema_version 2): set when the entry first appears, kept on every rewrite, also when only its wording changed or its heading moved within the file; absent in version 1 files" },
           "kind": { "type": "string", "enum": ["word", "decision", "step", "secret"] },
           "source": { "type": "string", "description": "file, then `#` and the heading" },
           "item": { "type": ["string", "null"], "description": "roadmap item ID, when the entry names one" },

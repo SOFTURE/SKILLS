@@ -722,7 +722,7 @@ A project without the file gets it from the first of these runs; nothing has to 
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,                // 2 adds owner_queue[].id; read a version 1 file as one without ids
   "project": "Example clinic",         // workflow.json `project`, else the roadmap's, else the repository name; never null
   "mode": "autonomous", "main_branch": "main",
   "updated_at": "2026-11-20T09:00:00Z", // changes only when the content does
@@ -740,8 +740,8 @@ A project without the file gets it from the first of these runs; nothing has to 
   "open_changes": [ { "change_id": "search-titles", "title": "…", "status": "implementing", "roadmap_item": "SR-2",
                       "updated": "2026-11-10", "stage": "implement 2/3" } ],
   "owner_queue": [                     // everything that waits for the owner, oldest first
-    { "kind": "decision", "source": "context/foundation/roadmap.md#Owner decisions and checks", "item": "SR-5",
-      "since": "2026-11-10", "text": "**SR-5**: choose the ranking provider …" }
+    { "id": "oq-06e40f59e9", "kind": "decision", "source": "context/foundation/roadmap.md#Owner decisions and checks",
+      "item": "SR-5", "since": "2026-11-10", "text": "**SR-5**: choose the ranking provider …" }
   ],
   "last_release": { "version": "v1.4.0", "date": "2026-10-02",   // as a closed roadmap recorded it (§5.2); the
                    "source": "context/foundation/archive/2026-09-30-roadmap.md" }   // portfolio asks the forge first
@@ -767,7 +767,11 @@ An unticked entry in any other archived roadmap, and any unticked `## Owner deci
 roadmap, is history to settle (the doctor's `archived-roadmap-open-checks`), not something that waits for the owner.
 Entries from open changes are refreshed on every write and never make the file stale, like `open_changes`. `source` is the file, `#`, and the heading; `item` the roadmap ID the entry names;
 `since` the date in the entry, else the file's `updated`, and once written it is kept for that entry on every
-rewrite. Owner-word issues (§8.6) live on the forge, not here.
+rewrite. `id` is a short stable id (`oq-` and a hash of `source`, `item` and the entry's text when it first appeared):
+it is kept, like `since`, on every rewrite, also when only the entry's wording changed or it moved to another heading
+of the same file (the same item and kind, or text that is still close), so a reader follows one entry across scans
+without fingerprinting it and an owner-word issue can name the entry it answers (§8.6). Owner-word issues live on the
+forge, not here.
 
 `open_changes` and `updated_at` are refreshed on every write but never make the file stale: a change branch edits
 its own `change.md` without touching `state.json`, and stays green.

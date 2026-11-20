@@ -19,14 +19,19 @@ release is recorded. An unticked entry left in any other archived roadmap is his
 (`../references/state.schema.json`). A reader needs this one file per repository instead of parsing
 the markdown.
 
-`since` of an owner-queue entry is kept from the previous file for an entry that is still there, so
-"oldest first" stays true across rewrites. `updated_at` changes only when the content does.
+Every owner-queue entry has an `id`: a short hash of its `source`, `item` and text, taken when the entry first
+appears. `id` and `since` are kept from the previous file for an entry that is still there, also when only its
+wording changed or its heading moved within the same file (the same item, or text that is still close enough),
+so a reader can follow one entry across rewrites and "oldest first" stays true. `updated_at` changes only when the
+content does.
 
 Importable: `from context_state import build_state, render_state, FsReader, GitReader, IndexReader`.
 """
 from __future__ import annotations
 
 import datetime as dt
+import difflib
+import hashlib
 import json
 import os
 import re
@@ -35,7 +40,7 @@ import sys
 
 sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/skills
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STATE_PATH = "context/state.json"
 WORKFLOW_PATH = "context/workflow.json"
 ROADMAP_PATH = "context/foundation/roadmap.md"
@@ -487,9 +492,7 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
         owner_queue += _handoff_entries(f"{CHANGES_DIR}/{name}/change.md", text, meta.get("roadmap_item"),
                                         meta.get("updated") or today)
 
-    previous = {_entry_key(entry): entry.get("since") for entry in (prior or {}).get("owner_queue", [])}
-    for entry in owner_queue:
-        entry["since"] = previous.get(_entry_key(entry)) or entry["since"]
+    owner_queue = carry_identity(owner_queue, (prior or {}).get("owner_queue") or [])
     owner_queue.sort(key=lambda entry: (entry["since"] or "", entry["source"], entry["text"]))
 
     state = {
@@ -539,6 +542,93 @@ def _start_order(text: str) -> str | None:
 
 def _entry_key(entry: dict) -> tuple:
     return (entry.get("kind"), entry.get("source"), entry.get("text"))
+
+
+# Text of an unmatched entry this close to a prior entry's text (difflib ratio) is the same entry reworded.
+REWORD_RATIO = 0.6
+# The same, across headings of one file (a moved entry): stricter, because the section changed too.
+MOVED_RATIO = 0.8
+
+
+def entry_id(entry: dict) -> str:
+    """A short id for a new owner-queue entry: a hash of its source, item and first line."""
+    first_line = (entry.get("text") or "").strip().splitlines()[0] if (entry.get("text") or "").strip() else ""
+    seed = "\n".join((entry.get("source") or "", entry.get("item") or "", first_line))
+    return "oq-" + hashlib.sha1(seed.encode("utf-8")).hexdigest()[:10]
+
+
+def _file_of(source: str | None) -> str:
+    return (source or "").split("#", 1)[0]
+
+
+def _same_entry_score(new: dict, old: dict) -> float | None:
+    """How surely `old` (prior file) is `new` reworded or moved; None when it is not."""
+    if _file_of(new.get("source")) != _file_of(old.get("source")):
+        return None
+    same_section = new.get("source") == old.get("source")
+    ratio = difflib.SequenceMatcher(None, new.get("text") or "", old.get("text") or "").ratio()
+    if new.get("item") and new.get("item") == old.get("item") and new.get("kind") == old.get("kind"):
+        return 1.0 + ratio + (1.0 if same_section else 0.0)
+    if new.get("item") != old.get("item"):
+        return None
+    if ratio >= (REWORD_RATIO if same_section else MOVED_RATIO):
+        return ratio + (1.0 if same_section else 0.0)
+    return None
+
+
+def carry_identity(entries: list[dict], prior: list[dict]) -> list[dict]:
+    """Give every entry an `id` and keep `id` and `since` of the prior entry it continues.
+
+    An entry with the same kind, source and text as a prior one continues it. Each remaining entry continues the
+    prior one it matches best: the same file, and the same item and kind, or (without an item) text that is still
+    close enough (`REWORD_RATIO` under the same heading, `MOVED_RATIO` under another). A prior entry is continued
+    at most once. Anything else is new and gets a fresh id; ids stay unique within the queue.
+    """
+    unmatched = list(prior)
+    exact: dict[tuple, list[dict]] = {}
+    for old in unmatched:
+        exact.setdefault(_entry_key(old), []).append(old)
+    pending = []
+    for entry in entries:
+        candidates = exact.get(_entry_key(entry))
+        if candidates:
+            old = candidates.pop(0)
+            unmatched.remove(old)
+            _continue(entry, old)
+        else:
+            pending.append(entry)
+    pairs = []
+    for new_index, entry in enumerate(pending):
+        for old_index, old in enumerate(unmatched):
+            score = _same_entry_score(entry, old)
+            if score is not None:
+                pairs.append((score, new_index, old_index))
+    taken_new: set[int] = set()
+    taken_old: set[int] = set()
+    for _score, new_index, old_index in sorted(pairs, key=lambda pair: (-pair[0], pair[1], pair[2])):
+        if new_index in taken_new or old_index in taken_old:
+            continue
+        taken_new.add(new_index)
+        taken_old.add(old_index)
+        _continue(pending[new_index], unmatched[old_index])
+    used: set[str] = set()
+    result = []
+    for entry in entries:
+        ident = entry.get("id") if entry.get("id") not in used else None
+        if not ident:
+            base = entry_id(entry)
+            ident, suffix = base, 2
+            while ident in used:
+                ident, suffix = f"{base}-{suffix}", suffix + 1
+        used.add(ident)
+        result.append({"id": ident, **{key: value for key, value in entry.items() if key != "id"}})
+    return result
+
+
+def _continue(entry: dict, old: dict) -> None:
+    if old.get("id"):
+        entry["id"] = old["id"]
+    entry["since"] = old.get("since") or entry["since"]
 
 
 def comparable(state: dict | None) -> dict | None:
