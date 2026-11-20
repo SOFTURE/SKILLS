@@ -7,9 +7,11 @@ description: >
   changes that are not stamped or have unticked Automated items, Summary placeholders instead of
   merge SHAs, archived roadmaps with open rows, queued roadmaps that are fully done, backlog folders
   without their roadmap, index rows pointing at missing files, and a missing or stale state.json.
-  Use in CI, before an archive or roadmap commit, or when the user says "check the context",
-  "run the doctor", "what waits for me", "refresh the state".
-argument-hint: "[doctor [--fix [--write]] | state write|print|check] [--root <dir>] [--json] [--staged]"
+  Repairs history: --fix for the mechanical shapes, --sweep for a worklist with evidence that an
+  agent settles to zero. Use in CI, before an archive or roadmap commit, or when the user says
+  "check the context", "run the doctor", "what waits for me", "refresh the state", "clean up the
+  history", "sweep the doctor to zero".
+argument-hint: "[doctor [--fix [--write] | --sweep] | state write|print|check] [--root <dir>] [--json] [--staged]"
 allowed-tools:
   - Read
   - Bash
@@ -24,6 +26,7 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 |---|---|
 | `python3 <S>/doctor.py [--json]` | every check; exit 1 on a failure. Same as `npx softure-skills doctor` |
 | `python3 <S>/doctor.py --fix [--write]` | the mechanical repairs of history, printed edit by edit; a dry run unless `--write` |
+| `python3 <S>/doctor.py --sweep [--json]` | every remaining failure as a worklist entry with evidence pointers; read-only |
 | `python3 <S>/context_state.py write` | regenerate `context/state.json` from the working tree |
 | `python3 <S>/context_state.py write --staged` | regenerate it from what is staged, and stage it (use right before a commit) |
 | `python3 <S>/context_state.py print` / `check` | show it / exit 1 when it is missing or stale |
@@ -73,12 +76,52 @@ mechanical:
 It skips, and names, every row it cannot settle from history (a live index, a target that was never
 in git, a shallow checkout). Those and every other failure are judgement cases.
 
+## Sweep history to zero
+
+`doctor.py --sweep --json` lists every failure left after `--fix` as one entry per thing to settle:
+`code`, `path`, `line` and the exact `text` of the line, `evidence` (pointers of kind `commit`,
+`release` or `file`, each with a note), `settle` (what to do), and `owner: true` when the repository
+holds no evidence at all. The evidence it looks for:
+
+| Code | Evidence |
+|---|---|
+| `archived-change-progress` | the SHA ticked items of the same phase cite; commits that touched the phase's files after the plan's date; the change's merge commit |
+| `archived-roadmap-summary` | the merge (or squash) commit of the item's change on the main line; the last SHA of its archived plan |
+| `archived-roadmap-open-items` | the item's archived change folder, its merge commit, the release that contains it, later roadmaps that mention it |
+| `archived-roadmap-open-checks` | the same for the item the check names, plus the first release after the close (for pre-release steps) |
+| anything else | the file to fix (`index-missing-file`: where git history says the file went, or that it never existed) |
+
+Work the list in one change per repository (`docs(context): settle history to zero`):
+
+1. `doctor.py --fix --write` first, and commit it, so the sweep holds only judgement cases.
+2. For every entry, open its evidence (`git show <sha>`, the file, the release notes) and decide what
+   it proves. **Settle with evidence, never without:** write the proof into the line itself.
+   - Progress item: `- [x] <text> — <sha>` when that commit did it; `- [x] ~~<text>~~ — dropped: <reason>`
+     when the evidence shows it was never done and is no longer wanted.
+   - Summary placeholder: the merge SHA in the `Merge` cell.
+   - Open row: `done` (it shipped), `carried (to <path>)` (a later roadmap took it), `dropped (<reason>)`.
+   - Open check: `- [x] <text> — done: <sha | release | path>`, `- [x] <text> — obsolete: <reason, with
+     the evidence that made it obsolete>`, or carried (below).
+3. **Only true owner items stay open, in one place.** An entry is the owner's when the evidence does
+   not settle it and only the owner can: a real decision that is still open, or a step outside the
+   repository (a production setting, a secret, an account) that nothing shows as done. Carry it to the
+   live roadmap's `## Owner decisions and checks` (or an `owner-word` issue, WORKFLOW §8.6) and tick
+   the archived line `— carried to <path | #N>`. Never carry a check whose work the evidence shows done,
+   and never tick a decision on the owner's behalf.
+4. Regenerate the state (`context_state.py write`) and re-run `doctor.py` until it exits 0. Commit.
+5. Report: failures per code before and after, and **one short list for the owner**: `ID | what the
+   owner decides or does | where it lives now`. Nothing else is left open.
+
+An entry the agent cannot settle and that is not the owner's (the evidence is ambiguous) is named in
+the report with its evidence, not ticked.
+
 A project that has never written `context/state.json` gets a `note`, not a failure, until the first
 script run creates it.
 
 ## Rules
 
 - `context/state.json` is written by scripts only. Never edit it by hand; regenerate it.
+- Never tick, fill or close anything in the sweep without the evidence written into the line.
 - The doctor never edits anything, except `--fix --write`, which is run on purpose and edits only the
   two mechanical shapes above. A skill that runs it fixes only the files it owns in that run.
 - `open_changes`, `updated_at` and owner-queue entries from open changes are refreshed on every write

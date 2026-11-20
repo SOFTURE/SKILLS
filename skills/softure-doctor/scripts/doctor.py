@@ -3,6 +3,7 @@
 
     doctor.py [--root <dir>] [--json]
     doctor.py --fix [--write] [--json]    mechanical repairs of history (dry run unless --write)
+    doctor.py --sweep [--json]            every remaining failure as a worklist with evidence (read-only)
     npx softure-skills doctor [...]      (the same, from the installed package)
 
 Adopting projects run it in their CI check, documentation-only changes included (that is where the
@@ -25,7 +26,8 @@ what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
 moved, found through git history) and prints every edit; see doctor_fix.py. It is a dry run unless
-`--write` is given, and it writes only under `context/`.
+`--write` is given, and it writes only under `context/`. `--sweep` lists every remaining failure with
+the evidence an agent needs to settle it from the repository alone; see doctor_sweep.py.
 
 A project that has never written `context/state.json` (it adopted the package before the file existed)
 gets a note, not a failure: the first run of `wt-roadmap.py`, `softure-archive` or `softure-roadmap`
@@ -367,6 +369,33 @@ def run_fix(reader, root: str, git_root: str | None, write: bool, as_json: bool)
     return 0
 
 
+def run_sweep(reader, root: str, git_root: str | None, as_json: bool) -> int:
+    """`--sweep`: the worklist of every failure with its evidence; exit 1 while anything is left."""
+    import doctor_sweep
+
+    entries = doctor_sweep.sweep(reader, git_root)
+    owner = [entry for entry in entries if entry["owner"]]
+    if as_json:
+        print(json.dumps({"root": root, "entries": entries,
+                          "summary": {"total": len(entries), "with_evidence": len(entries) - len(owner),
+                                      "owner": len(owner)}}, indent=2, ensure_ascii=False))
+        return 1 if entries else 0
+    if not entries:
+        print("softure-doctor --sweep: nothing to settle, the context/ contract is OK")
+        return 0
+    for entry in entries:
+        where = f"{entry['path']}:{entry['line']}" if entry.get("line") else entry["path"]
+        print(f"{entry['code']} {where}: {entry['subject']}")
+        for evidence in entry["evidence"]:
+            print(f"    evidence {evidence['kind']} {evidence['ref']}: {evidence['note']}")
+        if entry["owner"]:
+            print("    owner: no evidence in the repository; only the owner can settle it")
+        print(f"    settle: {entry['settle']}")
+    print(f"softure-doctor --sweep: {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} to settle, "
+          f"{len(entries) - len(owner)} with evidence, {len(owner)} for the owner")
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "-h" in args or "--help" in args:
@@ -375,12 +404,13 @@ def main(argv: list[str] | None = None) -> int:
     as_json = _take(args, "--json")
     fix = _take(args, "--fix")
     write = _take(args, "--write")
+    do_sweep = _take(args, "--sweep")
     root = None
     if "--root" in args:
         k = args.index("--root")
         root = os.path.abspath(args[k + 1])
         del args[k:k + 2]
-    if args or (write and not fix):
+    if args or (write and not fix) or (fix and do_sweep):
         print(__doc__, file=sys.stderr)
         return 2
     top = subprocess.run(["git", "-C", root or os.getcwd(), "rev-parse", "--show-toplevel"],
@@ -397,6 +427,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if fix:
         return run_fix(reader, root, git_root, write, as_json)
+    if do_sweep:
+        return run_sweep(reader, root, git_root, as_json)
     findings = run_checks(reader, git_root)
     failures = [f for f in findings if f.severity == "fail"]
     if as_json:

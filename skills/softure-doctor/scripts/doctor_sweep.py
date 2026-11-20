@@ -1,0 +1,386 @@
+#!/usr/bin/env python3
+"""softure-doctor --sweep: every remaining failure as a worklist entry with the evidence to settle it.
+
+    doctor.py --sweep [--json] [--root <dir>]
+    npx softure-skills doctor --sweep [--json]
+
+Read-only. One entry per thing to settle (an unticked Progress item, a Summary placeholder, an open
+row, an open owner check, ...), each with `path`, `line` and the exact `text` of the line, the
+evidence found in the repository, and how to settle it:
+
+  archived-change-progress      commits that touched the phase's files after the plan's date, the SHA
+                                ticked items of the same phase cite, and the change's merge commit
+  archived-roadmap-summary      the merge (or squash) commit of the item's change on the main branch
+  archived-roadmap-open-items   the item's archived change folder, merge commit, the release that
+                                contains it, and later roadmaps that mention the item
+  archived-roadmap-open-checks  the same for the item the check names, plus the first release after
+                                the roadmap was closed
+  anything else                 the file to fix (and `--fix` for the mechanical shapes)
+
+An entry with no evidence at all carries `"owner": true`: only the owner can settle it, and it goes to
+the owner's list (WORKFLOW §12.2). The skill section "Sweep history to zero" tells an agent how to work
+the list: settle every entry with its evidence, never without.
+
+Importable: `from doctor_sweep import sweep`.
+"""
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from context_state import (  # noqa: E402
+    ARCHIVE_ROADMAPS_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_SECTION, ROADMAP_PATH, CHECKBOX_RE,
+    ITEM_REF_RE, archived_roadmap_files, frontmatter, pending_release_roadmap, roadmap_rows, sections,
+)
+
+SHA_TAIL_RE = re.compile(r"\b([0-9a-f]{7,40})\b")
+PATH_RE = re.compile(r"`((?:[\w.-]+/)+[\w.-]+\.\w+|[\w.-]+\.(?:ts|tsx|js|jsx|mjs|py|cs|go|rs|java|kt|rb|php|sql|css|scss|html|json|yml|yaml|sh))`")
+SEMVER_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+")
+LIMIT = 3
+
+SETTLE = {
+    "archived-change-progress": "tick it with the SHA that did it (`- [x] <text> — <sha>`), or, when the work was "
+                                "never done, `- [x] ~~<text>~~ — dropped: <reason>`",
+    "archived-roadmap-summary": "put the merge SHA into the row's Merge cell (`—` only for a carried or dropped row)",
+    "archived-roadmap-open-items": "set the row's status to `done` when the evidence shows it shipped, "
+                                   "`carried (to <path>)` when a later roadmap took it, or `dropped (<reason>)`",
+    "archived-roadmap-open-checks": "tick it with its evidence (`— done: <sha | release | path>`), as obsolete "
+                                    "(`— obsolete: <reason>`), or carry it to a live roadmap or an owner-word issue "
+                                    "and tick it with where it went (`— carried to <path | #N>`)",
+    "archived-change-status": "mechanical: `doctor --fix --write`",
+    "index-missing-file": "point the row at the file's current path, or drop the row",
+    "roadmap-archived-not-removed": "remove roadmap.md (the close moved it)",
+    "roadmap-status-mismatch": "set `status` to match the rows",
+    "queued-roadmap-done": "archive the finished queued roadmap to foundation/archive/",
+    "backlog-without-roadmap": "move live entries to a queued roadmap, then remove the folder",
+    "state-missing": "`npx softure-skills state`, commit context/state.json",
+    "state-stale": "`npx softure-skills state`, commit context/state.json",
+}
+
+
+class Git:
+    """Read-only questions to the repository's history; every answer is [] without full history."""
+
+    def __init__(self, root: str | None) -> None:
+        self.root = root
+        self.usable = False
+        if root:
+            probe = self._run("rev-parse", "--is-shallow-repository")
+            self.usable = probe.returncode == 0 and probe.stdout.strip() == "false"
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", self.root or ".", *args], capture_output=True, text=True)
+
+    def _commits(self, *args: str) -> list[dict]:
+        if not self.usable:
+            return []
+        out = self._run("log", "--format=%h%x09%ad%x09%s", "--date=short", *args)
+        commits = []
+        for line in out.stdout.splitlines():
+            parts = line.split("\t", 2)
+            if len(parts) == 3:
+                commits.append({"sha": parts[0], "date": parts[1], "subject": parts[2]})
+        return commits
+
+    def touching(self, files: list[str], since: str | None) -> list[dict]:
+        if not files:
+            return []
+        args = ["--no-merges", f"-n{LIMIT}"] + ([f"--since={since}"] if since else []) + ["--", *files]
+        return self._commits(*args)
+
+    def merges_for(self, change_id: str | None) -> list[dict]:
+        """First-parent commits of the main line that name the change (merge commits and squash merges)."""
+        if not change_id:
+            return []
+        return self._commits("--first-parent", "-i", "--fixed-strings", f"--grep={change_id}", f"-n{LIMIT}")
+
+    def release_containing(self, sha: str) -> str | None:
+        if not self.usable:
+            return None
+        out = self._run("tag", "--contains", sha, "--sort=v:refname")
+        tags = [tag for tag in out.stdout.split() if SEMVER_TAG_RE.match(tag)]
+        return tags[0] if tags else None
+
+    def release_after(self, day: str | None) -> dict | None:
+        """The first release tag created on or after `day`."""
+        if not self.usable or not day:
+            return None
+        out = self._run("for-each-ref", "--sort=creatordate", "--format=%(refname:short)\t%(creatordate:short)",
+                        "refs/tags")
+        for line in out.stdout.splitlines():
+            tag, _, date = line.partition("\t")
+            if SEMVER_TAG_RE.match(tag) and date >= day:
+                return {"tag": tag, "date": date}
+        return None
+
+
+def _evidence(kind: str, ref: str, note: str) -> dict:
+    return {"kind": kind, "ref": ref, "note": note}
+
+
+def _commit_evidence(commits: list[dict], note: str) -> list[dict]:
+    return [_evidence("commit", c["sha"], f"{note}: {c['date']} {c['subject']}") for c in commits]
+
+
+def _lines(text: str) -> list[str]:
+    return (text or "").split("\n")
+
+
+def _archived_change_folder(reader, change_id: str | None) -> str | None:
+    if not change_id:
+        return None
+    for name, is_dir in reader.listdir("context/archive"):
+        if is_dir and re.sub(r"^\d{4}-\d{2}-\d{2}-", "", name) == change_id:
+            return f"context/archive/{name}"
+    return None
+
+
+def _date_of(path: str, meta: dict) -> str | None:
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", os.path.basename(path.rstrip("/")))
+    return meta.get("created") or meta.get("updated") or (match.group(1) if match else None)
+
+
+def _later_mentions(reader, path: str, needles: list[str]) -> list[dict]:
+    """Roadmaps other than `path` (later archived ones, queued, the live one) that mention a needle."""
+    candidates = [p for p in archived_roadmap_files(reader) if p > path]
+    candidates += [f"{QUEUED_DIR}/{name}" for name, is_dir in reader.listdir(QUEUED_DIR)
+                   if not is_dir and name.endswith(".md")]
+    candidates.append(ROADMAP_PATH)
+    found = []
+    for candidate in candidates:
+        text = reader.read(candidate)
+        if text is None:
+            continue
+        for number, line in enumerate(_lines(text), start=1):
+            if any(needle and re.search(r"(?<![\w-])" + re.escape(needle) + r"(?![\w-])", line)
+                   for needle in needles):
+                found.append(_evidence("file", f"{candidate}:{number}", line.strip()[:160]))
+                break
+    return found
+
+
+def _item_evidence(reader, git: Git, path: str, item: str | None, change_id: str | None) -> list[dict]:
+    evidence: list[dict] = []
+    folder = _archived_change_folder(reader, change_id)
+    if folder:
+        evidence.append(_evidence("file", folder + "/", "the item's change was archived"))
+    merges = git.merges_for(change_id)
+    evidence += _commit_evidence(merges, "merge of the item's change")
+    for commit in merges[:1]:
+        release = git.release_containing(commit["sha"])
+        if release:
+            evidence.append(_evidence("release", release, f"the first release that contains {commit['sha']}"))
+    evidence += _later_mentions(reader, path, [item, change_id] if item else [change_id])
+    return evidence
+
+
+def _entry(code: str, path: str, line: int | None, text: str, subject: str, evidence: list[dict],
+           **extra) -> dict:
+    return {"code": code, "path": path, "line": line, "text": text, "subject": subject, "evidence": evidence,
+            "owner": not evidence, "settle": SETTLE.get(code, "fix the file it names"), **extra}
+
+
+# ---------------------------------------------------------------- per failure code
+
+
+def _progress_entries(reader, git: Git, path: str) -> list[dict]:
+    import doctor
+
+    text = reader.read(path) or ""
+    folder = os.path.dirname(path)
+    change = frontmatter(reader.read(f"{folder}/change.md") or "")
+    change_id = change.get("change_id") or re.sub(r"^\d{4}-\d{2}-\d{2}-", "", os.path.basename(folder))
+    since = _date_of(folder, change)
+    phase_files: dict[str, list[str]] = {}
+    current = None
+    for line in _lines(text):
+        heading = re.match(r"^## Phase (\d+)", line)
+        if heading:
+            current = heading.group(1)
+            continue
+        if line.startswith("## "):
+            current = None
+        if current:
+            phase_files.setdefault(current, []).extend(PATH_RE.findall(line))
+    open_items = set(doctor.unticked_automated(text))
+    entries = []
+    in_progress = False
+    phase = None
+    phase_shas: dict[str, list[str]] = {}
+    pending: list[tuple[int, str, str, str]] = []
+    for number, line in enumerate(_lines(text), start=1):
+        if line.startswith("## "):
+            in_progress = line[3:].strip() == "Progress"
+            continue
+        if not in_progress:
+            continue
+        heading = re.match(r"^### Phase (\d+)", line)
+        if heading:
+            phase = heading.group(1)
+            continue
+        box = CHECKBOX_RE.match(line)
+        if not box:
+            continue
+        if box.group("mark") != " ":
+            tail = line.rsplit(" — ", 1)[-1] if " — " in line else ""
+            phase_shas.setdefault(phase or "", []).extend(SHA_TAIL_RE.findall(tail))
+        elif box.group("text").strip() in open_items:
+            pending.append((number, line, box.group("text").strip(), phase or ""))
+    merges = git.merges_for(change_id)
+    for number, line, subject, phase in pending:
+        evidence = [_evidence("commit", sha, f"cited by a ticked item of phase {phase}")
+                    for sha in dict.fromkeys(phase_shas.get(phase, []))]
+        files = sorted(set(phase_files.get(phase, [])))
+        evidence += _commit_evidence(git.touching(files, since), f"touched {', '.join(files)} after {since}")
+        evidence += _commit_evidence(merges, "merge of the change")
+        entries.append(_entry("archived-change-progress", path, number, line, subject, evidence))
+    return entries
+
+
+def _roadmap_rows_by_id(text: str) -> dict[str, dict]:
+    return {row["id"]: row for row in roadmap_rows(text)}
+
+
+def _summary_entries(reader, git: Git, path: str) -> list[dict]:
+    import doctor
+
+    text = reader.read(path) or ""
+    rows = _roadmap_rows_by_id(text)
+    bad = {entry.split(":", 1)[0] for entry in doctor.summary_placeholders(text)}
+    entries = []
+    in_summary = False
+    header = None
+    for number, line in enumerate(_lines(text), start=1):
+        if line.startswith("## "):
+            in_summary = line[3:].strip() == "Summary"
+            header = None
+            continue
+        if not in_summary or not line.strip().startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if header is None:
+            header = [cell.lower() for cell in cells]
+            continue
+        if cells[0] not in bad:
+            continue
+        index = header.index("merge") if "merge" in header else len(cells) - 1
+        cell = cells[index] if index < len(cells) else ""
+        item = cells[0]
+        change_id = (rows.get(item) or {}).get("change_id")
+        evidence = _commit_evidence(git.merges_for(change_id), "merge of the item's change")
+        folder = _archived_change_folder(reader, change_id)
+        if folder:
+            shas = SHA_TAIL_RE.findall(reader.read(f"{folder}/plan.md") or "")
+            if shas:
+                evidence.append(_evidence("commit", shas[-1], f"last SHA in {folder}/plan.md (not a merge; prefer the merge)"))
+        entries.append(_entry("archived-roadmap-summary", path, number, line, f"{item}: {cell}", evidence,
+                              cell=cell, item=item, change_id=change_id))
+    return entries
+
+
+def _open_item_entries(reader, git: Git, path: str) -> list[dict]:
+    import doctor
+
+    text = reader.read(path) or ""
+    entries = []
+    rows = {row["id"]: row for row in roadmap_rows(text) if row["status"] not in doctor.CLOSED_STATUSES}
+    for number, line in enumerate(_lines(text), start=1):
+        match = re.match(r"^\|\s*\*\*([A-Z]+-\d+)\*\*\s*\|", line)
+        if not match or match.group(1) not in rows:
+            continue
+        row = rows.pop(match.group(1))
+        status = [cell.strip() for cell in line.strip().strip("|").split("|")][-1]
+        evidence = _item_evidence(reader, git, path, row["id"], row["change_id"])
+        entries.append(_entry("archived-roadmap-open-items", path, number, line, f"{row['id']} ({row['status']})",
+                              evidence, item=row["id"], change_id=row["change_id"], status=status))
+    return entries
+
+
+def _open_check_entries(reader, git: Git, path: str) -> list[dict]:
+    text = reader.read(path) or ""
+    rows = _roadmap_rows_by_id(text)
+    include_release = path != pending_release_roadmap(reader)
+    wanted = {OWNER_SECTION} | ({RELEASE_SECTION} if include_release else set())
+    closed_on = _date_of(path, frontmatter(text))
+    release = git.release_after(closed_on)
+    entries = []
+    section = None
+    for number, line in enumerate(_lines(text), start=1):
+        if line.startswith("## "):
+            section = line[3:].strip()
+            continue
+        box = CHECKBOX_RE.match(line)
+        if section not in wanted or not box or box.group("mark") != " ":
+            continue
+        ref = ITEM_REF_RE.search(line)
+        item = ref.group("id") if ref else None
+        change_id = (rows.get(item) or {}).get("change_id") if item else None
+        evidence = _item_evidence(reader, git, path, item, change_id) if item else []
+        if release and section == RELEASE_SECTION:
+            evidence.append(_evidence("release", release["tag"], f"released {release['date']}, after the close"))
+        entries.append(_entry("archived-roadmap-open-checks", path, number, line, box.group("text").strip(),
+                              evidence, item=item, change_id=change_id, section=section))
+    return entries
+
+
+def _index_entries(reader, root: str | None) -> list[dict]:
+    import doctor
+    import doctor_fix
+
+    history = doctor_fix.History(root)
+    entries = []
+    for missing in doctor.missing_index_targets(reader):
+        evidence = []
+        for candidate in missing["candidates"]:
+            traced = history.trace(candidate)
+            if traced and traced[0] == "moved":
+                evidence.append(_evidence("file", traced[1], f"`{missing['target']}` moved here (git rename history)"))
+                break
+            if traced:
+                evidence.append(_evidence("commit", traced[1], f"the last commit that had `{candidate}`; "
+                                                                "it was deleted, not moved"))
+                break
+        if not evidence:
+            evidence.append(_evidence("file", f"{missing['path']}:{missing['line']}",
+                                      "the target was never in git history: fix the link or drop the row"))
+        entries.append(_entry("index-missing-file", missing["path"], missing["line"], missing["text"],
+                              f"`{missing['target']}`", evidence, target=missing["target"]))
+    return entries
+
+
+def _file_entry(failure, reader) -> dict:
+    target = failure.path.rstrip("/")
+    evidence = [_evidence("file", failure.path, failure.message)] if reader.exists(target) or failure.code in (
+        "state-missing",) else []
+    return _entry(failure.code, failure.path, None, "", failure.message, evidence)
+
+
+def sweep(reader, root: str | None) -> list[dict]:
+    """Every failure the doctor reports on `reader`, as worklist entries with evidence."""
+    import doctor
+
+    git = Git(root)
+    entries: list[dict] = []
+    indexes_done = False
+    for failure in doctor.run_checks(reader, root):
+        if failure.severity != "fail":
+            continue
+        if failure.code == "index-missing-file":
+            if not indexes_done:
+                entries += _index_entries(reader, root)
+                indexes_done = True
+        elif failure.code == "archived-change-progress":
+            entries += _progress_entries(reader, git, failure.path)
+        elif failure.code == "archived-roadmap-summary":
+            entries += _summary_entries(reader, git, failure.path)
+        elif failure.code == "archived-roadmap-open-items":
+            entries += _open_item_entries(reader, git, failure.path)
+        elif failure.code == "archived-roadmap-open-checks":
+            entries += _open_check_entries(reader, git, failure.path)
+        else:
+            entries.append(_file_entry(failure, reader))
+    return entries

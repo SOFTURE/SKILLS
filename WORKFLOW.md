@@ -800,6 +800,18 @@ left after them; `--fix --write` applies them, only under `context/`, and a seco
 A row whose target was never in git history, a live index, and a checkout without full history are left alone and
 named. Everything else is a judgement case.
 
+**Judgement cases: the sweep.** `npx softure-skills doctor --sweep [--json]` (read-only) lists every remaining failure
+as one worklist entry per thing to settle (an unticked Progress item, a `## Summary` placeholder, an open row, an open
+owner check), with `path`, `line`, the exact `text`, and evidence pointers found in the repository alone: for unticked
+Progress items the commits that touched the phase's files after the plan's date (and the SHA the phase's ticked items
+cite); for `## Summary` placeholders the merge commit of the item's change (first-parent log, branch name, change ID in
+the message); for open rows and owner checks the item's archived change, merge commit, the release that contains it,
+and later roadmaps that mention the item. An entry with no evidence is marked `owner`. The `softure-doctor` skill
+("Sweep history to zero") tells an agent how to work it: every entry is settled with its evidence written into the line,
+never without; what only the owner can settle (a real open decision, a step outside the repository) is carried to the
+live roadmap's `## Owner decisions and checks` or an `owner-word` issue and collected in one short list for the owner;
+nothing else is left open.
+
 A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in their
 CI check**, documentation-only changes included; the installer prints the line (`npx softure-skills doctor`) until a
 workflow under `.github/workflows/` runs it. `softure-archive` and `softure-roadmap --close` run it before their commit
