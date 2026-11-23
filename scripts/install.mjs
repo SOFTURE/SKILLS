@@ -61,6 +61,23 @@ const CI_JOB_YAML = (version) => [
   "        env:",
   "          npm_config_ignore_scripts: \"true\"  # run the doctor only, no install into the checkout",
 ].join("\n");
+// The trigger the workflow that holds the job needs: every pull request, and every push to the main branch (the
+// check run on the main branch's head is what readers look for). No paths filter, no condition.
+const CI_ON_YAML = (branch) => [
+  "on:",
+  "  pull_request:",
+  "  push:",
+  `    branches: [${branch}]`,
+].join("\n");
+const CI_WORKFLOW_YAML = (version, branch) => [
+  "name: context-doctor",
+  "",
+  CI_ON_YAML(branch),
+  "",
+  "jobs:",
+  CI_JOB_YAML(version),
+].join("\n");
+const CI_CONFIG_SCRIPT = path.join(DOCTOR_SCRIPTS, "ci_config.py");
 // Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6).
 const OWNER_WORD_LABEL = {
   name: "owner-word",
@@ -117,6 +134,20 @@ function doctorInCi(projectRoot) {
     .filter((text) => text.includes("softure-skills doctor"));
   if (texts.length === 0) return "none";
   return texts.some((text) => hasCiJob(text)) ? "named" : "unnamed";
+}
+
+// Workflows whose CI_JOB job does not run on every push to the main branch (ci_config.py: no push trigger for it,
+// a paths filter, an `if:`), as [{ path, problems }]; [] when python3 is missing or nothing is wrong.
+function ciTriggerProblems(projectRoot, branch) {
+  const args = [CI_CONFIG_SCRIPT, "--root", projectRoot, "--json"];
+  if (branch) args.push("--main-branch", branch);
+  const result = spawnSync("python3", args, { encoding: "utf8", timeout: 15000 });
+  if (result.error || (result.status !== 0 && result.status !== 1)) return [];
+  try {
+    return JSON.parse(result.stdout).workflows ?? [];
+  } catch {
+    return [];
+  }
 }
 
 // True when a workflow has a job whose id or `name:` is CI_JOB (the name its check run carries).
@@ -326,10 +357,16 @@ function install(options) {
     console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json takes it from the active roadmap until then; softure-init asks for it)`);
   }
   const ci = doctorInCi(projectRoot);
+  const branch = readWorkflowConfig(projectRoot).mainBranch || null;
+  const shownBranch = branch ?? "main";
   if (ci === "none") {
-    console.log(`${prefix} CI: once \`${CI_LINE}\` exits 0 (rollout: doctor --fix, doctor --sweep; WORKFLOW.md §12.4), add this job to a workflow under .github/workflows/ that runs on every push and pull request, documentation-only changes included:\n${CI_JOB_YAML(PACKAGE.version)}`);
+    console.log(`${prefix} CI: once \`${CI_LINE}\` exits 0 (rollout: doctor --fix, doctor --sweep; WORKFLOW.md §12.4), add this workflow under .github/workflows/ (or the job to one with the same \`on:\`): it runs on every pull request and every push to ${shownBranch}, documentation-only changes included:\n${CI_WORKFLOW_YAML(PACKAGE.version, shownBranch)}`);
   } else if (ci === "unnamed") {
-    console.log(`${prefix} CI: run the doctor in a job named \`${CI_JOB}\` (no paths filter, no condition), so its check run can be found by that name (WORKFLOW.md §12.2):\n${CI_JOB_YAML(PACKAGE.version)}`);
+    console.log(`${prefix} CI: run the doctor in a job named \`${CI_JOB}\` (no paths filter, no condition), on every pull request and every push to ${shownBranch}, so its check run can be found by that name on ${shownBranch}'s head (WORKFLOW.md §12.2):\n${CI_ON_YAML(shownBranch)}\n\njobs:\n${CI_JOB_YAML(PACKAGE.version)}`);
+  } else {
+    for (const workflow of ciTriggerProblems(projectRoot, branch)) {
+      console.log(`${prefix} CI: the \`${CI_JOB}\` job in ${workflow.path} does not run on every push to ${shownBranch}: ${workflow.problems.join("; ")}. Give the workflow this trigger (no paths filter) and the job no \`if:\`, so ${shownBranch}'s head gets a \`${CI_JOB}\` check run (WORKFLOW.md §12.2):\n${CI_ON_YAML(shownBranch)}`);
+    }
   }
 }
 

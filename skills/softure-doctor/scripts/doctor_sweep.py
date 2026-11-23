@@ -74,6 +74,8 @@ OWNER_KINDS = (
 )
 
 SETTLE = {
+    "ci-doctor-trigger": "give the workflow `on: pull_request` and `push` to the main branch, drop its paths filter "
+                         "and the job's `if:` (WORKFLOW.md §12.2)",
     "archived-change-progress": "tick it with the SHA that did it (`- [x] <text> — <sha>`), or, when the work was "
                                 "never done, `- [x] ~~<text>~~ — dropped: <reason>`",
     "archived-roadmap-summary": "put the merge SHA into the row's Merge cell (a release tag where the roadmap records "

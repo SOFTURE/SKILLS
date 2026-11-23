@@ -37,7 +37,10 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 ## When it runs
 
 - **CI of every adopting project**, documentation-only changes included: `npx softure-skills doctor` in a job
-  named `context-doctor`, with no paths filter and no condition (the installer prints the job; WORKFLOW §12.2).
+  named `context-doctor`, on `pull_request` and on `push` to the main branch, with no paths filter and no condition
+  (the installer prints the workflow; WORKFLOW §12.2). The doctor fails with `ci-doctor-trigger` when that job misses
+  pushes to `mainBranch` (no `push` trigger for it, a `paths`/`paths-ignore` filter, an `if:`): fix the workflow's
+  `on:` block and drop the condition, never baseline it.
   Keep the name: outside readers look for that check run on the main branch's head; in GitHub Actions the doctor
   writes its failure codes there as annotations (the first, `context-doctor failure codes`, lists them all), as
   one plain line of the job's log (for readers with Actions: read only) and as the job summary. A project with history adds it after the rollout (WORKFLOW §12.4):
@@ -66,6 +69,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `index-missing-file` | a real link (a markdown link, or a cell that is only a path in a file column) points at a missing file: fix or drop the row; a path mentioned in a description cell never fails |
 | `state-missing` / `state-stale` | `context_state.py write`, commit `context/state.json` |
 | `baseline-stale` | a baselined failure is fixed: `doctor.py --baseline` rewrites the file without it (commit it) |
+| `ci-doctor-trigger` | the workflow's `context-doctor` job misses pushes to `mainBranch`: give its `on:` `pull_request` and `push` with `branches: [<mainBranch>]`, drop any `paths`/`paths-ignore` filter and the job's `if:` (never baselined) |
 
 ## Mechanical repairs: `--fix`
 

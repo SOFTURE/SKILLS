@@ -866,6 +866,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `state-missing` | `context/state.json` is gone although git history holds it |
 | `state-stale` | `context/state.json` does not match the markdown |
 | `baseline-stale` | `context/doctor-baseline.json` lists a failure that no longer occurs (remove it), or is unreadable |
+| `ci-doctor-trigger` | a workflow's `context-doctor` job does not run on every push to `mainBranch` (no `push` trigger for it, a `paths`/`paths-ignore` filter, an `if:` on the job), so the main branch's head has no check run; never baselined |
 
 **Mechanical repairs.** `npx softure-skills doctor --fix` prints the edits that need no judgement, and the failures
 left after them; `--fix --write` applies them, only under `context/`, and a second run changes nothing:
@@ -910,13 +911,14 @@ checks` or an `owner-word` issue and collected in one short list for the owner; 
 that remain to `context/doctor-baseline.json` (`{ "note", "created", "entries": [ { "code", "path", "message" } ] }`).
 The check then reports those as `baselined` and fails only on a new failure (a code and path not in the file) and on an
 entry that was fixed but not removed (`baseline-stale`). The file only shrinks: running `--baseline` again drops the
-fixed entries, never adds one (it names them and exits 1), and removes the file once it is empty. State findings are
+fixed entries, never adds one (it names them and exits 1), and removes the file once it is empty. State findings and `ci-doctor-trigger` are
 never baselined; `--fix` and `--sweep` ignore it. It is the owner's call, recorded in the commit; the recommended path
 is the sweep to zero.
 
 A project that has never written `state.json` gets a note, not a failure. **Adopting projects run the doctor in a CI
-job named `context-doctor`**, with no paths filter and no condition, so documentation-only changes are checked too and
-an outside reader finds the result by that name: the check run `context-doctor` on the main branch's head says whether
+job named `context-doctor`, on `pull_request` and on `push` to the main branch**, with no paths filter and no
+condition, so documentation-only changes are checked too and an outside reader finds the result by that name: the check
+run `context-doctor` on the main branch's head says whether
 the project's context contract is green (`portfolio --source api` reads it). In GitHub Actions the doctor also leaves
 its failure codes on that check run: the first annotation, titled `context-doctor failure codes`, lists every code with
 its count (`archived-change-progress (3), state-stale (1)`), one annotation per failure follows (as many as GitHub
@@ -924,10 +926,23 @@ keeps), and the job summary holds the same table. The job's log carries the same
 `context-doctor failure codes: archived-change-progress (3), state-stale (1)`: check runs and their annotations need
 the Checks permission, which a fine-grained token cannot hold, so on a private repository a least-privilege reader
 (Actions: read) finds the job through the Actions API and the codes in its log. Keep the job name, whatever the rest of
-the workflow looks like. The installer prints the job until a workflow under `.github/workflows/` runs the doctor, and
-asks to rename it while the job that runs it has another name:
+the workflow looks like. **The push trigger is what puts the check run on the main branch's head:** a job that runs on
+`pull_request` only checks every change, yet the main branch never gets a `context-doctor` check run, and
+`portfolio --source api` (or any outside reader) finds no doctor result. A merge commit is a new head; only a run on
+that push answers for it. The installer prints the workflow below until a workflow under `.github/workflows/` runs the
+doctor, asks to rename the job while the job that runs it has another name, and prints the `on:` block while the
+`context-doctor` job has no `push` trigger for `mainBranch`, a `paths`/`paths-ignore` filter or an `if:`. The doctor
+fails on the same with `ci-doctor-trigger` (never baselined):
 
 ```yaml
+name: context-doctor
+
+on:
+  pull_request:
+  push:
+    branches: [main]  # your mainBranch (context/workflow.json)
+
+jobs:
   context-doctor:  # keep this name: readers look for the check run "context-doctor"
     runs-on: ubuntu-latest
     steps:
@@ -984,7 +999,19 @@ long ago. The history is put right, not hidden. One pass per repository, in this
    agent's report lists it once, short: `ID | what the owner decides or does | where it lives now`. Nothing else
    waits, so `portfolio --owner` shows only these and the live roadmaps' entries.
 4. **The CI job at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add the `context-doctor` job
-   (§12.2; no paths filter, no condition), or rename the job that already runs the doctor to `context-doctor`. From then on every new drift is red where it happens.
+   (§12.2), or rename the job that already runs the doctor to `context-doctor`. Its workflow runs on `pull_request`
+   and on `push` to the main branch, with no paths filter, and the job has no condition:
+
+   ```yaml
+   on:
+     pull_request:
+     push:
+       branches: [main]  # your mainBranch
+   ```
+
+   After the first merge, check that the main branch's head has a `context-doctor` check run
+   (`gh api repos/<owner>/<repo>/commits/<mainBranch>/check-runs?check_name=context-doctor`). From then on every new
+   drift is red where it happens, and an outside reader sees the result.
 
 A project that cannot finish step 2 in one change may, on the owner's word, use `doctor --baseline` (§12.2) and add the
 `context-doctor` job with it; the baseline only shrinks, and the sweep continues until the file is gone.
