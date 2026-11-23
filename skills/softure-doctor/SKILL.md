@@ -39,8 +39,8 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 - **CI of every adopting project**, documentation-only changes included: `npx softure-skills doctor` in a job
   named `context-doctor`, with no paths filter and no condition (the installer prints the job; WORKFLOW §12.2).
   Keep the name: outside readers look for that check run on the main branch's head; in GitHub Actions the doctor
-  writes its failure codes there as annotations (the first, `context-doctor failure codes`, lists them all) and as
-  the job summary. A project with history adds it after the rollout (WORKFLOW §12.4):
+  writes its failure codes there as annotations (the first, `context-doctor failure codes`, lists them all), as
+  one plain line of the job's log (for readers with Actions: read only) and as the job summary. A project with history adds it after the rollout (WORKFLOW §12.4):
   `--fix --write`, the sweep to zero, the owner's short list, then the CI job. Drift happens in the documents, so a CI that skips doc-only
   changes misses it.
 - **`softure-archive`** (on the main branch) and **`softure-roadmap`** (record, `--queue`, `--promote`,

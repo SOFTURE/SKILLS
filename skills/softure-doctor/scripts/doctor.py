@@ -10,8 +10,9 @@
 
 Adopting projects run it in a CI job named `context-doctor`, documentation-only changes included (that is where the
 drift happens). In GitHub Actions it also writes the failure codes as annotations of that check run (the first one,
-titled `context-doctor failure codes`, lists every code with its count) and as the job summary, so a reader of the
-forge API sees the codes on the main branch's head without a checkout. `softure-archive` and `softure-roadmap
+titled `context-doctor failure codes`, lists every code with its count), as one plain log line of the job
+(`context-doctor failure codes: <code> (<count>), ...`, readable with Actions: read, where the checks API is not)
+and as the job summary, so a reader of the forge API sees the codes on the main branch's head without a checkout. `softure-archive` and `softure-roadmap
 --close` run it before their commit and fix what they own. Each problem is one line `FAIL <code> <path>: <what>`; the codes:
 
   roadmap-archived-not-removed    roadmap.md is still there although the same roadmap is in foundation/archive/
@@ -662,6 +663,8 @@ def run_sweep(reader, root: str, git_root: str | None, as_json: bool, use_forge:
 
 # The annotation that lists every failure code of a run; readers of the check run (portfolio --source api) find it
 # by this title. GitHub keeps only the first few annotations of a step, so the codes come first, in one annotation.
+# The same list is printed as one plain line, `CI_CODES_TITLE: <codes>`, into the job's log: annotations need the
+# Checks permission, which a fine-grained token cannot hold, while the job log needs only Actions: read.
 CI_CODES_TITLE = "context-doctor failure codes"
 CI_ANNOTATION_LIMIT = 9
 
@@ -683,6 +686,8 @@ def report_to_ci(failures: list[Finding], env: dict | None = None, out=None) -> 
 
     The first annotation (title `CI_CODES_TITLE`) lists every code with its count, so a reader of the check run
     through the forge API gets the codes without a checkout; one annotation per failure follows, up to the limit.
+    The same list goes into the job log as the plain line `CI_CODES_TITLE: <codes>` for a reader with Actions: read
+    only (a fine-grained token on a private repository cannot read check runs).
     The job summary (`$GITHUB_STEP_SUMMARY`) holds the same table. Outside Actions nothing changes.
     """
     env = os.environ if env is None else env
@@ -693,6 +698,7 @@ def report_to_ci(failures: list[Finding], env: dict | None = None, out=None) -> 
     if codes:
         listed = ", ".join(f"{code} ({count})" for code, count in codes)
         print(f"::error title={_escape(CI_CODES_TITLE, True)}::{_escape(listed)}", file=out)
+        print(f"{CI_CODES_TITLE}: {listed}", file=out)
         for failure in failures[:CI_ANNOTATION_LIMIT]:
             print(f"::error file={_escape(failure.path, True)},title={_escape(failure.code, True)}::"
                   f"{_escape(failure.message)}", file=out)
