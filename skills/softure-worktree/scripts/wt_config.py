@@ -9,7 +9,7 @@
 Always reads the config of the MAIN worktree (first entry of `git worktree list`), so every
 worktree and every script sees the same values. `mainBranch` falls back to origin's HEAD, then
 "main"; `worktree.maxParallel` to 4; `language` to "en"; `mode` to "manual";
-`autonomy.reports.every` to 60; `autonomy.remergeMain` to "when-needed" ("on-conflict" and "always"
+`autonomy.reports.every` to 60; `autonomy.reports.idleHours` to 24; `autonomy.remergeMain` to "when-needed" ("on-conflict" and "always"
 are the other values).
 
 Importable: `from wt_config import load_config, main_root, main_branch`.
@@ -27,7 +27,7 @@ DEFAULTS = {
     "language": "en",
     "worktree": {"maxParallel": 4, "setup": []},
     "release": {"owner": True},
-    "autonomy": {"reports": {"every": 60, "hours": None}, "remergeMain": "when-needed"},
+    "autonomy": {"reports": {"every": 60, "hours": None, "idleHours": 24}, "remergeMain": "when-needed"},
 }
 
 

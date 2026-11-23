@@ -8,6 +8,7 @@ never re-created to pick up a fix.
 | Routine | File | Schedule | What it does |
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
+| Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
 
 ## The standard every routine follows
 
@@ -17,7 +18,8 @@ Learned from routines that ran for weeks in several adopting projects:
    the whole conversation again on every fire: after a month that was 150k to 240k tokens per run and several times
    the cost of the same work in a fresh session. It also carries stale beliefs: a persistent package-update session
    that once heard "the server is ready" released and deployed every nightly bump from then on. A fresh session
-   knows only the repository, which is the point: everything a routine needs lives there.
+   knows only the repository, which is the point: everything a routine needs lives there. A routine is never bound
+   to the coordinator's session either: an hourly heartbeat bound there cost about 145k tokens per fire.
 2. **Never release, tag, publish or deploy from a routine**, without conditions. A dependency bump rides the next
    release the owner orders. A rule like "until the owner says the server is ready" stops being true one day and the
    routine starts deploying unattended, database migrations included.
@@ -35,6 +37,9 @@ Learned from routines that ran for weeks in several adopting projects:
    projects firing at the same minute is fine.
 
 ## Setting one up
+
+The roadmap heartbeat is created by the coordinator when an autonomous run starts and deleted when it ends; its file
+has its own setup brief. The package-update routine is set up once per project:
 
 Paste this into the project's main chat (or any session of the project that can create scheduled tasks). Replace
 `<owner>/<repo>` with the repository:

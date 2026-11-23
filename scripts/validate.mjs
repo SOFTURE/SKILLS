@@ -6,6 +6,7 @@
 // - any shipped file contains Polish diacritics (everything shipped is English)
 // - a mode section of the rules block does not mention the owner-word label (WORKFLOW.md §8.6)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
+// - any shipped file tells a coordinator to bind a routine to its own session (routines run in a fresh session)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -49,11 +50,20 @@ for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true }).filter((i
   }
 }
 
+// A sentence that binds a routine to the coordinator's (or "this") session is allowed only as a prohibition.
+const BINDING = /\b(bind|binds|bound|binding)\b[^.;]*\b(coordinator's|this) session/i;
+const PROHIBITION = /\b(never|not|no)\b/i;
+
 for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(path.join(ROOT, "routines")), ...walk(path.join(ROOT, "scripts")).filter((file) => !file.endsWith("validate.mjs")), path.join(ROOT, "README.md"), path.join(ROOT, "WORKFLOW.md"), path.join(ROOT, "ONBOARD.md")]) {
   if (!/\.(md|sh|py|mjs|js|json|txt)$/.test(file)) continue;
   const content = fs.readFileSync(file, "utf8");
   for (const pattern of FORBIDDEN) {
     if (pattern.test(content)) errors.push(`${path.relative(ROOT, file)}: matches forbidden pattern ${pattern}`);
+  }
+  for (const sentence of content.replace(/\s+/g, " ").split(/(?<=[.;])\s/)) {
+    if (BINDING.test(sentence) && !PROHIBITION.test(sentence)) {
+      errors.push(`${path.relative(ROOT, file)}: binds a routine to the coordinator's session: "${sentence.slice(0, 120)}"`);
+    }
   }
 }
 
@@ -72,6 +82,7 @@ for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".
   const content = fs.readFileSync(path.join(routinesDir, file), "utf8");
   if (!/Never release, tag, publish or deploy/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never release, tag, publish or deploy"`);
   if (!/fresh session/i.test(content)) errors.push(`routines/${file}: does not say it runs in a fresh session`);
+  if (!/Never disable, edit or delete this routine/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never disable, edit or delete this routine"`);
   if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
 }
 
