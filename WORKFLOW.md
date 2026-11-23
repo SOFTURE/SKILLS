@@ -367,6 +367,11 @@ Parsing rules (scripts depend on them):
 - **Stages** (first token inside the parentheses of `in_progress`): `research`, `frame`, `plan`,
   `plan-review`, `implement N/M`, `impl-review`, `integration`, `archive`.
 - The item block mirrors the row status in `- **Status:** …` directly under `- **Change ID:**`.
+- Item blocks are `### <ID>: <title>` under `## Items`, one per row, followed by `- **<Field>:** <value>` lines
+  (a value may wrap onto lines indented by two spaces; a list field holds `  - ` lines). Apps that show a roadmap
+  (an adopting cockpit, for one) read the title, `Outcome`, `Prerequisites`, `Size` and the other fields from the
+  block and the status from the row. Every block has a row; the doctor fails a roadmap that breaks this
+  (`roadmap-item-shape`, §12.2).
 
 ### 5.1 Thematic roadmaps and the backlog
 
@@ -861,6 +866,7 @@ its own `change.md` without touching `state.json`, and stays green.
 | `archived-roadmap-summary` | an archived roadmap whose `## Summary` item table (the table with a merge column; other tables there are ignored) holds a placeholder in the merge column; a SHA, a release tag, `carried`, `dropped` and `— <reason>` pass |
 | `archived-roadmap-open-checks` | an archived roadmap with an unticked `## Owner decisions and checks` entry, or an unticked `## Before the next release` step once its release is recorded or a later roadmap was closed |
 | `queued-roadmap-done` | a queued roadmap whose rows are all done, never archived |
+| `roadmap-item-shape` | a live roadmap (`roadmap.md`, `roadmaps/roadmap-*.md`) that apps reading it cannot parse (§5): item blocks but no at-a-glance row, an item block whose ID has no row, a row status outside the vocabulary, an item block whose `Status` contradicts its row, or an item block without a title; a row without an item block passes |
 | `backlog-without-roadmap` | `backlog/roadmap-<slug>/` without `roadmaps/roadmap-<slug>.md` (or the promoted main roadmap) |
 | `index-missing-file` | a table row of a `README.md` or `INDEX.md` under `context/` that links a missing file: a markdown link, or a cell that is only a path in a file column (`File`, `Path`, `Document`, `Link`); a path mentioned in a description cell is not a link |
 | `state-missing` | `context/state.json` is gone although git history holds it |
@@ -880,7 +886,8 @@ left after them; `--fix --write` applies them, only under `context/`, and a seco
 - an unticked owner check or pre-release step of an archived roadmap, or an open row, whose text carries a carry
   marker (`→ roadmap-<slug>`, `carried to <roadmap>`) naming a roadmap that exists (queued, archived or the live one)
   is ticked `- [x] <text> — carried to <path>` (a row becomes `carried (to <path>)`); the sweep shows such an entry
-  with that roadmap as its evidence. A marker whose roadmap does not exist stays a failure.
+  with that roadmap as its evidence. A marker whose roadmap does not exist stays a failure;
+- an item block of a live roadmap whose `- **Status:**` contradicts its at-a-glance row takes the row's status cell.
 
 A row whose move or deletion the history does not show, and a live index, are left alone and named. A shallow clone
 works on the commits it holds and names what lies past its edge. Everything else is a judgement case.

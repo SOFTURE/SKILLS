@@ -102,6 +102,8 @@ SETTLE_OWNER = {
     "roadmap-archived-not-removed": "remove roadmap.md (the close moved it)",
     "roadmap-status-mismatch": "set `status` to match the rows",
     "queued-roadmap-done": "archive the finished queued roadmap to foundation/archive/",
+    "roadmap-item-shape": "give every item block its at-a-glance row and a status from the vocabulary; a block "
+                          "status that contradicts its row is mechanical: `doctor --fix --write`",
     "backlog-without-roadmap": "move live entries to a queued roadmap, then remove the folder",
     "state-missing": "`npx softure-skills state`, commit context/state.json",
     "state-stale": "`npx softure-skills state`, commit context/state.json",

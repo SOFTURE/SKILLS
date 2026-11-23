@@ -50,6 +50,7 @@ GIT_ENV = {
 sys.dont_write_bytecode = True  # the package ships skills/, so no __pycache__ may land there
 sys.path.insert(0, SCRIPTS)
 import context_state  # noqa: E402
+import doctor  # noqa: E402
 
 CASES = sorted(os.listdir(os.path.join(FIXTURES, "cases")))
 FIX_CASES = sorted(os.listdir(os.path.join(FIXTURES, "fix")))
@@ -188,7 +189,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_each_case_fails_with_its_code(self) -> None:
-        self.assertEqual(len(CASES), 13)
+        self.assertEqual(len(CASES), 14)
         for case in CASES:
             with self.subTest(case=case):
                 project = Project()
@@ -219,6 +220,38 @@ class DoctorTest(unittest.TestCase):
         shutil.rmtree(self.project.path("context"))
         code, _ = self.project.doctor()
         self.assertEqual(code, 0)
+
+
+class RoadmapShapeTest(unittest.TestCase):
+    """`roadmap-item-shape`: what keeps a live roadmap readable by scripts and apps (WORKFLOW §5)."""
+
+    HEAD = ("# Roadmap x\n\n| ID | Change | Outcome | Depends on | Mode | Status |\n| --- | --- | --- | --- | --- | --- |\n"
+            "| **AB-1** | `one` | first | — | autonomous | ready |\n")
+
+    def messages(self, text: str) -> list[str]:
+        return [f"{finding.severity}: {finding.message}" for finding in doctor.roadmap_shape("roadmap.md", text)]
+
+    def test_rows_with_matching_blocks_pass_and_a_row_without_a_block_passes(self) -> None:
+        self.assertEqual(self.messages(self.HEAD), [])
+        self.assertEqual(self.messages(self.HEAD + "\n### AB-1: First\n- **Change ID:** `one`\n- **Status:** ready\n"), [])
+
+    def test_blocks_without_any_row_fail(self) -> None:
+        messages = self.messages("# Roadmap x\n\n### AB-1: First\n- **Status:** ready\n")
+        self.assertEqual(len(messages), 1)
+        self.assertIn("no at-a-glance row", messages[0])
+
+    def test_a_block_without_a_row_a_contradicting_status_and_a_missing_title_fail(self) -> None:
+        text = self.HEAD + ("\n### AB-1: First\n- **Status:** done\n\n### AB-2: Second\n- **Status:** ready\n"
+                            "\n### AB-1:\n")
+        messages = " | ".join(self.messages(text))
+        self.assertIn("without an at-a-glance row: AB-2", messages)
+        self.assertIn("AB-1 (block done, row ready)", messages)
+        self.assertIn("without a title: AB-1", messages)
+
+    def test_a_row_status_outside_the_vocabulary_fails(self) -> None:
+        messages = self.messages(self.HEAD.replace("| ready |", "| waiting (owner) |"))
+        self.assertEqual(len(messages), 1)
+        self.assertIn("AB-1 (waiting)", messages[0])
 
 
 class FixTest(unittest.TestCase):

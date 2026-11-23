@@ -4,7 +4,7 @@
     doctor.py --fix [--write] [--json] [--root <dir>]
     npx softure-skills doctor --fix [--write]
 
-Three shapes are mechanical, and only files under `context/` are edited:
+These shapes are mechanical, and only files under `context/` are edited:
 
   archived-change-status   an archived change.md gets `status: archived`; the old value is kept as
                            `legacy_status` in its front matter (a missing status gets none)
@@ -22,6 +22,9 @@ Three shapes are mechanical, and only files under `context/` are edited:
                            roadmap that exists (queued, archived or the live one): the check is ticked
                            `- [x] <text> — carried to <path>`, the row (and its item block) becomes
                            `carried (to <path>)`; a marker whose roadmap does not exist is left alone and named
+  block status             an item block of a live roadmap (roadmap.md, a queued one) whose `- **Status:**`
+                           contradicts its at-a-glance row takes the row's status cell (scripts write the row;
+                           the block mirrors it, WORKFLOW §5)
 
 Everything else (an index row whose target is not in the history this checkout holds, a live index)
 is a judgement case: `doctor.py --sweep` lists it with evidence. A shallow clone works: what it cannot
@@ -227,6 +230,7 @@ def plan_fixes(reader, root: str | None) -> dict:
             files[rel] = "\n".join(lines)
 
     _plan_carried(reader, files, edits, skipped)
+    _plan_block_status(reader, files, edits)
 
     history = History(root)
     for missing in doctor.missing_index_targets(reader):
@@ -325,6 +329,44 @@ def _plan_carried(reader, files: dict[str, str], edits: list[dict], skipped: lis
                         lines[block_index] = block_line.replace(old_status, new_status, 1)
                 edits.append({"code": "archived-roadmap-open-items", "path": path, "line": index + 1,
                               "what": f"{row.group(1)} {old_status} -> {new_status}"})
+        if lines != text.split("\n"):
+            files[path] = "\n".join(lines)
+
+
+def _plan_block_status(reader, files: dict[str, str], edits: list[dict]) -> None:
+    """Item blocks of live roadmaps take the status of their row when the two contradict."""
+    import doctor  # noqa: E402
+
+    from context_state import QUEUED_DIR, ROADMAP_PATH, cells, parse_status
+
+    for path in [ROADMAP_PATH, *doctor._files(reader, QUEUED_DIR, r"^roadmap-.+\.md$")]:
+        text = files.get(path, reader.read(path))
+        if text is None:
+            continue
+        rows = {}
+        for line in text.split("\n"):
+            row = re.match(r"^\|\s*\*\*([A-Z]+-\d+)\*\*\s*\|", line)
+            if row and row.group(1) not in rows:
+                rows[row.group(1)] = cells(line)[-1]
+        lines = text.split("\n")
+        current = None
+        for index, line in enumerate(lines):
+            heading = doctor.ITEM_BLOCK_RE.match(line)
+            if heading:
+                current = heading.group("id")
+                continue
+            if line.startswith("#"):
+                current = None
+                continue
+            status = doctor.BLOCK_STATUS_RE.match(line)
+            if current is None or not status or current not in rows:
+                continue
+            row_status = rows[current]
+            if parse_status(status.group("status"))["status"] != parse_status(row_status)["status"]:
+                lines[index] = f"- **Status:** {row_status}"
+                edits.append({"code": "roadmap-item-shape", "path": path, "line": index + 1,
+                              "what": f"{current} block status `{status.group('status').strip()}` -> `{row_status}`"})
+            current = None
         if lines != text.split("\n"):
             files[path] = "\n".join(lines)
 
