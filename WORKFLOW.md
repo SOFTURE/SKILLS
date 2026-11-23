@@ -120,6 +120,13 @@ or languages.
     "rules": ["language", "workflow", "conventions"],  // sections of rules/AGENTS.md to inject; default: all.
                                     // "language" ships even when omitted here
     "allowNonEnglishCode": false    // true only on the owner's explicit word for a codebase that stays non-English
+  },
+  "routines": {                     // optional: state a routine keeps between runs (§13); a fresh session reads it here
+    "packageUpdates": {
+      "hold": [                     // packages the nightly update leaves alone until the fix is published
+        { "package": "@softure-ai/mailing", "issue": "SOFTURE/AI#123", "since": "2026-11-20" }
+      ]
+    }
   }
 }
 ```
@@ -975,3 +982,24 @@ long ago. The history is put right, not hidden. One pass per repository, in this
 
 A project that cannot finish step 2 in one change may, on the owner's word, use `doctor --baseline` (§12.2) and add the
 `context-doctor` job with it; the baseline only shrinks, and the sweep continues until the file is gone.
+
+## 13. Routines
+
+A routine is a scheduled session that keeps a project healthy without the owner. Its steps ship in this package under
+`routines/` (one file per routine, written for the session that runs it); the project's scheduled task holds only a
+short pointer prompt, so a routine follows the installed `@softure-ai/skills` version and is never re-created to pick
+up a fix. `routines/README.md` lists the routines, the prompt that sets one up, and the standard every routine follows:
+
+- **a fresh session on every fire**, never one persistent session: a persistent session re-reads its whole history on
+  every run, gets more expensive each night and carries stale beliefs;
+- **never release, tag, publish or deploy**, without conditions: a dependency bump rides the next release the owner
+  orders (§8, Releases);
+- **state in the repository**, not in memory (`routines.*` in `workflow.json`, §2);
+- **one pull request at most per run**, merged on green through the project's merge path;
+- **a report on every run**, quiet ones included, in `chatLanguage`, as the run's last message; no artifacts;
+- **one routine per purpose per project**; a routine never disables, edits or deletes itself.
+
+| Routine | File | Schedule |
+| --- | --- | --- |
+| Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
+

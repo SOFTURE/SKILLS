@@ -5,6 +5,7 @@
 // - any shipped file mentions third-party course branding (this package is original work)
 // - any shipped file contains Polish diacritics (everything shipped is English)
 // - a mode section of the rules block does not mention the owner-word label (WORKFLOW.md §8.6)
+// - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -48,7 +49,7 @@ for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true }).filter((i
   }
 }
 
-for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(path.join(ROOT, "scripts")).filter((file) => !file.endsWith("validate.mjs")), path.join(ROOT, "README.md"), path.join(ROOT, "WORKFLOW.md"), path.join(ROOT, "ONBOARD.md")]) {
+for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(path.join(ROOT, "routines")), ...walk(path.join(ROOT, "scripts")).filter((file) => !file.endsWith("validate.mjs")), path.join(ROOT, "README.md"), path.join(ROOT, "WORKFLOW.md"), path.join(ROOT, "ONBOARD.md")]) {
   if (!/\.(md|sh|py|mjs|js|json|txt)$/.test(file)) continue;
   const content = fs.readFileSync(file, "utf8");
   for (const pattern of FORBIDDEN) {
@@ -63,6 +64,16 @@ for (const mode of ["manual", "autonomous"]) {
 }
 const startOfRun = rules.slice(rules.indexOf("**Start of a run.**"), rules.indexOf("**Messages to the owner"));
 if (!/owner-word/.test(startOfRun)) errors.push('rules/AGENTS.md: "Start of a run" does not act on `owner-word` issues first');
+
+const routinesDir = path.join(ROOT, "routines");
+const routinesReadme = fs.readFileSync(path.join(routinesDir, "README.md"), "utf8");
+if (!/create_new_session_on_fire/.test(routinesReadme)) errors.push("routines/README.md: does not require a fresh session on every fire");
+for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".md") && name !== "README.md")) {
+  const content = fs.readFileSync(path.join(routinesDir, file), "utf8");
+  if (!/Never release, tag, publish or deploy/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never release, tag, publish or deploy"`);
+  if (!/fresh session/i.test(content)) errors.push(`routines/${file}: does not say it runs in a fresh session`);
+  if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
+}
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);

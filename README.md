@@ -128,6 +128,13 @@ session, **AUTO** and **MANUAL**. In a project that is already set up the sessio
 reads the rules, the config, `context/` and the forge, reports where the work stands and restates the
 rules it will work by. In a project that is not, it installs the skills and runs `softure-init` first.
 
+## Routines
+
+[routines/](routines/README.md) holds the scheduled sessions a project runs without the owner, starting with the
+nightly **package updates** (every `@softure-ai/*` package and pin to the newest, one pull request, never a release
+or deploy). Each runs in a fresh session; the project's scheduled task only points at the file, so a routine improves
+with every bump of this package. `routines/README.md` has the prompt that sets one up (WORKFLOW §13).
+
 ## The chain
 
 See [WORKFLOW.md](WORKFLOW.md) for the full contract: artifacts, statuses, formats and
