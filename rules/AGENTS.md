@@ -380,6 +380,10 @@ completed, and names it in the next report. An issue it cannot act on (unclear, 
 or a standing order) gets one comment with the question and stays open; the question also goes to the
 owner in the main chat. Owner-word issues are not work items: they never get a thread of their own
 unless the decision itself needs one, and they are not in `context/state.json`.
+A project that sets `autonomy.ownerWordWake: "routine"` also has the owner-word wake routine
+(`routines/owner-word-wake.md`): a GitHub-triggered session that claims a new owner-word issue and hands it to the
+coordinator, or acts on it itself when no coordinator is reachable. An issue claimed by that routine
+(`<!-- owner-word-wake: claimed -->`) is acted on once, by whoever the claim handed it to.
 
 **Issues as the work source** (`autonomy.source: "issues"`, no roadmap):
 - The coordinator lists open issues (through a thread when it has no forge access). Not well-founded:

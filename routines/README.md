@@ -9,6 +9,7 @@ never re-created to pick up a fix.
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
 | Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
+| Owner-word wake | [owner-word-wake.md](owner-word-wake.md) | GitHub trigger on issues (opened, labeled), once per repository | picks up an open `owner-word` issue whose author can write to the repository the moment it lands, also in an idle project: hands it to the coordinator or carries the decision out itself; never releases or deploys |
 
 ## The standard every routine follows
 
@@ -39,7 +40,9 @@ Learned from routines that ran for weeks in several adopting projects:
 ## Setting one up
 
 The roadmap heartbeat is created by the coordinator when an autonomous run starts and deleted when it ends; its file
-has its own setup brief. The package-update routine is set up once per project:
+has its own setup brief. The owner-word wake is set up once per repository with a GitHub trigger, and the project
+declares it in `context/workflow.json` → `autonomy.ownerWordWake`; its file has its own setup brief. The
+package-update routine is set up once per project:
 
 Paste this into the project's main chat (or any session of the project that can create scheduled tasks). Replace
 `<owner>/<repo>` with the repository:

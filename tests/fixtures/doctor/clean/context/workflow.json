@@ -3,5 +3,10 @@
   "mode": "autonomous",
   "language": "en",
   "mainBranch": "main",
-  "gates": { "test": "npm test" }
+  "gates": {
+    "test": "npm test"
+  },
+  "autonomy": {
+    "ownerWordWake": "routine"
+  }
 }

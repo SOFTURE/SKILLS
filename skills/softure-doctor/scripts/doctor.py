@@ -41,6 +41,9 @@ and as the job summary, so a reader of the forge API sees the codes on the main 
                                   push to `mainBranch` (no `push` trigger for it, a `paths`/`paths-ignore` filter, an
                                   `if:` on the job), so the main branch's head has no `context-doctor` check run;
                                   see ci_config.py (a project without the job gets the installer's notice instead)
+  owner-word-wake-invalid         context/workflow.json `autonomy.ownerWordWake` is not one of "routine", "heartbeat",
+                                  "none" (WORKFLOW.md §8.6); an autonomous project that leaves the key out gets a note
+                                  (`owner-word-wake-undeclared`), not a failure
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
 moved or was deleted on purpose, found through git history; a dropped Progress item, normalised) and prints every edit; see doctor_fix.py. It is a dry run unless
@@ -75,14 +78,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ci_config  # noqa: E402
 from context_state import (  # noqa: E402
     ARCHIVE_ROADMAPS_DIR, CHANGES_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_SECTION, ROADMAP_PATH, STATE_PATH,
-    FsReader, frontmatter, open_checkboxes, parse_status, pending_release_roadmap, quiet_broken_pipe, roadmap_rows,
-    sections,
+    WORKFLOW_PATH, FsReader, frontmatter, open_checkboxes, parse_status, pending_release_roadmap, quiet_broken_pipe, roadmap_rows,
+    read_workflow, sections,
     staleness,
 )
 
 ARCHIVE_DIR = "context/archive"
 BASELINE_PATH = "context/doctor-baseline.json"
-NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale", "ci-doctor-trigger")
+NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale", "ci-doctor-trigger", "owner-word-wake-invalid")
 BACKLOG_DIR = "context/backlog"
 CLOSED_STATUSES = ("done", "done_code", "dropped", "carried")
 SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
@@ -553,6 +556,27 @@ def check_ci(reader) -> list[Finding]:
             for path, found in ci_config.check(reader, branches)]
 
 
+OWNER_WORD_WAKES = ("routine", "heartbeat", "none")
+
+
+def check_owner_word_wake(reader) -> list[Finding]:
+    """How owner-word issues wake the project (WORKFLOW §8.6): declared, since the routine is not in the repository."""
+    workflow = read_workflow(reader)
+    autonomy = workflow.get("autonomy") if isinstance(workflow.get("autonomy"), dict) else {}
+    if "ownerWordWake" not in autonomy:
+        if workflow.get("mode") != "autonomous":
+            return []
+        return [Finding("owner-word-wake-undeclared", WORKFLOW_PATH,
+                        'autonomy.ownerWordWake is not set: declare "routine" (routines/owner-word-wake.md is set up), '
+                        '"heartbeat" or "none" (WORKFLOW.md §8.6)', severity="note")]
+    value = autonomy["ownerWordWake"]
+    if value in OWNER_WORD_WAKES:
+        return []
+    return [Finding("owner-word-wake-invalid", WORKFLOW_PATH,
+                    f'autonomy.ownerWordWake is {json.dumps(value)}; use "routine", "heartbeat" or "none" '
+                    "(WORKFLOW.md §8.6)")]
+
+
 def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[Finding]:
     """Every finding for the project `reader` sees. `root` (a git checkout) enables the history check.
 
@@ -563,7 +587,7 @@ def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[F
         return []
     findings: list[Finding] = []
     for check in (check_main_roadmap, check_archived_changes, check_archived_roadmaps,
-                  check_queued_and_backlog, check_roadmap_shape, check_indexes, check_ci):
+                  check_queued_and_backlog, check_roadmap_shape, check_indexes, check_ci, check_owner_word_wake):
         findings += check(reader)
     findings += check_state(reader, root)
     return apply_baseline(reader, findings) if baseline else findings

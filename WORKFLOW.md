@@ -98,12 +98,15 @@ or languages.
                                     // files the branch changes; null = the full test gate
     "fullGatePaths": [],            // extra globs that force the full gates after a merge of <main> (built in: lockfiles,
                                     // package manifests, test runner and TypeScript config, test setup, hook config, CI)
-    "reports": { "every": 60, "hours": null, "idleHours": 24 }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
+    "reports": { "every": 60, "hours": null, "idleHours": 24 },  // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
                                     // window; one recurring routine on full hours, `every` rounded up to a multiple of 60.
                                     // `hours: null` = around the clock (24/7), recommended for autonomous runs: the routine
                                     // is also the heartbeat that starts unblocked items and nudges stalled threads
                                     // (routines/roadmap-heartbeat.md, a fresh session per fire). `idleHours` (issue mode):
                                     // the heartbeat is deleted after this many hours with an empty queue; null keeps it
+    "ownerWordWake": "routine"      // what wakes the project on an owner-word issue (§8.6): "routine" (the GitHub-triggered
+                                    // routines/owner-word-wake.md is set up), "heartbeat" (only the roadmap heartbeat, while
+                                    // a run works), "none"; the doctor notes it when missing, fails on any other value
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -691,6 +694,16 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   `change.md` or a standing order) gets a comment with the question and stays open.
 - **Manual mode.** The coordinator shows open `owner-word` issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
+- **An idle project.** Listing at the start of a run and on reports reaches an issue only while a coordinator is awake.
+  A project that must act on its issues by itself, also with no run in flight, sets up the owner-word wake routine
+  (`routines/owner-word-wake.md`): a scheduled task with a GitHub trigger on issue events (opened, labeled) that
+  starts a fresh session per event. That session lists the open owner-word issues, acts only on those whose author
+  can write to the repository, claims each with a comment so two fires never both act, and then hands it to the
+  coordinator's session or, with no coordinator reachable, does both jobs itself (manual mode: it only comments that
+  the issue waits for the owner). It never releases or deploys: a release word is recorded for the next run. The
+  project declares the wake-up in `workflow.json` → `autonomy.ownerWordWake` (`"routine"`, `"heartbeat"` or
+  `"none"`, §2), because the routine itself cannot be read from the repository; the doctor notes an autonomous
+  project that leaves it out, so an aggregator can show which projects wake on their own.
 - **Answering a queue entry.** An issue that answers one `owner_queue` entry (§12.1) may carry, next to the prose, one
   machine-readable line that names the entry by its `id` and the answer:
 
@@ -1068,6 +1081,7 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
 | Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
+| Owner-word wake | `routines/owner-word-wake.md` | GitHub trigger on issues (opened, labeled), once per repository |
 
 
 ## 14. Infrastructure and deploy work

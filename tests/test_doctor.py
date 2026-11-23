@@ -189,7 +189,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_each_case_fails_with_its_code(self) -> None:
-        self.assertEqual(len(CASES), 14)
+        self.assertEqual(len(CASES), 15)
         for case in CASES:
             with self.subTest(case=case):
                 project = Project()
@@ -208,6 +208,37 @@ class DoctorTest(unittest.TestCase):
         code, report = self.project.doctor()
         self.assertEqual(code, 0, report)
         self.assertEqual([note["code"] for note in report["notes"]], ["state-missing"])
+
+    def set_owner_word_wake(self, mode: str, autonomy: dict) -> None:
+        rel = "context/workflow.json"
+        workflow = json.loads(self.project.read(rel))
+        workflow["mode"], workflow["autonomy"] = mode, autonomy
+        self.project.write(rel, json.dumps(workflow, indent=2) + "\n")
+        self.project.state("write")  # state.json carries `mode`
+
+    def test_autonomous_project_without_owner_word_wake_gets_a_note(self) -> None:
+        self.set_owner_word_wake("autonomous", {})
+        code, report = self.project.doctor()
+        self.assertEqual(code, 0, report)
+        self.assertEqual([note["code"] for note in report["notes"]], ["owner-word-wake-undeclared"])
+
+    def test_manual_project_without_owner_word_wake_is_silent(self) -> None:
+        self.set_owner_word_wake("manual", {})
+        code, report = self.project.doctor()
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["notes"], [])
+
+    def test_every_declared_owner_word_wake_passes_and_another_value_fails(self) -> None:
+        for value in ("routine", "heartbeat", "none"):
+            with self.subTest(value=value):
+                self.set_owner_word_wake("autonomous", {"ownerWordWake": value})
+                code, report = self.project.doctor()
+                self.assertEqual((code, report["notes"]), (0, []), report)
+        self.set_owner_word_wake("manual", {"ownerWordWake": True})
+        code, report = self.project.doctor()
+        self.assertEqual(code, 1)
+        self.assertEqual([f["code"] for f in report["failures"]], ["owner-word-wake-invalid"])
+        self.assertIn('autonomy.ownerWordWake is true', report["failures"][0]["message"])
 
     def test_change_branch_editing_its_change_keeps_the_state_fresh(self) -> None:
         rel = "context/changes/search-titles/change.md"
