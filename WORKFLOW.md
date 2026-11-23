@@ -560,7 +560,18 @@ project's own `AGENTS.md`, outside the managed block, not in a session's memory.
 
 A hosted multi-session project (for example a claude.ai project) has a **main-chat session** that
 the owner talks to and that starts **thread sessions**. The main-chat session is the coordinator;
-each thread carries one change. They differ from a local run in three ways: the coordinator has no
+each thread carries one change.
+
+**One roadmap item = one change = one thread session**, however the work starts: a new roadmap, the
+owner's go on an existing roadmap ("implement the roadmap item by item"), an owner-word issue, a
+resumed run. "Item by item" means one thread per item. Serial order comes from starting the next
+item's thread after the previous merge (the startable set, below), never from queueing items in one
+thread; "merges are serial" and `worktree.maxParallel` are about how many threads merge or run at
+once, never about how many items one thread carries. Two guards keep it:
+- **Coordinator:** before sending a brief, check that it names exactly one item ID and one change-id.
+- **Thread:** a thread whose brief names more than one item (several IDs, a lane, a whole roadmap)
+  carries only the first, tells the coordinator at once that the rest need their own threads, and
+  resolves after its one merge. It never starts a second item in the same session. They differ from a local run in three ways: the coordinator has no
 shell over the threads, each thread is a cloud session in its own container on a branch the harness
 assigns, and the coordinator is started by the harness, not inside a checkout.
 
@@ -602,7 +613,7 @@ runs in a checkout and reads the block itself.
 
 | step | local | hosted project |
 | --- | --- | --- |
-| launch (M3) | `wm-launch.sh` | start a thread session with the standard brief (item ID, change-id, outcome, base, owned files, waits for, merge path, report-to, "follow AGENTS.md → Operating mode: autonomous") |
+| launch (M3) | `wm-launch.sh` | start one thread session per item with the standard brief (exactly one item ID and one change-id, outcome, base, owned files, waits for, merge path, report-to, "follow AGENTS.md → Operating mode: autonomous") |
 | in-flight state (M0.1) | `wm-resume.sh` | roadmap rows on `origin/<main>`, live for every stage (with `cloudState: "branch"` they show only at merge, so also memory), the harness's thread list, open pull requests |
 | watch (M4) | `wm-watch.sh` Monitor | thread messages and the report routine; no polling when PR events reach the threads, otherwise each thread polls its own CI (below) |
 | READY / merged report | `SendMessage` | cross-session message to the coordinator's session, never a reply in the thread |
@@ -807,6 +818,10 @@ recorded:
 | `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps |
 | `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry; `**Owner step:**` / `**Owner check:**` lines of an open change's `## Roadmap handoff` |
 | `secret` | a `step` whose text names a secret, key, token, credential or password |
+
+The idle placeholder `roadmap.md` (`status: idle` or `roadmap: none`) is no active roadmap, but a project between
+roadmaps still has owner steps: its open `## Owner decisions and checks` and `## Before the next release` entries
+feed `owner_queue` like the main roadmap's, so an owner-word issue can answer them by `id` (§8.6).
 
 An archived roadmap contributes nothing, with one exception: the newest one, while its `## Summary` records no
 `Release:` line, contributes its open `## Before the next release` steps (the close comes before the release, §5.2).

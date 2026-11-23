@@ -166,6 +166,12 @@ add`), the change-id lives in `context/changes/`, the READY and merge reports
 go to the coordinator's session by cross-session message, the go comes back
 the same way, and the thread is resolved only after its pull request is merged.
 
+**One item per thread, in A0.** A thread carries exactly one roadmap item (or
+one issue). When its brief names more than one (several IDs, a lane, a whole
+roadmap, "implement the roadmap item by item"), carry only the first, tell the
+coordinator at once that every other item needs its own thread (WORKFLOW §8.5),
+and resolve after that one merge. Never start a second item in the same session.
+
 **Bootstrap check (hosted thread, autonomous mode), in A0.** The coordinator
 follows the managed block only if the project instructions point it there
 (WORKFLOW §8.5, Bootstrap); without the pointer it runs on the harness defaults

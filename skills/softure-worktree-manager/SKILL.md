@@ -683,7 +683,9 @@ Everything else is decided and written into the report.
   resolutions.
 - **Every worktree, branch and background session maps to a row in flight**
   (M0.2). Stale ones get removed, not carried over.
-- **Merges are serial; launches are serial; workers run in parallel.**
+- **Merges are serial; launches are serial; workers run in parallel.** One
+  worker (or hosted thread) carries exactly one item: serial means one merge
+  at a time, never several items queued in one worker.
 - **The batch is pairwise disjoint in code files, ≤ 1 migration**, and
   respects content dependencies and hot files.
 - **`context/changes/` holds exactly the queued and running changes**; the

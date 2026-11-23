@@ -947,6 +947,27 @@ class StateTest(unittest.TestCase):
                 self.assertIsNone(self.state()["active_roadmap"])
                 self.project.apply_case("idle-roadmap", "state")
 
+    def test_idle_placeholder_roadmap_keeps_its_owner_entries(self) -> None:
+        self.project.apply_case("idle-roadmap", "state")
+        rel = context_state.ROADMAP_PATH
+        self.project.write(rel, self.project.read(rel) + (
+            "\n## Owner decisions and checks\n\n"
+            "- [ ] Owner step: create the storage bucket and its access token (2026-11-19)\n"
+            "- [x] Owner step: an answered step stays out\n\n"
+            "## Before the next release\n\n"
+            "- [ ] Set `STORAGE_URL` in production\n"))
+        self.project.state("write")
+        state = self.state()
+        self.assertIsNone(state["active_roadmap"])
+        entries = [entry for entry in state["owner_queue"] if entry["source"].startswith(rel)]
+        by_section = {entry["source"].split("#")[1]: entry for entry in entries}
+        self.assertEqual(len(entries), 2, "the ticked step stays out")
+        self.assertEqual(by_section[context_state.OWNER_SECTION]["kind"], "secret")
+        self.assertEqual(by_section[context_state.OWNER_SECTION]["since"], "2026-11-19")
+        self.assertEqual(by_section[context_state.RELEASE_SECTION]["kind"], "step")
+        self.assertEqual(by_section[context_state.RELEASE_SECTION]["since"], "2026-11-18", "the front matter date")
+        self.assertTrue(all(entry["id"].startswith("oq-") for entry in entries))
+
     def test_owner_queue_ids_survive_rewording_and_moves(self) -> None:
         before = {entry["text"]: entry for entry in self.state()["owner_queue"]}
         self.assertTrue(all(entry["id"].startswith("oq-") for entry in before.values()))
