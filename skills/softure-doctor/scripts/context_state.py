@@ -472,6 +472,11 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
                       for row in rows if row["status"] not in DONE_STATUSES],
         }
         owner_queue += _owner_entries(ROADMAP_PATH, roadmap_text, rows, meta.get("updated") or today)
+    elif roadmap_text is not None:
+        # The idle placeholder is no active roadmap, but a project between roadmaps still has owner steps:
+        # its open `## Owner decisions and checks` and `## Before the next release` entries stay in the queue.
+        meta = frontmatter(roadmap_text)
+        owner_queue += _owner_entries(ROADMAP_PATH, roadmap_text, [], meta.get("updated") or today)
 
     queued = []
     for path in _roadmap_files(reader, QUEUED_DIR, r"^roadmap-.+\.md$"):
