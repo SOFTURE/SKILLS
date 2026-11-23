@@ -298,12 +298,14 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   unsupervised. Routines
   fire at most once an hour, on the full hour, so the schedule is `every` rounded up to a multiple of
   60 (60 → `0 * * * *`, 120 → `0 */2 * * *`; `wt_config.py --report-cron` prints it); a value below 60
-  runs hourly. **One recurring routine** drives the reports: the coordinator creates it when work
+  runs hourly. **One recurring routine** drives the reports (`routines/roadmap-heartbeat.md`): the coordinator creates it when work
   starts and deletes it when nothing runs, or on the owner's "stop" or "pause". Never a chain of
   one-off wake-ups. **A coordinator without a scheduling tool** (a hosted project's main-chat session)
-  starts one short setup thread whose only job is to create that routine from the template
-  `softure-worktree-manager/references/report-routine.md` and send its id back; the setup thread is
-  then closed. The coordinator records the id in memory and, at the end of the run or on "stop" or
+  starts one short setup thread whose only job is to create that routine and send its id back; the
+  setup thread is then closed. The routine is `routines/roadmap-heartbeat.md` of this package: it runs
+  in a **fresh session on every fire**, never bound to the coordinator's or any other session, reads the
+  run's state, wakes the coordinator with the facts and changes nothing itself; it writes to no
+  dashboard. The coordinator records the id in memory and, at the end of the run or on "stop" or
   "pause", has a thread delete the routine by that id. Missing tools never mean skipped reports. After a pause (usage limit) name the reports that were skipped. A report produced in a thread of its own (a scheduled routine) is pasted into the main
   chat and that thread is closed at once.
 - Shape, the same in every project, nothing else:

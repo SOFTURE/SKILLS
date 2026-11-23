@@ -75,6 +75,11 @@ for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".
   if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
 }
 
+for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(routinesDir)]) {
+  if (!file.endsWith(".md")) continue;
+  if (/to the coordinator's session \(the routine wakes/.test(fs.readFileSync(file, "utf8"))) errors.push(`${path.relative(ROOT, file)}: binds a routine to the coordinator's session (WORKFLOW.md §13: a fresh session on every fire)`);
+}
+
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);
   process.exit(1);

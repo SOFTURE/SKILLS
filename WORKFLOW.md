@@ -627,7 +627,7 @@ runs in a checkout and reads the block itself.
 | go | a signal in the conversation | coordinator-to-thread message |
 | branch | `<change-id>` in a worktree | the branch the harness assigns; the change-id lives in `context/changes/` and `change.md` → `branch:` |
 | Phase A | `wt-open.sh` + worktree | in the thread's own checkout, no `git worktree add` (`softure-worktree` → Cloud session) |
-| reports / heartbeat | `CronCreate` | a recurring routine; without a scheduling tool, a setup thread creates it from `softure-worktree-manager/references/report-routine.md` |
+| reports / heartbeat | `CronCreate` | a recurring routine; without a scheduling tool, a setup thread creates it from `routines/roadmap-heartbeat.md` (a fresh session on every fire) |
 | close | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on the merge result the coordinator checks it and resolves it if still open |
 
 **When PR events do not arrive.** A thread checks at session start whether pull request activity can
@@ -1006,4 +1006,5 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | Routine | File | Schedule |
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
+| Roadmap heartbeat | `routines/roadmap-heartbeat.md` | every `autonomy.reports.every` minutes while a run is in flight; the coordinator creates and deletes it |
 

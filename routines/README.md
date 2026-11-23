@@ -8,6 +8,7 @@ never re-created to pick up a fix.
 | Routine | File | Schedule | What it does |
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
+| Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | every `autonomy.reports.every` minutes while a run is in flight; created and deleted by the coordinator | reads where the run stands and wakes the coordinator with the facts, so it posts the roadmap report and acts; changes nothing itself |
 
 ## The standard every routine follows
 
@@ -36,7 +37,8 @@ Learned from routines that ran for weeks in several adopting projects:
 
 ## Setting one up
 
-Paste this into the project's main chat (or any session of the project that can create scheduled tasks). Replace
+The roadmap heartbeat is created and deleted by the coordinator itself (roadmap-heartbeat.md, "Creating it"); the
+owner sets up only the package-update routine. Paste this into the project's main chat (or any session of the project that can create scheduled tasks). Replace
 `<owner>/<repo>` with the repository:
 
 ```text
