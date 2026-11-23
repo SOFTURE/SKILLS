@@ -1,0 +1,11 @@
+name: ci
+
+on:
+  pull_request:
+
+jobs:
+  context-doctor:  # runs on pull requests only: the main branch's head never gets the check run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes --package @softure-ai/skills@0.30.0 softure-skills doctor

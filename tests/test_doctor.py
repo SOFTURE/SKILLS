@@ -188,7 +188,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_each_case_fails_with_its_code(self) -> None:
-        self.assertEqual(len(CASES), 12)
+        self.assertEqual(len(CASES), 13)
         for case in CASES:
             with self.subTest(case=case):
                 project = Project()

@@ -74,6 +74,14 @@ the package goes to step 5.
   regenerated `context/state.json` in the same pull request, then `npx softure-skills doctor`, which must exit 0.
   A new skills version can change what `state.json` holds; skipping the regeneration turns the `context-doctor`
   check red. Check that the installed version equals the lockfile and the newest on npm.
+- **The `context-doctor` check run on the main branch** (WORKFLOW §12.2): check that the main branch's head has one
+  (`gh api repos/<owner>/<repo>/commits/<mainBranch>/check-runs?check_name=context-doctor`; with a fine-grained
+  token that cannot read check runs, the latest workflow runs of that head through the Actions API and their
+  `context-doctor` job). When it has none, or the doctor or the installer reports `ci-doctor-trigger` (no `push`
+  trigger for the main branch, a `paths`/`paths-ignore` filter, an `if:` on the job), fix the workflow in this same
+  pull request: `on:` gets `pull_request` and `push` with `branches: [<mainBranch>]`, the filter and the condition go.
+  This is a CI configuration fix, not SOFTURE code (hard rule 4); name it in the pull request body. After the merge,
+  check that the new head of the main branch has the `context-doctor` check run and say so in the report.
 - Apply what the release notes require (messages, exports, config, migrations, regenerated files), and fix every
   gate the bump turns red in the project itself, in this pull request.
 - **Tests with every fix:** each adaptation gets a unit test (and an integration test where the behaviour is visible
@@ -117,7 +125,7 @@ Every run reports, also when nothing changed, in `chatLanguage`, times in `timez
 
 PR: #N (merge <sha>) | none
 Issues: SOFTURE/AI#N, … | none
-Doctor: 0
+Doctor: 0 (check run on <mainBranch>: ok | failing | missing)
 Decision: … | none
 ```
 

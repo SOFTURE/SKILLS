@@ -29,8 +29,8 @@ What the installer does (idempotent; re-run on every `npm install`):
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
 `--no-gitignore` (commit the skills instead).
 
-**CI job.** Run the doctor in a CI job named `context-doctor`, with no paths filter and no condition, so
-documentation-only changes are checked too (in a project that already has history, once the rollout below
+**CI job.** Run the doctor in a CI job named `context-doctor`, on `pull_request` and on `push` to the main
+branch, with no paths filter and no condition, so documentation-only changes are checked too (in a project that already has history, once the rollout below
 brings the doctor to zero). Keep that name: outside readers (`portfolio --source api`, an aggregator) look for
 the `context-doctor` check run on the main branch's head. In GitHub Actions the doctor writes its failure codes on
 that check run (the annotation `context-doctor failure codes`, then one per failure), as one plain line of the job's
@@ -38,6 +38,12 @@ log (`context-doctor failure codes: <code> (<count>), ...`) and in the job summa
 the forge API without a checkout, with Actions: read alone when a fine-grained token cannot read check runs.
 
 ```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]  # your mainBranch
+
+jobs:
   context-doctor:
     runs-on: ubuntu-latest
     steps:
@@ -48,8 +54,11 @@ the forge API without a checkout, with Actions: read alone when a fine-grained t
 ```
 
 It fails on drift in `context/` (a roadmap left after its archive, archived changes not stamped,
-`## Summary` placeholders, a stale `context/state.json`, …; WORKFLOW §12). The installer prints the
-job until a workflow runs the doctor, and asks to rename a job that runs it under another name. `npx softure-skills state` regenerates `context/state.json`, which the
+`## Summary` placeholders, a stale `context/state.json`, …; WORKFLOW §12) and on a `context-doctor` job that
+misses pushes to the main branch (`ci-doctor-trigger`: no `push` trigger for it, a paths filter, an `if:`; without
+the push trigger the main branch's head has no check run to read). The installer prints the workflow until one runs
+the doctor, asks to rename a job that runs it under another name, and prints the `on:` block while the trigger is
+incomplete. `npx softure-skills state` regenerates `context/state.json`, which the
 scripts otherwise write themselves. When nothing names the project, its first run (and the installer) writes the
 repository name into `context/workflow.json` → `project`, so the name no longer depends on how the repository was cloned.
 

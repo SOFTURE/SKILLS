@@ -33,6 +33,10 @@ and as the job summary, so a reader of the forge API sees the codes on the main 
   state-missing                   context/state.json is missing although the project has written it before
   state-stale                     context/state.json does not match the markdown
   baseline-stale                  context/doctor-baseline.json lists a failure that is fixed (remove it), or is unreadable
+  ci-doctor-trigger               a workflow under .github/workflows/ whose `context-doctor` job does not run on every
+                                  push to `mainBranch` (no `push` trigger for it, a `paths`/`paths-ignore` filter, an
+                                  `if:` on the job), so the main branch's head has no `context-doctor` check run;
+                                  see ci_config.py (a project without the job gets the installer's notice instead)
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
 moved or was deleted on purpose, found through git history; a dropped Progress item, normalised) and prints every edit; see doctor_fix.py. It is a dry run unless
@@ -64,6 +68,7 @@ import sys
 
 sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/skills
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ci_config  # noqa: E402
 from context_state import (  # noqa: E402
     ARCHIVE_ROADMAPS_DIR, CHANGES_DIR, OWNER_SECTION, QUEUED_DIR, RELEASE_SECTION, ROADMAP_PATH, STATE_PATH,
     FsReader, frontmatter, open_checkboxes, pending_release_roadmap, quiet_broken_pipe, roadmap_rows, sections,
@@ -72,7 +77,7 @@ from context_state import (  # noqa: E402
 
 ARCHIVE_DIR = "context/archive"
 BASELINE_PATH = "context/doctor-baseline.json"
-NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale")
+NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale", "ci-doctor-trigger")
 BACKLOG_DIR = "context/backlog"
 CLOSED_STATUSES = ("done", "done_code", "dropped", "carried")
 SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
@@ -468,6 +473,13 @@ def check_state(reader, root: str | None) -> list[Finding]:
                     f"{problem}; regenerate it (`npx softure-skills state`) and commit")]
 
 
+def check_ci(reader) -> list[Finding]:
+    """The `context-doctor` job must run on every push to the main branch: readers look for its check run there."""
+    branches = ci_config.main_branches_from(reader)
+    return [Finding("ci-doctor-trigger", path, f"{'; '.join(found)}; {ci_config.fix_text(branches[0])}")
+            for path, found in ci_config.check(reader, branches)]
+
+
 def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[Finding]:
     """Every finding for the project `reader` sees. `root` (a git checkout) enables the history check.
 
@@ -478,7 +490,7 @@ def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[F
         return []
     findings: list[Finding] = []
     for check in (check_main_roadmap, check_archived_changes, check_archived_roadmaps,
-                  check_queued_and_backlog, check_indexes):
+                  check_queued_and_backlog, check_indexes, check_ci):
         findings += check(reader)
     findings += check_state(reader, root)
     return apply_baseline(reader, findings) if baseline else findings
