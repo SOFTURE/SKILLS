@@ -17,8 +17,10 @@ These hold whatever the project's memory, a previous run, a chat message or the 
    release: not "the server is ready", not "the owner released yesterday", not "the change is tiny".
 2. **One pull request at most.** If an open pull request from an earlier run already bumps packages, finish that one
    instead of opening another.
-3. **Never force a package.** A package whose upgrade breaks a gate, needs an unexplained change or contradicts its
-   release notes stays on its current version; the rest go ahead.
+3. **Bump and fix, never skip.** A package whose upgrade breaks a gate is still bumped: the run adapts the project in
+   the same pull request (code, config, messages, migrations, regenerated files) and adds tests that prove the
+   adapted behaviour, each seen red without the fix. A package is held back only when the break is a defect in the
+   package itself that the project could fix only by working around SOFTURE code (step 5).
 4. **Never change SOFTURE code** and never loosen a test, a guard or a hook to get green (`--no-verify` is forbidden).
 5. **Never disable, edit or delete this routine.** Only the owner does.
 6. **Rely on the repository, not on memory.** A fresh session has none: everything it needs is in the repository
@@ -53,8 +55,10 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 
 For every package that moves, read its release notes or changelog for each version crossed (SOFTURE/AI for the
 `@softure-ai/*` packages, SOFTURE/SKILLS for `@softure-ai/skills`). Note breaking changes, migrations the package
-brings, upgrade steps it asks of an adopting app, and re-runs of generators (`softure-deploy init`). A step the
-notes explain is applied in this project; a break they do not explain is a reason to hold the package (step 5).
+brings, upgrade steps it asks of an adopting app, and re-runs of generators (`softure-deploy init`). Every step the
+notes ask for is applied in this project. A break the notes do not explain is investigated, not skipped: find what
+changed in the package (its source and tests at the new tag) and adapt the project to it (step 4); only a defect in
+the package goes to step 5.
 
 ### 4. Bump as one change
 
@@ -70,7 +74,11 @@ notes explain is applied in this project; a break they do not explain is a reaso
   regenerated `context/state.json` in the same pull request, then `npx softure-skills doctor`, which must exit 0.
   A new skills version can change what `state.json` holds; skipping the regeneration turns the `context-doctor`
   check red. Check that the installed version equals the lockfile and the newest on npm.
-- Apply what the release notes require (messages, exports, config, migrations, regenerated files).
+- Apply what the release notes require (messages, exports, config, migrations, regenerated files), and fix every
+  gate the bump turns red in the project itself, in this pull request.
+- **Tests with every fix:** each adaptation gets a unit test (and an integration test where the behaviour is visible
+  on the running app) that names the behaviour, fails without the fix and passes with it; record that red/green run
+  in `## Progress`. A bump that changed nothing in the project's code needs no new test.
 - Gates: every gate in `context/workflow.json` → `gates`, plus whatever the project's `AGENTS.md` adds for a
   dependency change; the language scan of the diff. Long commands run in the background with a long timeout.
 - Pull request titled `chore(deps): bump SOFTURE packages (<YYYY-MM-DD>)`, its body listing every package from →
@@ -80,12 +88,14 @@ notes explain is applied in this project; a break they do not explain is a reaso
   (`autonomy.merge`, `autonomy.remergeMain`); a red check you cannot fix within the rules leaves the pull request
   open and is named in the report.
 
-### 5. A package that does not go
+### 5. A defect in a package
 
-A breaking change without a migration note, a red build caused by the package, an unclear upgrade step, a missing
-export, a style regression, or a new feature that forces changes on an app that does not use it:
+Hold a package back only when the break is a defect in the package itself, not a change the project has to adapt
+to: a bug the package's own tests should have caught, a missing export the release notes promise, a regression of
+behaviour the package documents, or a new feature that forces changes on an app that does not use it and that the
+project could undo only by patching or wrapping SOFTURE code. Then:
 
-- leave that package on its current version and bump the rest;
+- leave that package on its current version, bump and fix the rest;
 - file an issue right away in the repository that owns it (`@softure-ai/skills` → SOFTURE/SKILLS, every other
   `@softure-ai/*` package → SOFTURE/AI). Search for a duplicate first; an open one gets a comment with the new
   evidence. Neutral English text: "an adopting app", no project name, no addresses, no personal data; versions,
