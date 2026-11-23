@@ -99,6 +99,22 @@ function ensureOwnerWordLabel(projectRoot, previous, options) {
   return [`label ${OWNER_WORD_LABEL.name}: not created here; run once in the repository: ${LABEL_COMMAND}`, false];
 }
 
+// The one-time setup of the owner-word wake routine (WORKFLOW.md §8.6), printed until an autonomous project
+// declares how its owner-word issues wake it. Returns the notice, or null when there is nothing to say.
+function ownerWordWakeNotice(workflowConfig) {
+  if (workflowConfig.mode !== "autonomous" || "ownerWordWake" in (workflowConfig.autonomy ?? {})) return null;
+  return [
+    `${WORKFLOW_CONFIG_PATH}: autonomy.ownerWordWake is not set, so an owner-word issue waits until a coordinator is awake.`,
+    "To have the project pick it up by itself, set up the owner-word wake routine once:",
+    "  1. install the Claude GitHub App on the repository (https://github.com/apps/claude);",
+    "  2. paste the setup brief from node_modules/@softure-ai/skills/routines/owner-word-wake.md (\"Setting it up\")",
+    "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (opened, labeled),",
+    "     a fresh session per event;",
+    `  3. set "autonomy": { "ownerWordWake": "routine" } in ${WORKFLOW_CONFIG_PATH}.`,
+    'Without the routine, declare "heartbeat" (picked up only while a run works) or "none".',
+  ].join("\n");
+}
+
 function runSubcommand(name, args) {
   const [script, defaults] = SUBCOMMANDS[name];
   const result = spawnSync("python3", [script, ...(args.length > 0 ? args : defaults)], { stdio: "inherit" });
@@ -356,6 +372,8 @@ function install(options) {
   if (fs.existsSync(path.join(projectRoot, WORKFLOW_CONFIG_PATH)) && !readWorkflowConfig(projectRoot).project) {
     console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json takes it from the active roadmap until then; softure-init asks for it)`);
   }
+  const wakeNotice = ownerWordWakeNotice(readWorkflowConfig(projectRoot));
+  if (wakeNotice) console.log(`${prefix} ${wakeNotice}`);
   const ci = doctorInCi(projectRoot);
   const branch = readWorkflowConfig(projectRoot).mainBranch || null;
   const shownBranch = branch ?? "main";
@@ -384,4 +402,4 @@ try {
   process.exit(isPostinstall ? 0 : 1);
 }
 
-export { CI_JOB, CI_LINE, OWNER_WORD_LABEL, hasCiJob, replaceManagedBlock, selectRuleSections };
+export { CI_JOB, CI_LINE, OWNER_WORD_LABEL, hasCiJob, ownerWordWakeNotice, replaceManagedBlock, selectRuleSections };
