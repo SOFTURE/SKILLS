@@ -98,10 +98,12 @@ or languages.
                                     // files the branch changes; null = the full test gate
     "fullGatePaths": [],            // extra globs that force the full gates after a merge of <main> (built in: lockfiles,
                                     // package manifests, test runner and TypeScript config, test setup, hook config, CI)
-    "reports": { "every": 60, "hours": null }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
+    "reports": { "every": 60, "hours": null, "idleHours": 24 }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
                                     // window; one recurring routine on full hours, `every` rounded up to a multiple of 60.
                                     // `hours: null` = around the clock (24/7), recommended for autonomous runs: the routine
                                     // is also the heartbeat that starts unblocked items and nudges stalled threads
+                                    // (routines/roadmap-heartbeat.md, a fresh session per fire). `idleHours` (issue mode):
+                                    // the heartbeat is deleted after this many hours with an empty queue; null keeps it
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -627,7 +629,7 @@ runs in a checkout and reads the block itself.
 | go | a signal in the conversation | coordinator-to-thread message |
 | branch | `<change-id>` in a worktree | the branch the harness assigns; the change-id lives in `context/changes/` and `change.md` → `branch:` |
 | Phase A | `wt-open.sh` + worktree | in the thread's own checkout, no `git worktree add` (`softure-worktree` → Cloud session) |
-| reports / heartbeat | `CronCreate` | a recurring routine; without a scheduling tool, a setup thread creates it from `softure-worktree-manager/references/report-routine.md` |
+| reports / heartbeat | `CronCreate` | the roadmap heartbeat, `routines/roadmap-heartbeat.md`: a fresh session per fire that sends the coordinator the facts; without a scheduling tool, a setup thread creates it from the brief in that file |
 | close | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on the merge result the coordinator checks it and resolves it if still open |
 
 **When PR events do not arrive.** A thread checks at session start whether pull request activity can
@@ -1006,4 +1008,5 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | Routine | File | Schedule |
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
+| Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
 

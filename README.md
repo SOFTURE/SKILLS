@@ -131,9 +131,10 @@ rules it will work by. In a project that is not, it installs the skills and runs
 
 ## Routines
 
-[routines/](routines/README.md) holds the scheduled sessions a project runs without the owner, starting with the
-nightly **package updates** (every `@softure-ai/*` package and pin to the newest, one pull request, never a release
-or deploy). Each runs in a fresh session; the project's scheduled task only points at the file, so a routine improves
+[routines/](routines/README.md) holds the scheduled sessions a project runs without the owner: the nightly
+**package updates** (every `@softure-ai/*` package and pin to the newest, one pull request, never a release or
+deploy) and the **roadmap heartbeat** of an autonomous run (reads the repository and the forge, hands the coordinator
+the facts for the roadmap report, changes nothing). Each runs in a fresh session, never in the coordinator's; the project's scheduled task only points at the file, so a routine improves
 with every bump of this package. `routines/README.md` has the prompt that sets one up (WORKFLOW §13).
 
 ## The chain
