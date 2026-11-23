@@ -33,8 +33,9 @@ It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--ta
 documentation-only changes are checked too (in a project that already has history, once the rollout below
 brings the doctor to zero). Keep that name: outside readers (`portfolio --source api`, an aggregator) look for
 the `context-doctor` check run on the main branch's head. In GitHub Actions the doctor writes its failure codes on
-that check run (the annotation `context-doctor failure codes`, then one per failure) and in the job summary, so a
-reader gets the codes through the forge API without a checkout.
+that check run (the annotation `context-doctor failure codes`, then one per failure), as one plain line of the job's
+log (`context-doctor failure codes: <code> (<count>), ...`) and in the job summary, so a reader gets the codes through
+the forge API without a checkout, with Actions: read alone when a fine-grained token cannot read check runs.
 
 ```yaml
   context-doctor:

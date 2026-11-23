@@ -19,7 +19,9 @@ clone into a temporary folder for a remote), takes `context/state.json`, and run
 same tree. A project without `state.json` gets one built in memory and is marked `*`.
 `--source api` reads only `context/state.json` through the GitHub API (`gh api`) and runs no doctor: the
 doctor column shows the `context-doctor` check run on the main branch's head instead (`ok`, `failing`,
-`pending`, or `missing` when the project's CI has no job by that name).
+`pending`, or `missing` when the project's CI has no job by that name). When the checks API refuses (a
+fine-grained token cannot hold the Checks permission, so a private repository answers 403), the same job is
+read through the Actions API (Actions: read) and its failure codes from the job's log.
 
 Default output, one row per project:
 
@@ -34,7 +36,8 @@ repository, in both modes; a local checkout counts when its `origin` is on GitHu
 names the entry it answers by that id, WORKFLOW §8.6). `--json` prints the same data
 for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`;
 with `--source api`, `doctor_check` is the check run's status, `doctor_check_url` its page and `doctor_check_codes`
-the doctor's failure codes from the run's annotations; the table shows them after `failing`). Exit 1 when a project could not be read (its row says why); nothing is ever written
+the doctor's failure codes from the run's annotations, or from the job's log when only the Actions API answers;
+the table shows them after `failing`). Exit 1 when a project could not be read (its row says why); nothing is ever written
 outside a temporary folder.
 """
 from __future__ import annotations
@@ -60,6 +63,9 @@ SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 # The CI job every adopting project runs the doctor in (WORKFLOW.md §12.2); its check run carries this name.
 DOCTOR_CHECK = "context-doctor"
 CODES_TITLE = "context-doctor failure codes"  # the doctor's annotation that lists its failure codes
+# The doctor's plain log line with the same list (`context-doctor failure codes: a (3), b (1)`), read through the
+# Actions API when the checks API is out of reach. `::error title=...::` lines do not match (no space after `:`).
+CODES_LINE_RE = re.compile(re.escape(CODES_TITLE) + r": (\S.*)$")
 PASSING = ("success", "neutral", "skipped")
 
 
@@ -136,25 +142,43 @@ def forge_release(slug: str | None) -> dict | None:
     return {"version": data["tag_name"], "date": (data.get("published_at") or "")[:10] or None, "source": "release"}
 
 
-def gh_json(path: str):
-    """`gh api <path>` as JSON; None without gh, access or a valid answer."""
+def gh_api(path: str) -> str | None:
+    """`gh api <path>` as text; None without gh, access or an answer."""
     try:
-        shown = subprocess.run([gh(), "api", path], capture_output=True, text=True, timeout=30)
+        shown = subprocess.run([gh(), "api", path], capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if shown.returncode != 0:
+    return shown.stdout if shown.returncode == 0 else None
+
+
+def gh_json(path: str):
+    """`gh api <path>` as JSON; None without gh, access or a valid answer."""
+    shown = gh_api(path)
+    if shown is None:
         return None
     try:
-        return json.loads(shown.stdout)
+        return json.loads(shown)
     except json.JSONDecodeError:
         return None
+
+
+def run_status(item: dict) -> str:
+    """`ok`, `failing` or `pending` of a check run or an Actions job (both carry `status` and `conclusion`)."""
+    if item.get("status") != "completed":
+        return "pending"
+    return "ok" if item.get("conclusion") in PASSING else "failing"
+
+
+def newest(items: list[dict]) -> dict:
+    return max(items, key=lambda item: (item.get("started_at") or "", item.get("id") or 0))
 
 
 def doctor_check(slug: str, branch: str | None) -> dict:
     """The newest `context-doctor` check run on the head of `branch` (else the default branch).
 
     `status` is `ok`, `failing`, `pending`, `missing` (no check run by that name), or `unknown` (the forge
-    could not be asked).
+    could not be asked). The checks API needs the Checks permission, which a fine-grained token cannot hold;
+    when it does not answer, the same job is read through the Actions API (`doctor_job`).
     """
     if not branch:
         branch = (gh_json(f"repos/{slug}") or {}).get("default_branch")
@@ -162,17 +186,55 @@ def doctor_check(slug: str, branch: str | None) -> dict:
         return {"status": "unknown", "url": None}
     data = gh_json(f"repos/{slug}/commits/{branch}/check-runs?check_name={DOCTOR_CHECK}&filter=latest")
     if not isinstance(data, dict):
-        return {"status": "unknown", "url": None}
+        return doctor_job(slug, branch)
     runs = [run for run in data.get("check_runs") or [] if run.get("name") == DOCTOR_CHECK]
     if not runs:
         return {"status": "missing", "url": None}
-    run = max(runs, key=lambda run: (run.get("started_at") or "", run.get("id") or 0))
-    if run.get("status") != "completed":
-        status = "pending"
-    else:
-        status = "ok" if run.get("conclusion") in PASSING else "failing"
+    run = newest(runs)
+    status = run_status(run)
     codes = failure_codes(slug, run) if status == "failing" else []
     return {"status": status, "url": run.get("html_url"), "codes": codes}
+
+
+def doctor_job(slug: str, branch: str) -> dict:
+    """The newest `context-doctor` job of the workflow runs on the head of `branch`, through the Actions API.
+
+    Every endpoint here needs only Actions: read (and Contents: read for the head commit), which a fine-grained
+    token can hold on a private repository. The failure codes come from the doctor's plain log line.
+    """
+    head = gh_json(f"repos/{slug}/commits/{branch}")
+    sha = head.get("sha") if isinstance(head, dict) else None
+    runs = gh_json(f"repos/{slug}/actions/runs?head_sha={sha}&per_page=100") if sha else None
+    if not isinstance(runs, dict):
+        return {"status": "unknown", "url": None}
+    jobs = []
+    for run in runs.get("workflow_runs") or []:
+        data = gh_json(f"repos/{slug}/actions/runs/{run.get('id')}/jobs?filter=latest&per_page=100")
+        if not isinstance(data, dict):
+            return {"status": "unknown", "url": None}
+        jobs += [job for job in data.get("jobs") or [] if job.get("name") == DOCTOR_CHECK]
+    if not jobs:
+        return {"status": "missing", "url": None}
+    job = newest(jobs)
+    status = run_status(job)
+    codes = log_failure_codes(gh_api(f"repos/{slug}/actions/jobs/{job.get('id')}/logs") or "") \
+        if status == "failing" else []
+    return {"status": status, "url": job.get("html_url"), "codes": codes}
+
+
+def split_codes(listed: str) -> list[str]:
+    """`a (3), b (1)` -> `["a", "b"]`."""
+    return [part.strip().split(" (")[0] for part in listed.split(",") if part.strip()]
+
+
+def log_failure_codes(log: str) -> list[str]:
+    """The doctor's failure codes from a job log: its last `context-doctor failure codes: ...` line."""
+    codes: list[str] = []
+    for line in log.splitlines():
+        match = CODES_LINE_RE.search(line.rstrip("\r"))
+        if match:
+            codes = split_codes(match.group(1))
+    return codes
 
 
 def failure_codes(slug: str, run: dict) -> list[str]:
@@ -182,8 +244,7 @@ def failure_codes(slug: str, run: dict) -> list[str]:
     annotations = gh_json(f"repos/{slug}/check-runs/{run['id']}/annotations")
     for annotation in annotations if isinstance(annotations, list) else []:
         if annotation.get("title") == CODES_TITLE:
-            return [part.strip().split(" (")[0] for part in (annotation.get("message") or "").split(",")
-                    if part.strip()]
+            return split_codes(annotation.get("message") or "")
     return []
 
 

@@ -34,8 +34,21 @@ path = sys.argv[-1]
 if path.startswith("repos/acme/") and path.count("/") == 2:
     print('{"default_branch": "main"}')
 elif "/commits/main/check-runs?check_name=context-doctor" in path:
+    if os.path.exists(sys.argv[0] + ".private." + path.split("/")[2]):
+        sys.stderr.write("gh: Resource not accessible by personal access token (HTTP 403)\\n")
+        sys.exit(1)
     stub = sys.argv[0] + ".checks." + path.split("/")[2] + ".json"
     print(open(stub).read() if os.path.exists(stub) else '{"total_count": 0, "check_runs": []}')
+elif path.startswith("repos/acme/") and path.endswith("/commits/main"):
+    print('{"sha": "abc123"}')
+elif "/actions/runs?head_sha=abc123" in path or ("/actions/runs/" in path and "/jobs?" in path) \\
+        or ("/actions/jobs/" in path and path.endswith("/logs")):
+    kind = "runs" if "head_sha" in path else "jobs" if "/jobs?" in path else "log." + path.split("/")[-2]
+    stub = sys.argv[0] + "." + kind + "." + path.split("/")[2]
+    if not os.path.exists(stub):
+        sys.stderr.write("gh: Resource not accessible by personal access token (HTTP 403)\\n")
+        sys.exit(1)
+    print(open(stub).read())
 elif "/check-runs/" in path and path.endswith("/annotations"):
     stub = sys.argv[0] + ".annotations." + path.split("/")[2] + ".json"
     print(open(stub).read() if os.path.exists(stub) else "[]")
@@ -183,6 +196,44 @@ class PortfolioTest(unittest.TestCase):
         self.assertIn("| shop | search 2/5 | 1 | 1 | 6 | v1.6.0 (2026-11-20) | ok |", lines)
         self.assertIn("| red | no state.json | — | — | — | — | failing: archived-change-progress, state-stale |", lines)
         self.assertIn("| old | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | missing |", lines)
+
+    def test_api_source_falls_back_to_the_actions_api_when_checks_are_forbidden(self) -> None:
+        """A fine-grained token cannot read check runs (403); the job and its log need only Actions: read."""
+        def private(name: str, jobs: list[dict] | None, log: str = "") -> None:
+            open(f"{self.gh}.private.{name}", "w").close()
+            if jobs is None:
+                return
+            with open(f"{self.gh}.runs.{name}", "w", encoding="utf-8") as fh:
+                json.dump({"total_count": 1, "workflow_runs": [{"id": 7}]}, fh)
+            with open(f"{self.gh}.jobs.{name}", "w", encoding="utf-8") as fh:
+                json.dump({"total_count": len(jobs), "jobs": [
+                    {"id": index, "name": "context-doctor", "started_at": f"2026-11-20T0{index}:00:00Z",
+                     "html_url": f"https://github.com/acme/{name}/actions/runs/7/job/{index}", **job}
+                    for index, job in enumerate(jobs, 1)] + [
+                    {"id": 99, "name": "build", "status": "completed", "conclusion": "failure"}]}, fh)
+            for index in range(1, len(jobs) + 1):
+                with open(f"{self.gh}.log.{index}.{name}", "w", encoding="utf-8") as fh:
+                    fh.write(log)
+        log = ("2026-11-20T02:00:01.0000000Z ##[group]Run npx softure-skills doctor\n"
+               "2026-11-20T02:00:05.0000000Z ##[error]archived-change-progress (3), state-stale (1)\n"
+               "2026-11-20T02:00:05.0000000Z context-doctor failure codes: archived-change-progress (3), "
+               "state-stale (1)\n")
+        private("red", [{"status": "completed", "conclusion": "success"},
+                        {"status": "completed", "conclusion": "failure"}], log)
+        private("shop", [{"status": "completed", "conclusion": "success"}])
+        private("wip", [{"status": "queued", "conclusion": None}])
+        private("old", [])
+        private("gone", None)  # Actions: read missing too: the forge cannot be asked
+        result = self.run_portfolio("acme/red", "acme/shop", "acme/wip", "acme/old", "acme/gone",
+                                    "--source", "api", "--json")
+        rows = {row["name"]: row for row in json.loads(result.stdout)["projects"]}
+        self.assertEqual({name: row["doctor_check"] for name, row in rows.items()},
+                         {"red": "failing", "shop": "ok", "wip": "pending", "old": "missing", "gone": "unknown"})
+        self.assertEqual(rows["red"]["doctor_check_codes"], ["archived-change-progress", "state-stale"])
+        self.assertEqual(rows["red"]["doctor_check_url"], "https://github.com/acme/red/actions/runs/7/job/2")
+        self.assertEqual(rows["shop"]["doctor_check_codes"], [])
+        lines = self.run_portfolio("acme/red", "--source", "api").stdout.splitlines()
+        self.assertIn("| red | no state.json | — | — | — | — | failing: archived-change-progress, state-stale |", lines)
 
 
 if __name__ == "__main__":

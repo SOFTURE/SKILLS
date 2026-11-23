@@ -805,12 +805,16 @@ class CiReportTest(unittest.TestCase):
         first = next(line for line in result.stdout.splitlines() if line.startswith("::error"))
         self.assertEqual(first, "::error title=context-doctor failure codes::archived-change-status (1), state-stale (1)")
         self.assertIn("::error file=context/state.json,title=state-stale::", result.stdout)
+        # The same codes as a plain log line, for a reader with Actions: read only.
+        self.assertIn("context-doctor failure codes: archived-change-status (1), state-stale (1)",
+                      result.stdout.splitlines())
         self.assertIn("| `state-stale` | 1 | `context/state.json` |", summary)
 
     def test_a_green_run_writes_a_summary_and_no_annotation(self) -> None:
         result, summary = self.run_in_actions()
         self.assertEqual(result.returncode, 0)
         self.assertNotIn("::error", result.stdout)
+        self.assertNotIn("context-doctor failure codes", result.stdout)
         self.assertIn("context/ contract OK", summary)
 
     def test_outside_actions_nothing_changes(self) -> None:
