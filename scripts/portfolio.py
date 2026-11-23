@@ -37,7 +37,9 @@ names the entry it answers by that id, WORKFLOW §8.6). `--json` prints the same
 for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`;
 with `--source api`, `doctor_check` is the check run's status, `doctor_check_url` its page and `doctor_check_codes`
 the doctor's failure codes from the run's annotations, or from the job's log when only the Actions API answers;
-the table shows them after `failing`). Exit 1 when a project could not be read (its row says why); nothing is ever written
+the table shows them after `failing`; `release_drift` is set when the forge's release is not older than rows still
+`waiting: release`, which means nobody ran `wt-roadmap.py released <tag>` after the deploy: the table appends
+`drift: <IDs> wait for a release since <date>` to the last release). Exit 1 when a project could not be read (its row says why); nothing is ever written
 outside a temporary folder.
 """
 from __future__ import annotations
@@ -348,13 +350,41 @@ def release_fields(release: dict) -> dict:
             "last_release_source": release["source"]}
 
 
+WAITING_RELEASE_RE = re.compile(r"^release: (?P<ids>.+?) merged and waiting for a release$")
+
+
+def release_drift(row: dict) -> dict | None:
+    """The forge released on or after the day rows started waiting for a release, and they still wait.
+
+    `wt-roadmap.py released <tag>` settles them after the deploy (WORKFLOW §5.2); until it runs, every reader of
+    state.json shows a release word the owner already gave. Only a forge release counts: a version a roadmap
+    recorded itself is not news to the state.
+    """
+    if row.get("last_release_source") != "release" or not row.get("last_release_date"):
+        return None
+    for entry in (row.get("state") or {}).get("owner_queue") or []:
+        match = WAITING_RELEASE_RE.match(entry.get("text") or "")
+        if not match or entry.get("kind") != "word" or not entry.get("since"):
+            continue
+        if row["last_release_date"] >= entry["since"]:
+            return {"release": row["last_release"], "release_date": row["last_release_date"],
+                    "items": [item.strip() for item in match["ids"].split(",")],
+                    "waiting_since": entry["since"], "settle": f"wt-roadmap.py released {row['last_release']}"}
+    return None
+
+
 def release_cell(row: dict) -> str:
     version = row.get("last_release")
     if not version:
         return "—"
     notes = [note for note in ("roadmap" if row.get("last_release_source") == "roadmap" else None,
                                row.get("last_release_date")) if note]
-    return version + (f" ({', '.join(notes)})" if notes else "")
+    cell = version + (f" ({', '.join(notes)})" if notes else "")
+    drift = row.get("release_drift")
+    if drift:
+        verb = "waits" if len(drift["items"]) == 1 else "wait"
+        cell += f", drift: {', '.join(drift['items'])} {verb} for a release since {drift['waiting_since']}"
+    return cell
 
 
 def collect(projects: list[dict], source: str) -> list[dict]:
@@ -367,6 +397,7 @@ def collect(projects: list[dict], source: str) -> list[dict]:
             row.update({"branch": project.get("branch"), "state": None, "state_source": "missing",
                         "doctor": None, "last_release": None, "last_release_date": None,
                         "last_release_source": None, "error": str(exc)})
+        row["release_drift"] = release_drift(row)
         rows.append(row)
     return rows
 

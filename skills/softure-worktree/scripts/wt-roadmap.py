@@ -6,6 +6,7 @@
     wt-roadmap.py ready <change-id>                [--dry-run]
     wt-roadmap.py done  <change-id> [--verified "<evidence>"] [--dry-run]
     wt-roadmap.py done_code <change-id> --waiting "<what>" [--verified "<evidence>"] [--dry-run]
+    wt-roadmap.py released <tag>                   [--dry-run]
     (cloud sessions additionally: [--cloud] [--branch <branch>] — see below)
 
 `open`  — status -> **in_progress** (research, since <today>; worktree `../<repo>-<id>`, branch `<id>`[; note])
@@ -20,6 +21,15 @@
           handoff's status; `done_code --waiting "…"` forces `done_code` with that text. Lines
           already present are not added twice, so a re-run is safe. `Owner step:` lines (what only the
           owner can do, with the reason) go to `## Owner decisions and checks` as tracked items.
+
+`released` — run by the session that saw a release through, right after the deploy's checks pass (never by
+          the package-update routine): every `done_code (…; waiting: release)` row whose change the tag carries
+          (its archived change folder is in the tag's tree) -> `done` with `released: <tag>` on its `## Done`
+          line; the open owner entries that release answered (release and deploy words) and the pre-release
+          steps of those items are ticked `— done: <tag>`; when every row is then `done` and the header orders
+          "Archive roadmap: at the end", the roadmap is closed (`## Summary`, `Release: <tag> (<date>)`, moved to
+          `foundation/archive/`). A roadmap closed before its release gets the same settling and its `Release:`
+          line. One commit, `context/state.json` included; a re-run commits nothing (wt_release.py).
 
 Autonomous mode (`mode: "autonomous"` in context/workflow.json): the run verifies its own checks, so
 `done` refuses a handoff that still carries `Owner check:` lines or a `waiting: owner check …`
@@ -79,6 +89,7 @@ import time
 sys.dont_write_bytecode = True  # no __pycache__ inside the consumer's .claude/skills
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wt_config import load_config, main_branch, main_root  # noqa: E402
+import wt_release  # noqa: E402
 
 try:  # the state writer ships in the softure-doctor skill, installed next to this one
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "softure-doctor", "scripts"))
@@ -604,11 +615,190 @@ def run_local(mode: str, change_id: str, arg: str | None, dry: bool, verified: s
         print(f"note: roadmap.md on `{main}` holds someone else's uncommitted edits — left untouched, outside the commit")
 
 
+# ---------------------------------------------------------------- released <tag>
+
+
+def resolve_tag(repo: str, tag: str, cloud: bool) -> tuple[str, str]:
+    """(commit of `tag`, its date). A cloud session fetches the tag first; an unknown tag stops the run."""
+    if cloud:
+        subprocess.run(["git", "-C", repo, "fetch", "-q", "origin", f"refs/tags/{tag}:refs/tags/{tag}"],
+                       capture_output=True)
+    found = subprocess.run(["git", "-C", repo, "rev-parse", "--verify", "-q", f"refs/tags/{tag}^{{commit}}"],
+                           capture_output=True, text=True)
+    if found.returncode != 0:
+        sys.exit(f"tag `{tag}` not found (fetch it first: git fetch origin tag {tag})")
+    date = git(repo, "for-each-ref", "--format=%(creatordate:short)", f"refs/tags/{tag}").strip()
+    return found.stdout.strip(), date or dt.date.today().isoformat()
+
+
+def carried_changes(repo: str, rev: str) -> dict[str, str]:
+    """change ID -> archive folder of every change archived in the tree of `rev`."""
+    listed = git(repo, "ls-tree", "-d", "--name-only", rev, "context/archive/").splitlines()
+    out = {}
+    for path in listed:
+        match = re.match(r"^context/archive/[0-9]{4}-[0-9]{2}-[0-9]{2}-(?P<id>.+)$", path)
+        if match:
+            out[match["id"]] = path
+    return out
+
+
+def merge_shas(repo: str, rev: str, folders: dict[str, str]):
+    """For the close's `## Summary`: the first-parent commit on `rev` that brought each change's archive folder."""
+    def lookup(cids: set[str]) -> dict[str, str]:
+        out = {}
+        for cid in cids:
+            if cid in folders:
+                sha = git(repo, "log", "--first-parent", "--diff-filter=A", "--format=%H", "-1", rev, "--",
+                          folders[cid]).strip()
+                if sha:
+                    out[cid] = sha[:8]
+        return out
+    return lookup
+
+
+def plan_release(repo: str, rev: str, tag: str, cloud: bool) -> tuple[dict, list[str], str | None, str]:
+    """The files a release of `tag` changes on `rev`, the report, the new state.json, the commit message."""
+    tag_sha, tag_date = resolve_tag(repo, tag, cloud)
+    carried = set(carried_changes(repo, tag_sha))
+    reader = context_state.GitReader(repo, rev) if context_state else None
+
+    def read(path: str) -> str | None:
+        shown = subprocess.run(["git", "-C", repo, "show", f"{rev}:{path}"], capture_output=True, text=True)
+        return shown.stdout if shown.returncode == 0 else None
+
+    def listdir(path: str) -> list[tuple[str, bool]]:
+        listed = git(repo, "ls-tree", rev, f"{path.rstrip('/')}/").splitlines()
+        return [(line.split("\t", 1)[1].rsplit("/", 1)[-1], line.split()[1] == "tree") for line in listed]
+
+    def exists(path: str) -> bool:
+        return bool(git(repo, "ls-tree", rev, path).strip())
+
+    today = dt.date.today().isoformat()
+    changes, report = wt_release.settle(read, listdir, exists, carried, tag, tag_date, today,
+                                        merge_shas(repo, rev, carried_changes(repo, rev)))
+    state = render_state(context_state.GitReader(repo, rev, changes)) if changes and reader else None
+    closed = wt_release.ROADMAP in changes and changes[wt_release.ROADMAP] is None
+    slug = wt_release.frontmatter_value(read(wt_release.ROADMAP) or "", "roadmap") or "roadmap"
+    subject = f"docs(roadmap): close {slug} after release {tag}" if closed else f"docs(roadmap): released {tag}"
+    body = "\n".join(f"- {line}" for line in report)
+    return changes, report, state, f"{subject}\n\n{body}\n\n{COAUTHOR}" if body else f"{subject}\n\n{COAUTHOR}"
+
+
+def stage_files(repo: str, files: dict[str, str | None], env: dict[str, str] | None = None) -> None:
+    for path, text in files.items():
+        if text is None:
+            git(repo, "update-index", "--force-remove", "--", path, env=env)
+        else:
+            blob = hash_text(repo, text)
+            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=env)
+
+
+def write_files(root: str, files: dict[str, str | None], expected: dict[str, str | None]) -> None:
+    """Mirror the commit into the working tree, but only where the file still matches what the commit replaced."""
+    for path, text in files.items():
+        full = os.path.join(root, path)
+        try:
+            with open(full, encoding="utf-8") as fh:
+                current = fh.read()
+        except FileNotFoundError:
+            current = None
+        if current != expected.get(path):
+            print(f"note: {path} holds uncommitted edits — left untouched, outside the commit")
+            continue
+        if text is None:
+            if current is not None:
+                os.remove(full)
+        else:
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write(text)
+
+
+def print_release_plan(repo: str, rev: str, files: dict[str, str | None], report: list[str]) -> None:
+    for path, text in files.items():
+        old = subprocess.run(["git", "-C", repo, "show", f"{rev}:{path}"], capture_output=True, text=True)
+        before = old.stdout if old.returncode == 0 else ""
+        sys.stdout.writelines(difflib.unified_diff(before.splitlines(True), (text or "").splitlines(True),
+                                                   f"{rev[:8]}:{path}", f"commit:{path}"))
+    for line in report:
+        print(line)
+
+
+def run_released(tag: str, dry: bool, cloud: bool) -> None:
+    branch_mode = cloud and (load_config().get("worktree") or {}).get("cloudState") == "branch"
+    if cloud and not branch_mode:
+        repo = git(".", "rev-parse", "--show-toplevel").strip()
+        main = main_branch(repo)
+        push = None
+        for attempt in range(6):
+            git(repo, "fetch", "-q", "origin", main)
+            base = git(repo, "rev-parse", f"origin/{main}").strip()
+            changes, report, state, msg = plan_release(repo, base, tag, cloud=True)
+            files = {**changes, **({STATE: state} if state is not None else {})}
+            if dry:
+                print_release_plan(repo, base, files, report)
+                return
+            if not changes:
+                print(f"nothing the release {tag} settles on origin/{main} — nothing to commit")
+                return
+            with tempfile.TemporaryDirectory() as tmpdir:
+                env = {**os.environ, "GIT_INDEX_FILE": os.path.join(tmpdir, "index")}
+                git(repo, "read-tree", base, env=env)
+                stage_files(repo, files, env)
+                tree = git(repo, "write-tree", env=env).strip()
+                sha = git(repo, "commit-tree", tree, "-p", base, "-m", msg, env=env).strip()
+            push = push_roadmap_commit(repo, sha, main, dict(os.environ))
+            if push.returncode == 0:
+                subprocess.run(["git", "-C", repo, "fetch", "-q", "origin", main], capture_output=True)
+                print(f"{sha[:8]} {msg.splitlines()[0]} -> origin/{main}")
+                for line in report:
+                    print(line)
+                return
+            time.sleep(2 + attempt * 2)
+        sys.exit(f"push to origin/{main} failed after 6 attempts: {push.stderr.strip()[:300] if push else ''}")
+
+    repo = git(".", "rev-parse", "--show-toplevel").strip() if branch_mode else main_root()
+    if not branch_mode:
+        current = git(repo, "symbolic-ref", "--short", "HEAD").strip()
+        if current != main_branch(repo):
+            sys.exit(f"the main tree is on `{current}`, not on `{main_branch(repo)}` — not committing")
+    head = git(repo, "rev-parse", "HEAD").strip()
+    changes, report, state, msg = plan_release(repo, head, tag, cloud=cloud)
+    files = {**changes, **({STATE: state} if state is not None else {})}
+    if dry:
+        print_release_plan(repo, head, files, report)
+        return
+    if not changes:
+        print(f"nothing the release {tag} settles — nothing to commit")
+        return
+    if subprocess.run(["git", "-C", repo, "diff", "--cached", "--quiet"]).returncode != 0:
+        sys.exit("the index holds someone else's staged changes — not committing under them; retry shortly")
+    expected = {}
+    for path in files:
+        shown = subprocess.run(["git", "-C", repo, "show", f"HEAD:{path}"], capture_output=True, text=True)
+        expected[path] = shown.stdout if shown.returncode == 0 else None
+    try:
+        stage_files(repo, files)
+        git(repo, "commit", "-q", "-m", msg)
+    except subprocess.CalledProcessError as exc:
+        subprocess.run(["git", "-C", repo, "reset", "-q", "--", *files], capture_output=True)
+        sys.exit(f"commit failed (index restored): {exc.stderr}")
+    write_files(repo, files, expected)
+    print(f"{git(repo, 'rev-parse', '--short', 'HEAD').strip()} {msg.splitlines()[0]}")
+    for line in report:
+        print(line)
+
+
 def main() -> None:
     argv = sys.argv[1:]
     dry = "--dry-run" in argv
     cloud = "--cloud" in argv or os.environ.get("CLAUDE_CODE_REMOTE") == "true"
     args = [a for a in argv if a not in ("--dry-run", "--cloud")]
+    if args[:1] == ["released"]:
+        if len(args) != 2:
+            sys.exit(__doc__)
+        run_released(args[1], dry, cloud)
+        return
     note = branch = waiting = verified = None
     if "--verified" in args:
         k = args.index("--verified")

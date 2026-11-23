@@ -159,7 +159,8 @@ class PortfolioTest(unittest.TestCase):
         row = json.loads(result.stdout)["projects"][0]
         self.assertEqual((row["last_release"], row["last_release_date"], row["last_release_source"]),
                          ("v1.6.0", "2026-11-20", "release"))
-        self.assertIn("| v1.6.0 (2026-11-20) |", self.run_portfolio(self.alpha).stdout)
+        self.assertIn("| v1.6.0 (2026-11-20), drift: SR-4 waits for a release since 2026-11-09 |",
+                      self.run_portfolio(self.alpha).stdout)
 
     def test_api_source_reads_the_release_and_labels_the_roadmap_value(self) -> None:
         result = self.run_portfolio("acme/shop", "acme/old", "--source", "api", "--json")
@@ -169,6 +170,28 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual((rows["old"]["last_release"], rows["old"]["last_release_source"]), ("v1.4.0", "roadmap"))
         table = self.run_portfolio("acme/old", "--source", "api").stdout
         self.assertIn("| v1.4.0 (roadmap, 2026-10-02) | missing |", table)
+
+    def test_api_source_flags_a_release_newer_than_rows_waiting_for_one(self) -> None:
+        """The forge released after SR-4 merged, yet SR-4 still waits: `wt-roadmap.py released` did not run."""
+        result = self.run_portfolio("acme/shop", "acme/old", "--source", "api", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = {row["name"]: row for row in json.loads(result.stdout)["projects"]}
+        self.assertEqual(rows["shop"]["release_drift"],
+                         {"release": "v1.6.0", "release_date": "2026-11-20", "items": ["SR-4"],
+                          "waiting_since": "2026-11-09", "settle": "wt-roadmap.py released v1.6.0"})
+        self.assertIsNone(rows["old"]["release_drift"])  # the release is the roadmap's own record, not the forge's
+        table = self.run_portfolio("acme/shop", "--source", "api").stdout
+        self.assertIn("v1.6.0 (2026-11-20), drift: SR-4 waits for a release since 2026-11-09", table)
+
+    def test_a_release_older_than_the_waiting_rows_is_no_drift(self) -> None:
+        state = json.load(open(self.gh + ".state.json", encoding="utf-8"))
+        for entry in state["owner_queue"]:
+            if entry["text"].startswith("release: "):
+                entry["since"] = "2026-11-21"
+        with open(self.gh + ".state.json", "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        result = self.run_portfolio("acme/shop", "--source", "api", "--json")
+        self.assertIsNone(json.loads(result.stdout)["projects"][0]["release_drift"])
 
     def test_api_source_reads_the_context_doctor_check_run(self) -> None:
         def stub(name: str, *runs: dict) -> None:
@@ -193,7 +216,8 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual(rows["red"]["doctor_check_codes"], ["archived-change-progress", "state-stale"])
         self.assertEqual(rows["shop"]["doctor_check_codes"], [])
         lines = self.run_portfolio("acme/shop", "acme/red", "acme/old", "--source", "api").stdout.splitlines()
-        self.assertIn("| shop | search 2/5 | 1 | 1 | 6 | v1.6.0 (2026-11-20) | ok |", lines)
+        self.assertIn("| shop | search 2/5 | 1 | 1 | 6 | v1.6.0 (2026-11-20), drift: SR-4 waits for a release since "
+                      "2026-11-09 | ok |", lines)
         self.assertIn("| red | no state.json | — | — | — | — | failing: archived-change-progress, state-stale |", lines)
         self.assertIn("| old | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | missing |", lines)
 
