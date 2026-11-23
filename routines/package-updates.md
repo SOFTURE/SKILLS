@@ -14,7 +14,9 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 1. **Never release, tag, publish or deploy.** Do not run `auto-release.yml`, `release.yml`, `deploy.yml` or any
    workflow that cuts a release or reaches production, do not create a tag or a GitHub release, do not publish a
    package. A bump rides the next release the owner orders. There is no condition under which this routine may
-   release: not "the server is ready", not "the owner released yesterday", not "the change is tiny".
+   release: not "the server is ready", not "the owner released yesterday", not "the change is tiny". For the same
+   reason it never runs `wt-roadmap.py released <tag>`: settling the context after a release belongs to the session
+   that saw that release through (WORKFLOW §5.2).
 2. **One pull request at most.** If an open pull request from an earlier run already bumps packages, finish that one
    instead of opening another.
 3. **Bump and fix, never skip.** A package whose upgrade breaks a gate is still bumped: the run adapts the project in

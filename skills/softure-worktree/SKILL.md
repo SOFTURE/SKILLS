@@ -1021,6 +1021,22 @@ merge at the end.
    the release (and the roadmap section it is written in), worktree and branch
    removed, `<main>` not pushed.
 
+### After a release: `wt-roadmap.py released <tag>`
+
+Rows that merged as `done_code (…; waiting: release)` are not this phase's to
+close: the release is. The session that sees a release through (the coordinator,
+or the thread the owner's release word went to) runs, right after the deploy's
+checks pass, `python3 <S>/wt-roadmap.py released <tag>` on `<main>` (cloud: it
+commits on `origin/<main>`). One commit: every waiting row the tag carries (its
+archived change folder is in the tag's tree) becomes `done` with `released:
+<tag>` on its `## Done` line; the owner entries that release answered (release
+and deploy words) and the pre-release steps of those items are ticked `— done:
+<tag>`; a roadmap whose rows are then all `done` and whose header orders
+"Archive roadmap: at the end" is closed (`## Summary`, `Release:` line, moved to
+`foundation/archive/`); a roadmap closed before the release gets its `Release:`
+line. `context/state.json` rides in the same commit. `--dry-run` shows the diff.
+A re-run commits nothing. The package-update routine never runs it.
+
 ## Escalations specific to worktrees (in addition to the three above)
 
 - **Another session's uncommitted code overlaps your merge** (B3) → wait and

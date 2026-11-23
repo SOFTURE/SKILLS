@@ -440,6 +440,27 @@ Then, in one commit (`docs(roadmap): close <slug>`):
 - right before the commit: `context_state.py write --staged` (the state goes into the same commit) and
   `doctor.py`; a failure the close owns is fixed, any other is named in the report (§12).
 
+**After the release: settle the context.** Nothing else closes what a release answers, so every reader of
+`state.json` (the portfolio, a dashboard) would keep showing a release word the owner already gave. The session that
+sees a release through runs `wt-roadmap.py released <tag>` (softure-worktree) on `<main>` right after
+the deploy's checks pass (a release without a deploy: right after the release). In one commit, with `context/state.json`:
+
+- every `done_code (…; waiting: release)` row whose change the tag carries (its archived change folder is in the
+  tag's tree) loses the release part of its waiting text: `done` when nothing else waits (its `## Done` line gets
+  `released: <tag>`), else `done_code` with the rest (an owner step keeps waiting). Rows merged after the tag stay;
+- open `## Owner decisions and checks` entries of those items (or of no item) that name a release or a deploy ("run
+  the release", "deploy after …") and their open `## Before the next release` steps are ticked `— done: <tag>`;
+- the live roadmap, when every row is then `done` (or `dropped`) and its header orders "Archive roadmap: at the end",
+  is closed as above (`## Summary` with each row's merge SHA, `integration: covered by the release <tag>`,
+  `Release: <tag> (<date>)`), provided nothing is left open and `context/changes/` holds only its README; otherwise
+  it stays and the run names the gate that held it;
+- a roadmap closed before the release (the newest archived one without a `Release:` line) gets the same settling and
+  its `Release: <tag> (<date>)` line, so its pre-release steps leave the owner queue.
+
+A re-run commits nothing; `--dry-run` prints the diff. The package-update routine never runs it: it never
+releases (routines/package-updates.md). `portfolio` flags a project whose forge release is not older than its rows still
+waiting for a release (§12.3), the sign that this step was skipped.
+
 ## 6. `plan.md`
 
 ```markdown
@@ -983,7 +1004,11 @@ the project has no job by that name). When the checks API answers 403 (a fine-gr
 release through `gh api` (both modes, for a GitHub repository; a local checkout counts when its `origin` is on GitHub),
 else the highest `v*` tag (git mode), else `state.json` → `last_release`, which only records what a closed roadmap
 wrote and is shown labelled: `v1.4.0 (roadmap, 2026-10-02)`. `--json` gives `last_release`, `last_release_date` and
-`last_release_source` (`release`, `tag` or `roadmap`).
+`last_release_source` (`release`, `tag` or `roadmap`). **Release drift:** when the forge's release is dated on or after
+the day the main roadmap's rows started `waiting: release` (the owner queue's release word) and they still wait, the
+last-release cell adds `drift: <IDs> wait for a release since <date>` and `--json` sets `release_drift` (`release`,
+`release_date`, `items`, `waiting_since`, `settle`): nobody ran `wt-roadmap.py released <tag>` after the deploy
+(§5.2). A version only a roadmap recorded never counts as drift.
 
 ### 12.4 Rolling out the doctor to an existing project
 

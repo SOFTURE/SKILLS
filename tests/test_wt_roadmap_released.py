@@ -201,6 +201,27 @@ class ReleasedTest(unittest.TestCase):
         reader = context_state.GitReader(self.repo, "HEAD")
         self.assertEqual([f.code for f in doctor.run_checks(reader, None) if f.severity == "fail"], [])
 
+    def test_cloud_mode_fetches_the_tag_and_pushes_the_settle_to_origin(self) -> None:
+        self.write("context/foundation/roadmap.md", roadmap(
+            [("WK-8", "search-titles", "done_code (2026-01-02; waiting: release)"),
+             ("WK-9", "search-filters", "ready")], owner=[], release=[]))
+        self.archive("search-titles")
+        self.commit("WK-8 merged")
+        origin = tempfile.TemporaryDirectory()
+        self.addCleanup(origin.cleanup)
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", origin.name], check=True, capture_output=True)
+        self.git("remote", "add", "origin", origin.name)
+        self.git("tag", "-a", "v1.2.0", "-m", "v1.2.0")
+        self.git("push", "-q", "origin", "main", "v1.2.0")
+        self.git("tag", "-d", "v1.2.0")  # the session's clone does not have the tag yet
+        self.git("checkout", "-q", "-b", "claude/release")
+        result = self.run_script("released", "v1.2.0", "--cloud")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pushed = subprocess.run(["git", "--git-dir", origin.name, "show", "main:context/foundation/roadmap.md"],
+                                check=True, capture_output=True, text=True).stdout
+        self.assertRegex(pushed, r"\*\*WK-8\*\* .*\| done \|")
+        self.assertIsNone(context_state.staleness(context_state.GitReader(origin.name, "main")))
+
     def test_released_refuses_an_unknown_tag(self) -> None:
         self.write("context/foundation/roadmap.md", roadmap(
             [("WK-8", "search-titles", "done_code (2026-01-02; waiting: release)")], owner=[], release=[]))
