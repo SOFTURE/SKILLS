@@ -5,6 +5,7 @@
 // - any shipped file mentions third-party course branding (this package is original work)
 // - any shipped file contains Polish diacritics (everything shipped is English)
 // - a mode section of the rules block does not mention the owner-word label (WORKFLOW.md §8.6)
+// - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
 // - any shipped file tells a coordinator to bind a routine to its own session (routines run in a fresh session)
 
@@ -72,6 +73,10 @@ for (const mode of ["manual", "autonomous"]) {
   const section = rules.split(/\n(?=## )/).find((part) => part.startsWith(`## Operating mode: ${mode}`)) ?? "";
   if (!section.includes("`owner-word`")) errors.push(`rules/AGENTS.md: "Operating mode: ${mode}" does not mention the \`owner-word\` label`);
 }
+// Infrastructure and deploy rules bind in both modes, so the pointer lives in the shared part of the block (WORKFLOW.md §14).
+const sharedRules = rules.slice(0, rules.indexOf("## Operating mode: "));
+if (!/WORKFLOW §14/.test(sharedRules)) errors.push('rules/AGENTS.md: the shared part does not point to WORKFLOW §14 (infrastructure and deploy work)');
+if (!/^## 14\. Infrastructure and deploy work$/m.test(fs.readFileSync(path.join(ROOT, "WORKFLOW.md"), "utf8"))) errors.push("WORKFLOW.md: missing section 14, Infrastructure and deploy work");
 const startOfRun = rules.slice(rules.indexOf("**Start of a run.**"), rules.indexOf("**Messages to the owner"));
 if (!/owner-word/.test(startOfRun)) errors.push('rules/AGENTS.md: "Start of a run" does not act on `owner-word` issues first');
 

@@ -69,6 +69,30 @@ non-UTC zone, which research named as a risk." WARNING.
 Typical: "The new action takes `clientId` from the form and updates it without checking the
 user owns the client." CRITICAL.
 
+## Infrastructure and deploy
+
+Applies when the plan touches deploy config, a host inventory, an edge or Access setting, or server
+steps (WORKFLOW §14, rules 3 to 5). Otherwise the lens is PASS with "not applicable".
+
+- Does research have an `## Infrastructure survey` with real output for every target server? Is every
+  name in the plan (deploy user, edge network, certificate resolver, compose project) read from it?
+  No survey: verdict back to research.
+- On a server other apps share: does the plan keep `edge.manage: false`, avoid `softure-host server`,
+  use a deploy user without sudo, and leave sshd, Traefik and the firewall alone (a documented drop-in
+  at most)?
+- Is every command given to the owner copied from the README of the pinned package version? Outside an
+  app, is it the scoped, pinned `npx --yes --package @softure-ai/<pkg>@<version> <bin>` form?
+- Does every real run on a server have a `--check` step before it, with what a clean check looks like?
+- Does the post-deploy verify check only paths that answer without a login? Is every public path the
+  plan adds or moves (health, OAuth, MCP, unsubscribe, webhooks) in the Access bypass list and in the
+  verify configuration, in this change?
+- Are the owner's steps one complete, ordered list with commands and expected output?
+
+Typical: "Phase 2 adds `/api/oauth/callback`, but no step adds it to the Access bypass list; behind
+Access the provider's redirect gets a login page and sign-in fails after the deploy." CRITICAL.
+Typical: "The inventory sets `deploy_user: admin` and the edge network `web`; research has no survey,
+so neither name was read from the server." CRITICAL, back to research.
+
 ## Lean
 
 - Remove the phase or step in your head. Is the goal still met? Then it is not needed.

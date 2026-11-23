@@ -59,6 +59,11 @@ and link the stored files from the Progress item they prove. Owner material (bri
 stays in the project files (`<project-slug>/briefs|data|design/`, listed in `INDEX.md`) and is referenced
 by path, never copied into the repository.
 
+**Infrastructure and deploy work (WORKFLOW §14), in both modes:** survey the server read-only before writing an
+inventory, a deploy config or a server step; treat a server that runs other apps as shared; give the owner only
+commands copied from the pinned package README, run with `--check` first; keep verify on public paths and every
+public path in the Access bypass list; give the owner one complete list; stop and report on a failed step.
+
 Execution state lives only in the `## Progress` section of `plan.md`. Commands, the main branch
 and the artifact language come from `context/workflow.json`. Before building anything generic
 (auth, mail, feature switches, billing, GDPR, analytics, UI primitives), check the

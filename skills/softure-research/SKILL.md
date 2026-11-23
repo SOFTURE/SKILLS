@@ -40,6 +40,11 @@ command output), so a planner can trust it without re-reading the code.
   this change, and use them as priors: an accepted rule narrows what is worth re-investigating.
 - Every file named in change.md or in the request (ticket, spec, JSON sample): read it **fully,
   yourself, before** fanning out. Subagents get a better brief when you already know the input.
+- **An infrastructure survey, when the change touches deploy config, a host inventory, an edge or
+  Access setting, or server steps** (WORKFLOW §14): the read-only survey of every target server
+  (`softure-host survey`, or the fixed command list in §14 rule 1), run now or pasted by the owner.
+  Without it the research is unfinished: escalate for the owner's paste, never fill the gaps with
+  guesses.
 
 ## Procedure
 
@@ -83,7 +88,16 @@ command output), so a planner can trust it without re-reading the code.
    list every match under `## Affected surface` with the answer it expects. The gates never run
    these checks; a miss shows up only after the deploy.
 
-7. **Check SOFTURE modules first** (WORKFLOW.md §10). If the change needs a generic capability,
+7. **Survey the infrastructure** when the change touches deploy config, an inventory or server
+   steps (WORKFLOW §14). Record under `## Infrastructure survey`: each target server, the commands
+   run and their output (users and sudo rights, sshd `AllowUsers`, Docker networks, running edge
+   containers and their labels, `/srv/*`, firewall), whether other apps share the server, and every
+   name the plan will need (deploy user, edge network, certificate resolver, compose project) read
+   from that output. List the public paths the app answers without a login and whether each is in
+   the Access bypass list and the verify configuration. Write "not applicable" when the change
+   touches none of this.
+
+8. **Check SOFTURE modules first** (WORKFLOW.md §10). If the change needs a generic capability,
    check the `@softure-ai/*` catalog. Generic capabilities include auth, sessions, roles, feature
    switches, mail, unsubscribe, waitlist, MCP tokens, billing/trial, GDPR, consent, channel
    analytics, health and UI primitives. Record one of three outcomes:
@@ -91,25 +105,25 @@ command output), so a planner can trust it without re-reading the code.
    - **partially covered:** module plus the gap, to be filed as an issue in SOFTURE/AI;
    - **not applicable.**
 
-8. **Assess risks.** Cover data loss, migrations and rollback, backwards compatibility,
+9. **Assess risks.** Cover data loss, migrations and rollback, backwards compatibility,
    performance, security (authz, input validation, secrets), concurrency, and other in-flight
    changes touching the same files (check `context/changes/*/change.md` Constraints).
 
-9. **Resolve open questions.** Each question ends in one of three states:
-   - **answered**, with evidence;
-   - **decided**, with the decision, the reason, and who decided (owner, or auto);
-   - **escalated**, meaning it blocks planning, with the exact question and its options.
+10. **Resolve open questions.** Each question ends in one of three states:
+    - **answered**, with evidence;
+    - **decided**, with the decision, the reason, and who decided (owner, or auto);
+    - **escalated**, meaning it blocks planning, with the exact question and its options.
 
-   A research document with unanswered questions and no escalation is unfinished.
+    A research document with unanswered questions and no escalation is unfinished.
 
-10. **Write `research.md`** using the template below, in the `workflow.json` language. Capture
+11. **Write `research.md`** using the template below, in the `workflow.json` language. Capture
     the snapshot first (`git rev-parse --short HEAD`, current branch, date in
     `workflow.json` → `timezone` when set). No placeholder values: a field you cannot fill is a
     finding, not a blank.
 
-11. **Update `change.md`.** Set `status: preparing` and update `updated`.
+12. **Update `change.md`.** Set `status: preparing` and update `updated`.
 
-12. **Report** a five-line summary: key findings, risks, module verdict, escalations, next step.
+13. **Report** a five-line summary: key findings, risks, module verdict, escalations, next step.
 
 ## Follow-up questions
 
@@ -146,6 +160,11 @@ Snapshot: <short sha> on <branch>, <YYYY-MM-DD HH:MM zone>.
 
 ## Prior work
 <earlier changes, archived research or plans, commits that decided something here; path + one line each, or "none found">
+
+## Infrastructure survey
+<only when the change touches deploy config, an inventory or server steps (WORKFLOW §14): per server, the
+commands and their output, shared or not, the names read from it, the public paths with their bypass and
+verify status; otherwise "not applicable">
 
 ## SOFTURE modules
 <covered / partially covered (gap -> issue) / not applicable, with reasoning>
@@ -192,6 +211,8 @@ unsure how much detail a section needs.
 - [ ] Tests that will prove the change are identified, with the command to run them.
 - [ ] A change to routes lists every release verify check that names the path or a prefix (or "none").
 - [ ] The SOFTURE module verdict is explicit.
+- [ ] A change to deploy config, an inventory or server steps has the infrastructure survey, with real
+      output and no guessed names (or the survey is escalated to the owner).
 - [ ] Prior work was searched (`context/changes/`, `context/archive/`, git log), even if nothing was found.
 - [ ] Collisions with other in-flight changes have been checked.
 - [ ] The snapshot line names a real commit; no placeholders anywhere.
@@ -206,6 +227,8 @@ unsure how much detail a section needs.
 - Proposing the solution and calling it research.
 - Writing to the database or changing code "to check something".
 - Leaving an "Open questions" list with nothing marked as resolved or escalated.
+- Writing a host inventory or naming a deploy user, edge network or resolver before looking at
+  the server.
 
 ## Handoff
 

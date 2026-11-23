@@ -116,6 +116,14 @@ work?"
    - **Tests:** right discipline, named edge cases, the user-visible outcome covered end to end.
    - **Security:** authorisation on every new entry point, validated input, no secrets in code,
      safe error messages.
+   - **Infrastructure and deploy** (only when the plan touches deploy config, an inventory, an
+     edge or Access setting, or server steps; otherwise PASS with "not applicable"; WORKFLOW §14
+     rules 3 to 5): every name the plan uses comes from research's `## Infrastructure survey`, not
+     a guess; every command for the owner is copied from the pinned package README in the scoped
+     `npx --yes --package @softure-ai/<pkg>@<version> <bin>` form outside an app; every real run on a
+     server has a `--check` step before it; verify checks only public paths; every public route the
+     plan adds or moves is in both the Access bypass list and the verify configuration. A plan that
+     adds a public route without both is CRITICAL; a missing survey sends it back to research.
    - **Lean:** the removal test per phase and step; no premature abstraction or "while we are
      here" work.
    - **Fit:** no second way of doing what the codebase already does; sane dependency direction;
