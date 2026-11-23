@@ -760,6 +760,13 @@ The skills run `python3 .claude/skills/softure-doctor/scripts/context_state.py w
 staged (so nobody's uncommitted edits leak in) and stages the result. By hand: `npx softure-skills state`.
 A project without the file gets it from the first of these runs; nothing has to be migrated.
 
+`project` falls back to the repository name, and that name's letter case is the clone's (`owner/REPO` and
+`owner/repo` are one repository on GitHub). So the first `write` that falls back to it, and the installer, write it
+into `context/workflow.json` → `project` (in the spelling `state.json` already holds, else the forge's
+`GITHUB_REPOSITORY` in CI, else `origin`'s URL); from then on the value is fixed in the repository. Until it is, the
+doctor compares a repository-derived `project` without regard to letter case, and a rewrite keeps the committed
+spelling.
+
 ```jsonc
 {
   "schema_version": 2,                // 2 adds owner_queue[].id; read a version 1 file as one without ids
@@ -933,6 +940,10 @@ wrote and is shown labelled: `v1.4.0 (roadmap, 2026-10-02)`. `--json` gives `las
 A project that adopted the package before the doctor existed usually fails on history: archived changes with old
 status values, archive indexes that link moved files, unticked Progress items and owner checks in roadmaps closed
 long ago. The history is put right, not hidden. One pass per repository, in this order:
+
+0. **Name the project once.** Set `project` in `context/workflow.json` (the name the project calls itself), or let
+   `npx softure-skills state` pin the repository name there, and commit it. Without it `state.json` → `project`
+   depends on how each checkout was cloned (§12.1).
 
 1. **Mechanical fixes.** Update the package, then `npx softure-skills doctor --fix` (review the printed edits) and
    `npx softure-skills doctor --fix --write`. Commit: `docs(context): mechanical history fixes (doctor --fix)`.

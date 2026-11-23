@@ -92,6 +92,19 @@ function runSubcommand(name, args) {
   return result.status ?? 1;
 }
 
+// Fixes the repository-derived `project` in context/workflow.json the first time it is derived, so
+// context/state.json no longer depends on how the checkout was cloned (`owner/REPO` vs `owner/repo`).
+// Returns the action line, or null when there is nothing to do (no context/, a named project, no python3).
+function pinProject(projectRoot, workflowConfig, options) {
+  if (workflowConfig.project || !fs.existsSync(path.join(projectRoot, "context"))) return null;
+  if (options.isDryRun) return null;
+  const result = spawnSync("python3", [path.join(DOCTOR_SCRIPTS, "context_state.py"), "pin-project", "--root", projectRoot],
+    { encoding: "utf8", timeout: 15000 });
+  if (result.error || result.status !== 0) return null;
+  const line = result.stdout.trim();
+  return line ? line : null;
+}
+
 // How the project's GitHub workflows run the doctor: "named" (in a job whose id or name is CI_JOB),
 // "unnamed" (somewhere else), or "none".
 function doctorInCi(projectRoot) {
@@ -279,6 +292,9 @@ function install(options) {
     }
   }
 
+  const pinAction = pinProject(projectRoot, workflowConfig, options);
+  if (pinAction) actions.push(pinAction);
+
   const [labelAction, hasLabel] = ensureOwnerWordLabel(projectRoot, previous, options);
   if (labelAction) actions.push(labelAction);
 
@@ -306,8 +322,8 @@ function install(options) {
   const prefix = options.isDryRun ? "[softure-skills] (dry run)" : "[softure-skills]";
   for (const action of actions) console.log(`${prefix} ${action}`);
   console.log(`${prefix} ${PACKAGE.name}@${PACKAGE.version} -> ${projectRoot}`);
-  if (fs.existsSync(path.join(projectRoot, WORKFLOW_CONFIG_PATH)) && !workflowConfig.project) {
-    console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json falls back to the repository name; softure-init asks for it)`);
+  if (fs.existsSync(path.join(projectRoot, WORKFLOW_CONFIG_PATH)) && !readWorkflowConfig(projectRoot).project) {
+    console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json takes it from the active roadmap until then; softure-init asks for it)`);
   }
   const ci = doctorInCi(projectRoot);
   if (ci === "none") {

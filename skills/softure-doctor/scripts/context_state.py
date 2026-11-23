@@ -4,6 +4,7 @@
     context_state.py write  [--root <dir>] [--staged]   regenerate context/state.json
     context_state.py print  [--root <dir>] [--staged]   print what `write` would write
     context_state.py check  [--root <dir>]              exit 1 when the file is missing or stale
+    context_state.py pin-project [--root <dir>]         write the derived `project` into context/workflow.json
 
 The file is written only by scripts, never by hand: `wt-roadmap.py` (every mode) commits it together
 with `roadmap.md`, and `softure-archive` and `softure-roadmap` (record, promote, close) run
@@ -24,6 +25,11 @@ appears. `id` and `since` are kept from the previous file for an entry that is s
 wording changed or its heading moved within the same file (the same item, or text that is still close enough),
 so a reader can follow one entry across rewrites and "oldest first" stays true. `updated_at` changes only when the
 content does.
+
+`project` is workflow.json's `project`, else the active roadmap's, else the repository name. The repository name
+depends on how the checkout was cloned (`owner/REPO` or `owner/repo`), so the first `write` that falls back to it
+pins it in `context/workflow.json` (`project`), and `check` compares a name that came from the repository without
+regard to letter case. `pin-project` does only the pinning (the installer runs it).
 
 Importable: `from context_state import build_state, render_state, FsReader, GitReader, IndexReader`.
 """
@@ -406,17 +412,43 @@ def _last_release(reader) -> dict | None:
     return None
 
 
+def read_workflow(reader) -> dict:
+    """`context/workflow.json` as a dict; {} when it is absent or not a JSON object."""
+    raw = reader.read(WORKFLOW_PATH)
+    if not raw:
+        return {}
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def resolve_project(reader, workflow: dict | None = None, roadmap_text: str | None = None,
+                    prior: dict | None = None) -> tuple[str, bool]:
+    """`(project, from_repository)`: workflow.json `project`, else the active roadmap's, else the repository name.
+
+    `from_repository` is True for the last fallback. Its letter case depends on the clone, so when `prior` (the
+    state.json already written) holds the same name in another case, that spelling is kept.
+    """
+    workflow = read_workflow(reader) if workflow is None else workflow
+    if workflow.get("project"):
+        return workflow["project"], False
+    if roadmap_text is None:
+        roadmap_text = reader.read(ROADMAP_PATH)
+    if roadmap_text and frontmatter(roadmap_text).get("project"):
+        return frontmatter(roadmap_text)["project"], False
+    name = repository_name(reader)
+    previous = (prior or {}).get("project")
+    if isinstance(previous, str) and previous.casefold() == name.casefold():
+        name = previous
+    return name, True
+
+
 def build_state(reader, prior: dict | None = None, now: str | None = None) -> dict:
     """The state of the project that `reader` sees. `prior` keeps the `since` of entries still present."""
     today = _today()
-    workflow: dict = {}
-    raw = reader.read(WORKFLOW_PATH)
-    if raw:
-        try:
-            loaded = json.loads(raw)
-            workflow = loaded if isinstance(loaded, dict) else {}
-        except json.JSONDecodeError:
-            workflow = {}
+    workflow = read_workflow(reader)
 
     owner_queue: list[dict] = []
     active = None
@@ -497,8 +529,7 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
 
     state = {
         "schema_version": SCHEMA_VERSION,
-        "project": (workflow.get("project") or (frontmatter(roadmap_text).get("project") if roadmap_text else None)
-                    or repository_name(reader)),
+        "project": resolve_project(reader, workflow, roadmap_text, prior)[0],
         "mode": workflow.get("mode") or "manual",
         "main_branch": workflow.get("mainBranch"),
         "updated_at": now or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -522,13 +553,54 @@ def repository_name(reader) -> str:
 
     The last fallback for `project`, so a project between roadmaps without `project` in workflow.json still
     has a name. The URL comes first because a checkout's folder can be named anything (a worktree, a clone
-    into a temporary folder).
+    into a temporary folder). The URL's letter case is the clone's, not the forge's: in GitHub Actions the
+    forge's spelling (`GITHUB_REPOSITORY`) wins when it names the same repository.
     """
     folder = getattr(reader, "root", None) or getattr(reader, "repo", None) or os.getcwd()
     url = subprocess.run(["git", "-C", folder, "remote", "get-url", "origin"], capture_output=True,
                          text=True).stdout.strip()
     name = re.split(r"[/:]", url.rstrip("/"))[-1] if url else os.path.basename(os.path.abspath(folder))
-    return re.sub(r"\.git$", "", name) or "unnamed"
+    name = re.sub(r"\.git$", "", name) or "unnamed"
+    canonical = os.environ.get("GITHUB_REPOSITORY", "").rsplit("/", 1)[-1]
+    return canonical if canonical and canonical.casefold() == name.casefold() else name
+
+
+def pin_project(root: str, staged: bool = False) -> str | None:
+    """Write the repository-derived `project` into `context/workflow.json`; the name written, else None.
+
+    Nothing is written when `project` does not come from the repository name (workflow.json or the active
+    roadmap names it). The spelling is the one `context/state.json` already holds when it matches, so the
+    pin never flips a committed name. With `staged` the file is read from and added to the index; a
+    workflow.json with unstaged edits is left alone, so nobody's uncommitted work is committed.
+    """
+    reader = IndexReader(root) if staged else FsReader(root)
+    project, from_repository = resolve_project(reader, prior=load_prior(reader))
+    if not from_repository:
+        return None
+    target = os.path.join(root, WORKFLOW_PATH)
+    raw = reader.read(WORKFLOW_PATH)
+    if staged:
+        on_disk = None
+        if os.path.exists(target):
+            with open(target, encoding="utf-8") as fh:
+                on_disk = fh.read()
+        if on_disk != raw:
+            return None
+    workflow: dict = {}
+    if raw:
+        try:
+            loaded = json.loads(raw)
+        except json.JSONDecodeError:
+            return None  # a broken file is the doctor's to report, not ours to overwrite
+        if not isinstance(loaded, dict):
+            return None
+        workflow = loaded
+    workflow = {**workflow, "project": project} if "project" in workflow else {"project": project, **workflow}
+    with open(target, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(workflow, indent=2, ensure_ascii=False) + "\n")
+    if staged:
+        subprocess.run(["git", "-C", root, "add", "--", WORKFLOW_PATH], check=True)
+    return project
 
 
 def _start_order(text: str) -> str | None:
@@ -716,13 +788,24 @@ def main(argv: list[str] | None = None) -> int:
         del args[k:k + 2]
     staged = "--staged" in args
     args = [arg for arg in args if arg != "--staged"]
-    if len(args) != 1 or args[0] not in ("write", "print", "check"):
+    if len(args) != 1 or args[0] not in ("write", "print", "check", "pin-project"):
         print(__doc__, file=sys.stderr)
         return 2
     root = os.path.abspath(root) if root else repo_root(os.getcwd())
     if not os.path.isdir(os.path.join(root, "context")):
         print(f"no context/ directory in {root}: nothing to do", file=sys.stderr)
         return 0 if args[0] != "check" else 1
+    if args[0] == "pin-project":
+        pinned = pin_project(root, staged)
+        if pinned:
+            print(f"wrote {WORKFLOW_PATH}: \"project\": {json.dumps(pinned, ensure_ascii=False)}"
+                  + " (staged)" * staged)
+        return 0
+    if args[0] == "write":
+        pinned = pin_project(root, staged)
+        if pinned:
+            print(f"wrote {WORKFLOW_PATH}: \"project\": {json.dumps(pinned, ensure_ascii=False)} "
+                  "(the repository name, fixed so it no longer depends on the clone)" + " (staged)" * staged)
     reader = IndexReader(root) if staged else FsReader(root)
     if args[0] == "check":
         problem = staleness(FsReader(root))

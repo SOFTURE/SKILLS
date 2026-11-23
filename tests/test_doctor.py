@@ -845,19 +845,93 @@ class StateTest(unittest.TestCase):
         self.assertIsNone(state["active_roadmap"])
         self.assertEqual(state["project"], "Example clinic")
 
-    def test_project_between_roadmaps_falls_back_to_the_repository_name(self) -> None:
+    def drop_project(self) -> None:
+        """A project between roadmaps whose workflow.json names no `project`."""
         self.project.apply_case("between-roadmaps", "state")
         workflow = json.loads(self.project.read(context_state.WORKFLOW_PATH))
         del workflow["project"]
         self.project.write(context_state.WORKFLOW_PATH, json.dumps(workflow, indent=2) + "\n")
+
+    def printed_project(self, **env: str) -> str:
+        result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "context_state.py"), "print",
+                                 "--root", self.project.root],
+                                env={**os.environ, **GIT_ENV, "GITHUB_REPOSITORY": "", **env},
+                                capture_output=True, text=True, check=True)
+        return json.loads(result.stdout)["project"]
+
+    def test_project_between_roadmaps_falls_back_to_the_repository_name(self) -> None:
+        self.drop_project()
         self.project.git("remote", "add", "origin", "https://github.com/acme/clinic-site.git")
-        self.project.state("write")
-        self.assertEqual(self.state()["project"], "clinic-site")
+        self.assertEqual(self.printed_project(), "clinic-site")
         self.project.git("remote", "remove", "origin")
+        self.assertEqual(self.printed_project(), os.path.basename(self.project.root))
         self.project.state("write")
-        self.assertEqual(self.state()["project"], os.path.basename(self.project.root))
         with open(SCHEMA, encoding="utf-8") as fh:
             self.assertEqual(validate(self.state(), json.load(fh)), [])
+
+    def test_the_forge_spelling_of_the_repository_name_wins_in_ci(self) -> None:
+        self.drop_project()
+        self.project.git("remote", "add", "origin", "https://github.com/acme/clinic-site.git")
+        self.assertEqual(self.printed_project(GITHUB_REPOSITORY="acme/Clinic-Site"), "Clinic-Site")
+        self.assertEqual(self.printed_project(GITHUB_REPOSITORY="acme/other-repo"), "clinic-site")
+
+    def test_doctor_ignores_the_letter_case_of_a_repository_name(self) -> None:
+        self.drop_project()
+        for written, cloned in (("Clinic-Site", "clinic-site"), ("clinic-site", "Clinic-Site")):
+            with self.subTest(written=written, cloned=cloned):
+                os.remove(self.project.path(context_state.STATE_PATH))
+                self.project.git("remote", "add", "origin", f"https://github.com/acme/{written}.git")
+                state = self.project.state("print").stdout  # print never pins workflow.json
+                self.project.write(context_state.STATE_PATH, state)
+                self.assertEqual(json.loads(state)["project"], written)
+                self.project.git("remote", "set-url", "origin", f"https://github.com/acme/{cloned}.git")
+                self.assertNotIn("state-stale", self.project.codes())
+                self.assertEqual(self.project.state("print").stdout, state, "a rewrite keeps the committed spelling")
+                self.project.git("remote", "remove", "origin")
+        self.project.git("remote", "add", "origin", "https://github.com/acme/another-name.git")
+        self.assertIn("state-stale", self.project.codes(), "a different name is still a change")
+
+    def test_state_write_pins_the_repository_name_in_workflow_json(self) -> None:
+        self.drop_project()
+        self.project.git("remote", "add", "origin", "https://github.com/acme/Clinic-Site.git")
+        result = self.project.state("write")
+        self.assertIn("wrote context/workflow.json", result.stdout)
+        workflow = json.loads(self.project.read(context_state.WORKFLOW_PATH))
+        self.assertEqual(workflow["project"], "Clinic-Site")
+        self.assertEqual(workflow["mode"], "autonomous", "the other keys are kept")
+        before = {rel: self.project.read(rel) for rel in (context_state.WORKFLOW_PATH, context_state.STATE_PATH)}
+        self.project.git("remote", "set-url", "origin", "https://github.com/acme/clinic-site.git")
+        result = self.project.state("write")
+        self.assertNotIn("workflow.json", result.stdout)
+        self.assertEqual({rel: self.project.read(rel) for rel in before}, before, "a lower-case clone changes nothing")
+        self.assertEqual(self.project.codes() & {"state-stale", "state-missing"}, set())
+
+    def test_state_write_creates_workflow_json_and_keeps_the_committed_spelling(self) -> None:
+        self.drop_project()
+        self.project.git("remote", "add", "origin", "https://github.com/acme/Clinic-Site.git")
+        self.project.write(context_state.STATE_PATH, self.project.state("print").stdout)
+        os.remove(self.project.path(context_state.WORKFLOW_PATH))
+        self.project.git("remote", "set-url", "origin", "https://github.com/acme/clinic-site.git")
+        self.project.state("write")
+        self.assertEqual(json.loads(self.project.read(context_state.WORKFLOW_PATH)), {"project": "Clinic-Site"})
+        self.assertEqual(self.state()["project"], "Clinic-Site")
+
+    def test_pin_project_leaves_a_named_project_and_unstaged_edits_alone(self) -> None:
+        workflow = self.project.read(context_state.WORKFLOW_PATH)
+        self.project.git("remote", "add", "origin", "https://github.com/acme/clinic-site.git")
+        self.project.state("pin-project")
+        self.assertEqual(self.project.read(context_state.WORKFLOW_PATH), workflow, "workflow.json names the project")
+        self.drop_project()
+        self.project.commit("no project in workflow.json")
+        edited = self.project.read(context_state.WORKFLOW_PATH).replace("{", '{\n  "note": "unstaged",', 1)
+        self.project.write(context_state.WORKFLOW_PATH, edited)
+        self.project.state("pin-project", "--staged")
+        self.assertEqual(self.project.read(context_state.WORKFLOW_PATH), edited, "unstaged edits are not committed")
+        self.project.git("add", context_state.WORKFLOW_PATH)
+        self.project.state("write", "--staged")
+        self.assertEqual(json.loads(self.project.read(context_state.WORKFLOW_PATH))["project"], "clinic-site")
+        staged = json.loads(self.project.git("show", f":{context_state.WORKFLOW_PATH}"))
+        self.assertEqual(staged["project"], "clinic-site")
 
     def test_idle_placeholder_roadmap_is_no_active_roadmap(self) -> None:
         self.project.apply_case("idle-roadmap", "state")
