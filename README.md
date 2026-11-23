@@ -49,7 +49,8 @@ reader gets the codes through the forge API without a checkout.
 It fails on drift in `context/` (a roadmap left after its archive, archived changes not stamped,
 `## Summary` placeholders, a stale `context/state.json`, …; WORKFLOW §12). The installer prints the
 job until a workflow runs the doctor, and asks to rename a job that runs it under another name. `npx softure-skills state` regenerates `context/state.json`, which the
-scripts otherwise write themselves.
+scripts otherwise write themselves. When nothing names the project, its first run (and the installer) writes the
+repository name into `context/workflow.json` → `project`, so the name no longer depends on how the repository was cloned.
 
 **Rolling out to an existing project** (WORKFLOW §12.4). A project that adopted the package earlier
 usually fails on history. Put it right, in this order, one pass per repository:

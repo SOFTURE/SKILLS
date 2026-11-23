@@ -9,7 +9,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": { "type": "integer", "enum": [1, 2], "description": "2 adds owner_queue[].id; a reader of version 1 files treats id as absent" },
-    "project": { "type": "string", "description": "workflow.json `project`, else the active roadmap's `project`, else the repository name (origin's URL, else the folder); never null" },
+    "project": { "type": "string", "description": "workflow.json `project`, else the active roadmap's `project`, else the repository name (origin's URL, else the folder; GITHUB_REPOSITORY's spelling in CI; pinned in workflow.json by the first write that derives it; compared without letter case); never null" },
     "mode": { "type": "string", "enum": ["manual", "autonomous"] },
     "main_branch": { "type": ["string", "null"] },
     "updated_at": { "type": "string", "description": "UTC ISO 8601; changes only when the content does" },
