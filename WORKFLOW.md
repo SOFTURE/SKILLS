@@ -1037,3 +1037,54 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
 | Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
 
+
+## 14. Infrastructure and deploy work
+
+Binding in both modes (§8), for every session that writes or changes a host inventory, a deploy config, an edge or
+Access setting, or tells the owner what to run on a server. The deploy tools have their own checks; these rules apply
+whatever the tools do, because a wrong server step costs more than a wrong line of code: it changes a machine other
+apps may depend on, and the owner has to undo it.
+
+1. **Survey before you write.** Before writing or changing an inventory, a deploy config or any server step, run a
+   read-only survey of the target and record what it found in the change's `research.md` (`## Infrastructure survey`,
+   with the commands and their output). Use `softure-host survey` once the installed `@softure-ai/host` has it; until
+   then, this fixed list of read-only commands, over the owner's SSH access or by asking the owner to run them and
+   paste the output:
+
+   ```sh
+   id; getent passwd | awk -F: '$3 >= 1000 {print $1}'          # users
+   sudo -l -U <deploy-user>; ls /etc/sudoers.d/                   # sudo rights
+   sudo sshd -T | grep -Ei '^(allowusers|allowgroups|permitrootlogin|passwordauthentication)'
+   docker network ls; docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'
+   docker inspect --format '{{.Name}} {{json .Config.Labels}}' $(docker ps -q)   # edge containers and their labels
+   ls -la /srv/; ls /srv/*/                                       # apps already on the server
+   sudo ufw status verbose || sudo nft list ruleset               # firewall
+   ```
+
+   Never assume a server is empty, and never guess a name the survey can read (the deploy user, the edge's network,
+   its certificate resolver, its compose project).
+2. **A shared server is someone else's too.** When the survey shows other apps on the server: `edge.manage: false`
+   (the existing edge stays as it is), never run `softure-host server` on it, a dedicated deploy user without sudo,
+   and no change to sshd, Traefik or the firewall beyond a drop-in file the tool's README documents. Read how the
+   apps already there are set up (sshd `AllowUsers`, sudo rights, the edge and its compose project) before proposing
+   any change to what they share.
+3. **Only verified commands.** Every command given to the owner is copied from the README of the pinned package
+   version (`node_modules/@softure-ai/<pkg>/README.md` at the version in the lockfile), never from memory. Outside an
+   app's checkout it uses the scoped, pinned form `npx --yes --package @softure-ai/<pkg>@<version> <bin> …`; a bare
+   `npx <bin>` resolves to no package there. The agent ran it itself with `--check` (or `--help` where there is no
+   check mode) wherever it can reach the target, and says when it could not.
+4. **`--check` before every real run.** Every step that changes a server runs with `--check` first; its output is
+   read, and the real run follows only a clean check. A check that reports a change nobody expected stops the step.
+5. **Verify and Access follow the public paths.** The post-deploy verify checks only paths that answer without a login.
+   Every public path (health, OAuth callbacks, MCP, unsubscribe, webhooks) is in the Access bypass list. A plan that
+   adds or moves a public route updates both in the same change; `softure-plan-review` flags one that does not.
+6. **One list for the owner.** The owner's steps for a deploy are given once, complete and in order, each with the
+   exact command and its expected output, after the agent checked everything it can itself. A correction replaces the
+   whole list (marked as replacing the previous one); it is never a new message that patches one step.
+7. **A failed infrastructure step stops the chain.** Report what changed on the server before anything else, from the
+   tool's output and a fresh survey. Never retry a real run that changed something without understanding why it
+   failed; never continue to the next step on a server in an unknown state.
+
+`softure-research` treats the survey as a required input for such a change (§14 rule 1), and `softure-plan-review`
+reviews the plan with the **Infrastructure and deploy** lens (rules 3 to 5). The deploy onboarding checklist in the
+`@softure-ai/host` README links back to this section (SOFTURE/AI#1432).
