@@ -25,7 +25,7 @@ Learned from routines that ran for weeks in several adopting projects:
    release the owner orders. A rule like "until the owner says the server is ready" stops being true one day and the
    routine starts deploying unattended, database migrations included.
 3. **State lives in the repository, not in memory.** What a routine must remember between nights goes into the
-   repository (for package updates: `context/workflow.json` → `routines.packageUpdates.hold`), so a fresh session
+   repository (for package updates: `context/workflow.json` → `routines.packageUpdates.hold` and `ownerSteps`), so a fresh session
    finds it.
 4. **One pull request at most per run**, continued by the next run if it is still open; merged on green through the
    project's merge path, never pushed to the main branch.

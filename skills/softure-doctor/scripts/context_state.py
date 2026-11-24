@@ -14,8 +14,9 @@ the working tree, so someone else's uncommitted edits never leak into the file, 
 Everything in the file is derived from the markdown under `context/` (and `context/workflow.json`):
 the active roadmap, the queued roadmaps, the change folders, and one `owner_queue` that lists every
 entry that waits for the owner. The queue is built only from what is live: the active roadmap, the
-queued roadmaps, the open changes, and the pre-release steps of the newest closed roadmap until its
-release is recorded. An unticked entry left in any other archived roadmap is history to settle
+queued roadmaps, the open changes, the pre-release steps of the newest closed roadmap until its
+release is recorded, and the owner work of package bumps in `context/workflow.json` (`routines.packageUpdates`:
+holds with `owner`, `ownerSteps` without `confirmed`). An unticked entry left in any other archived roadmap is history to settle
 (the doctor's `archived-roadmap-open-checks`), never an owner-queue item. The schema ships next to this script
 (`../references/state.schema.json`). A reader needs this one file per repository instead of parsing
 the markdown.
@@ -68,12 +69,17 @@ SINCE_RE = re.compile(r"since (\d{4}-\d{2}-\d{2})")
 DONE_CODE_DATE_RE = re.compile(r"^done_code \((\d{4}-\d{2}-\d{2})")
 CHECKBOX_RE = re.compile(r"^\s*- \[(?P<mark>[ xX])\] (?P<text>.+)$")
 ITEM_REF_RE = re.compile(r"\*\*(?P<id>[A-Z]+-\d+)\*\*")
-SECRET_RE = re.compile(r"\b(secret|api[ -]?key|token|credential|password|private key)s?\b", re.IGNORECASE)
+# Word boundaries that also split environment variable names (`SOFTURE_EMAIL_KEY_SECRET`, `STRIPE_API_KEY`).
+SECRET_RE = re.compile(r"(?<![A-Za-z0-9])(secret|api[ _-]?key|token|credential|password|private[ _]key)s?(?![A-Za-z0-9])",
+                       re.IGNORECASE)
 RELEASE_LINE_RE = re.compile(
     r"^(?:- )?\**Release:?\**:?\s*(?P<version>v?\d+\.\d+\.\d+[0-9A-Za-z.+-]*)(?:\s*\((?P<date>\d{4}-\d{2}-\d{2})\))?")
 OWNER_SECTION = "Owner decisions and checks"
 RELEASE_SECTION = "Before the next release"
 DONE_STATUSES = ("done", "done_code")
+# A package bump's owner work that the package-update routine records in workflow.json (routines/package-updates.md).
+HOLD_SOURCE = f"{WORKFLOW_PATH}#routines.packageUpdates.hold"
+OWNER_STEPS_SOURCE = f"{WORKFLOW_PATH}#routines.packageUpdates.ownerSteps"
 
 
 # ---------------------------------------------------------------- readers
@@ -356,6 +362,48 @@ def _owner_entries(path: str, text: str, rows: list[dict], fallback_since: str,
     return entries
 
 
+def _package_update_entries(workflow: dict, fallback_since: str) -> list[dict]:
+    """Owner work the package-update routine recorded in `routines.packageUpdates` (routines/package-updates.md).
+
+    A `hold` entry with `owner` (a bump held until the owner decides, its issue in the project's repository) is a
+    `decision`; a `hold` entry without it waits for a fix in SOFTURE, not for the owner. An `ownerSteps` entry (a
+    merged bump whose owner step has no live roadmap to sit in) stays until it carries `confirmed`. Either is a
+    `secret` when its text names one.
+    """
+    updates = ((workflow.get("routines") or {}) if isinstance(workflow.get("routines"), dict) else {})
+    updates = updates.get("packageUpdates") if isinstance(updates.get("packageUpdates"), dict) else {}
+    entries: list[dict] = []
+
+    def listed(key: str) -> list[dict]:
+        value = updates.get(key)
+        return [entry for entry in value if isinstance(entry, dict) and isinstance(entry.get("package"), str)] \
+            if isinstance(value, list) else []
+
+    def ref(entry: dict) -> str:
+        return f" ({entry['issue']})" if isinstance(entry.get("issue"), str) and entry["issue"] else ""
+
+    def since(entry: dict) -> str:
+        return entry["since"] if isinstance(entry.get("since"), str) and DATE_RE.fullmatch(entry["since"]) \
+            else fallback_since
+
+    for entry in listed("hold"):
+        what = entry.get("owner")
+        if not isinstance(what, str) or not what.strip():
+            continue
+        text = f"hold {entry['package']}: {what.strip()}{ref(entry)}"
+        entries.append({"kind": "secret" if SECRET_RE.search(what) else "decision", "source": HOLD_SOURCE,
+                        "item": None, "since": since(entry), "text": text})
+    for entry in listed("ownerSteps"):
+        step = entry.get("step")
+        if entry.get("confirmed") or not isinstance(step, str) or not step.strip():
+            continue
+        version = f" {entry['version']}" if isinstance(entry.get("version"), str) and entry["version"] else ""
+        text = f"{entry['package']}{version}: {step.strip()}{ref(entry)}"
+        entries.append({"kind": "secret" if SECRET_RE.search(step) else "step", "source": OWNER_STEPS_SOURCE,
+                        "item": None, "since": since(entry), "text": text})
+    return entries
+
+
 def released(text: str) -> bool:
     """Whether an archived roadmap's `## Summary` records the release that shipped it."""
     return any(RELEASE_LINE_RE.match(line.strip()) for line in sections(text).get("Summary", []))
@@ -528,6 +576,8 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
         })
         owner_queue += _handoff_entries(f"{CHANGES_DIR}/{name}/change.md", text, meta.get("roadmap_item"),
                                         meta.get("updated") or today)
+
+    owner_queue += _package_update_entries(workflow, today)
 
     owner_queue = carry_identity(owner_queue, (prior or {}).get("owner_queue") or [])
     owner_queue.sort(key=lambda entry: (entry["since"] or "", entry["source"], entry["text"]))

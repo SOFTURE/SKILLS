@@ -22,7 +22,8 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 3. **Bump and fix, never skip.** A package whose upgrade breaks a gate is still bumped: the run adapts the project in
    the same pull request (code, config, messages, migrations, regenerated files) and adds tests that prove the
    adapted behaviour, each seen red without the fix. A package is held back only when the break is a defect in the
-   package itself that the project could fix only by working around SOFTURE code (step 5).
+   package itself that the project could fix only by working around SOFTURE code (step 6), or when the owner must
+   decide how existing data is treated (step 5).
 4. **Never change SOFTURE code** and never loosen a test, a guard or a hook to get green (`--no-verify` is forbidden).
 5. **Never disable, edit or delete this routine.** Only the owner does.
 6. **Rely on the repository, not on memory.** A fresh session has none: everything it needs is in the repository
@@ -48,10 +49,16 @@ These hold whatever the project's memory, a previous run, a chat message or the 
   version in workflows, scripts and `context/workflow.json` (`integration.*`), the files `softure-deploy init`
   generates (`docker/server/deploy.sh`, `deploy.json` `$schema`), `docs/deployment.md`, and schema pins such as
   `marketing.json`'s `$schema`.
-- **Held packages:** `context/workflow.json` → `routines.packageUpdates.hold` lists `{ "package", "issue", "since" }`.
-  A held package stays where it is until its issue is closed **and** a published version contains the fix (check
-  the release notes); then remove the entry in the same pull request that bumps it.
-- **Everything current:** change nothing, open nothing, and go to step 6 (the report). A quiet night still reports.
+- **Held packages:** `context/workflow.json` → `routines.packageUpdates.hold` lists `{ "package", "issue", "since" }`
+  for a package defect (step 6) and `{ "package", "issue", "since", "owner" }` for a bump that waits for the owner's
+  decision (step 5). A defect hold stays until its issue is closed **and** a published version contains the fix (check
+  the release notes); an owner hold stays until its issue in this repository carries the owner's answer (closed, or
+  the owner's word in a comment), and the bump then applies that answer. Remove the entry in the same pull request
+  that bumps the package.
+- **Owner steps of earlier bumps:** `routines.packageUpdates.ownerSteps` lists steps of merged bumps that wait for the
+  owner (step 5). An entry with `confirmed` is settled: remove it in this run's pull request (or in none, when nothing
+  else changes).
+- **Everything current:** change nothing, open nothing, and go to step 7 (the report). A quiet night still reports.
 
 ### 3. Read before bumping
 
@@ -60,7 +67,8 @@ For every package that moves, read its release notes or changelog for each versi
 brings, upgrade steps it asks of an adopting app, and re-runs of generators (`softure-deploy init`). Every step the
 notes ask for is applied in this project. A break the notes do not explain is investigated, not skipped: find what
 changed in the package (its source and tests at the new tag) and adapt the project to it (step 4); only a defect in
-the package goes to step 5.
+the package goes to step 6. A step the notes leave to the owner (a new secret, a variable, a data decision) goes to
+step 5.
 
 ### 4. Bump as one change
 
@@ -98,7 +106,38 @@ the package goes to step 5.
   (`autonomy.merge`, `autonomy.remergeMain`); a red check you cannot fix within the rules leaves the pull request
   open and is named in the report.
 
-### 5. A defect in a package
+### 5. A step only the owner can take
+
+A bump that needs something only the owner can do (a new production secret, an environment or build-time variable,
+an account, a decision about existing data) must reach the owner where the owner looks: the `owner_queue` of
+`context/state.json`, which every dashboard reads. Wiring the step into compose files and deploy workflows is not
+enough: without a record the next release fails at the secret check and nothing warned. Decide which applies:
+
+- **Merge, with the step recorded**, when the code can adapt and only the owner's step is missing (for example a
+  secret the deploy needs: the code, compose and the deploy workflow are wired, only the secret is missing). Record
+  the step in the same pull request:
+  - with a live roadmap (`context/foundation/roadmap.md`, the idle placeholder included): one line under
+    `## Before the next release` (create it above `## Owner decisions and checks` if missing):
+    `- [ ] Set the production secret SOFTURE_EMAIL_KEY_SECRET (@softure-ai/mailing 0.3.0, <YYYY-MM-DD>)`;
+  - with no live roadmap: an owner-word-style issue in the project's repository (label `owner-word`, the step, the
+    package and version, the gate it blocks; neutral text, no secret values), and the entry
+    `{ "package", "version", "issue": "#N", "since", "step" }` in `routines.packageUpdates.ownerSteps`.
+- **Hold, with an issue**, when the owner must choose how existing data is treated (a migration that rewrites or
+  drops data, a changed default for records already stored). Leave the package on its version, file the same kind
+  of issue in the project's repository with the choices, and add `{ "package", "issue": "#N", "since", "owner":
+  "<the decision in one line>" }` to `routines.packageUpdates.hold`. The `owner` field marks the hold as owner work.
+
+Every one of these is regenerated into `context/state.json` (`npx softure-skills state`) in the same pull request:
+the `owner_queue` lists `## Before the next release` lines, `ownerSteps` entries and owner holds, with `kind:
+"secret"` when the step names a secret, key, token or password (`SOFTURE_EMAIL_KEY_SECRET` included).
+
+A step is settled once the owner confirms it (in the main chat, or an owner-word issue answering the entry's `id`,
+WORKFLOW §8.6): the session that hears it ticks the roadmap line `— done: <the owner's word or #N>` or sets
+`"confirmed": "<#N or YYYY-MM-DD>"` on the `ownerSteps` entry, and closes the issue; a release that ships the bump
+settles a `## Before the next release` line as well (`wt-roadmap.py released`, never this routine). The routine
+never confirms a step itself, and never sets or asks for a secret's value.
+
+### 6. A defect in a package
 
 Hold a package back only when the break is a defect in the package itself, not a change the project has to adapt
 to: a bug the package's own tests should have caught, a missing export the release notes promise, a regression of
@@ -112,7 +151,7 @@ project could undo only by patching or wrapping SOFTURE code. Then:
   the error and the steps to reproduce;
 - add `{ "package", "issue", "since" }` to `routines.packageUpdates.hold` in the same pull request.
 
-### 6. Report
+### 7. Report
 
 Every run reports, also when nothing changed, in `chatLanguage`, times in `timezone`:
 
@@ -123,17 +162,21 @@ Every run reports, also when nothing changed, in `chatLanguage`, times in `timez
 | --- | --- | --- | --- |
 | @softure-ai/skills | 0.26.0 | 0.27.0 | bumped |
 | @softure-ai/auth | 0.2.21 | 0.2.21 | current |
-| @softure-ai/mailing | 0.2.8 | 0.2.8 | held: SOFTURE/AI#123 |
+| @softure-ai/mailing | 0.2.8 | 0.3.0 | bumped; owner step: secret SOFTURE_EMAIL_KEY_SECRET |
+| @softure-ai/billing | 0.3.2 | 0.3.2 | held: #41 (owner decision) |
+| @softure-ai/storage | 0.1.4 | 0.1.4 | held: SOFTURE/AI#123 |
 
 PR: #N (merge <sha>) | none
 Issues: SOFTURE/AI#N, … | none
 Doctor: 0 (check run on <mainBranch>: ok | failing | missing)
-Decision: … | none
+Decision: set the production secret SOFTURE_EMAIL_KEY_SECRET before the next release (Before the next release); #41: choose how existing invoices are treated | none
 ```
 
 Translate the headers into `chatLanguage`. `Was` is the lockfile before, `Is` after. `Decision` names something
-only the owner can settle (a held package that blocks a feature, a red check outside the routine's reach), never a
-release: releases are not this routine's business.
+only the owner can settle, never a release (releases are not this routine's business): every open owner step from
+step 5, this run's and earlier ones still waiting, by its exact step and where it is recorded (`Before the next
+release`, the issue); an owner hold with its issue and the decision; a held package that blocks a feature; a red check
+outside the routine's reach.
 
 Post the report as the run's last message. In a hosted project with a coordinator, also send it to the coordinator's
 session and ask for a one-line summary in the main chat; when that tool is missing, the last message is enough.

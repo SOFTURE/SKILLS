@@ -181,4 +181,6 @@ script run creates it.
 - `owner_queue` reads only what is live (WORKFLOW §12.1): an unticked entry left in an archived roadmap
   is a failure to settle, not something that waits for the owner.
 - Owner-word issues (label `owner-word`, WORKFLOW §8.6) live on the forge, not in `state.json`;
-  an aggregator reads both.
+  an aggregator reads both. The exception is a package bump's owner work, which the package-update
+  routine records in `context/workflow.json` (`routines.packageUpdates`: holds with `owner`,
+  `ownerSteps` until `confirmed`): those feed `owner_queue`, so editing them needs a `state` write.
