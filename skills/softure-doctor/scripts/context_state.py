@@ -77,6 +77,8 @@ RELEASE_LINE_RE = re.compile(
 OWNER_SECTION = "Owner decisions and checks"
 RELEASE_SECTION = "Before the next release"
 DONE_STATUSES = ("done", "done_code")
+# The queued roadmap that takes every item the owner answered "later" (WORKFLOW §8.6). It never asks for a start word.
+LATER_ROADMAP_PATH = f"{QUEUED_DIR}/roadmap-later.md"
 # A package bump's owner work that the package-update routine records in workflow.json (routines/package-updates.md).
 HOLD_SOURCE = f"{WORKFLOW_PATH}#routines.packageUpdates.hold"
 OWNER_STEPS_SOURCE = f"{WORKFLOW_PATH}#routines.packageUpdates.ownerSteps"
@@ -545,8 +547,10 @@ def build_state(reader, prior: dict | None = None, now: str | None = None) -> di
             "total": total,
             "items": [{key: row[key] for key in ("id", "change_id", "outcome", "status")} for row in rows],
         })
-        owner_queue.append({"kind": "word", "source": path, "item": None, "since": since,
-                            "text": f"start queued roadmap {slug}" + (f": {condition}" if condition else "")})
+        if path != LATER_ROADMAP_PATH:
+            # The later roadmap holds what the owner put off (WORKFLOW §8.6): nobody waits for a word to start it.
+            owner_queue.append({"kind": "word", "source": path, "item": None, "since": since,
+                                "text": f"start queued roadmap {slug}" + (f": {condition}" if condition else "")})
         owner_queue += _owner_entries(path, text, rows, meta.get("updated") or today)
 
     pending = pending_release_roadmap(reader)

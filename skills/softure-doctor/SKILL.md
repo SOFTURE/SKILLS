@@ -72,6 +72,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `baseline-stale` | a baselined failure is fixed: `doctor.py --baseline` rewrites the file without it (commit it) |
 | `ci-doctor-trigger` | the workflow's `context-doctor` job misses pushes to `mainBranch`: give its `on:` `pull_request` and `push` with `branches: [<mainBranch>]`, drop any `paths`/`paths-ignore` filter and the job's `if:` (never baselined) |
 | `owner-word-wake-invalid` | `autonomy.ownerWordWake` in `context/workflow.json` holds another value: set `"routine"` (the owner-word wake routine is set up and its GitHub trigger verified, `routines/owner-word-wake.md`; `"none"` until then), `"heartbeat"` or `"none"` (never baselined). An autonomous project without the key gets the note `owner-word-wake-undeclared`, not a failure |
+| `owner-entry-put-off` | a note, not a failure: an open `## Owner decisions and checks` entry that still carries `(later: #N)` (the settle shape before 0.37.0). Move the item to `roadmaps/roadmap-later.md` under a new ID and tick the entry `— later: #N → <new ID>` (WORKFLOW §8.6) |
 
 ## Mechanical repairs: `--fix`
 
