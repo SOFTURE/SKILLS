@@ -128,8 +128,17 @@ or languages.
   },
   "routines": {                     // optional: state a routine keeps between runs (§13); a fresh session reads it here
     "packageUpdates": {
-      "hold": [                     // packages the nightly update leaves alone until the fix is published
-        { "package": "@softure-ai/mailing", "issue": "SOFTURE/AI#123", "since": "2026-11-20" }
+      "hold": [                     // packages the nightly update leaves alone: until the fix is published (a
+                                    // package defect, issue in SOFTURE), or until the owner decides ("owner": the
+                                    // decision, issue in this repository; an owner_queue entry, §12.1)
+        { "package": "@softure-ai/mailing", "issue": "SOFTURE/AI#123", "since": "2026-11-20" },
+        { "package": "@softure-ai/billing", "issue": "#41", "since": "2026-11-22",
+          "owner": "choose how existing invoices are treated" }
+      ],
+      "ownerSteps": [               // owner steps of merged bumps with no live roadmap to hold them (an owner_queue
+                                    // entry until "confirmed" is set: the owner's #N or date)
+        { "package": "@softure-ai/mailing", "version": "0.3.0", "issue": "#42", "since": "2026-11-24",
+          "step": "set the production secret SOFTURE_EMAIL_KEY_SECRET", "confirmed": null }
       ]
     }
   }
@@ -858,14 +867,14 @@ The schema ships with the package: `skills/softure-doctor/references/state.schem
 
 **`owner_queue`** is the one list of what waits for the owner, built only from what is live: the main roadmap, the
 queued roadmaps, the open changes, and the pre-release steps of the newest closed roadmap until its release is
-recorded:
+recorded, and the owner work the package-update routine records in `context/workflow.json`:
 
 | `kind` | Comes from |
 | --- | --- |
 | `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word); every queued roadmap (the word to start it, with its `trigger`) |
-| `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps |
-| `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry; `**Owner step:**` / `**Owner check:**` lines of an open change's `## Roadmap handoff` |
-| `secret` | a `step` whose text names a secret, key, token, credential or password |
+| `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps; `routines.packageUpdates.hold` entries with `owner` (a bump held for the owner's decision, routines/package-updates.md) |
+| `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry; `**Owner step:**` / `**Owner check:**` lines of an open change's `## Roadmap handoff`; `routines.packageUpdates.ownerSteps` entries without `confirmed` |
+| `secret` | a `step` (or an owner hold) whose text names a secret, key, token, credential or password, also inside an environment variable name (`SOFTURE_EMAIL_KEY_SECRET`) |
 
 The idle placeholder `roadmap.md` (`status: idle` or `roadmap: none`) is no active roadmap, but a project between
 roadmaps still has owner steps: its open `## Owner decisions and checks` and `## Before the next release` entries

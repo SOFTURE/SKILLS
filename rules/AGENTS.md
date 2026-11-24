@@ -375,6 +375,9 @@ item's status). An issue whose body carries `<!-- owner-word: {"entry": "<id>", 
 answers the `owner_queue` entry with that `id` in `context/state.json`: settle that entry in its `source` file and cite
 the issue (`yes`: carry it out and tick it `— done: #N`; `no`: tick it `— declined: #N` and record what follows;
 `later`: leave it open with `(later: #N)`); an `entry` no longer in the queue gets a comment saying so (WORKFLOW §8.6).
+An entry whose `source` is `context/workflow.json#routines.packageUpdates.*` (a package bump's owner work,
+routines/package-updates.md) is settled there: `yes` on an `ownerSteps` entry sets `"confirmed": "#N"`; the answer to
+an owner hold goes on its issue, and the next package-update run applies it and removes the hold.
 Then it comments what it did (thread, PR, merge SHA, roadmap line), closes the issue as
 completed, and names it in the next report. An issue it cannot act on (unclear, contradicts `change.md`
 or a standing order) gets one comment with the question and stays open; the question also goes to the
