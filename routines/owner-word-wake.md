@@ -73,7 +73,8 @@ section for the project's `mode`:
   coordinator session named, or the session is gone), carry on as below.
 - **Autonomous, without a reachable coordinator:** this session does both jobs (`AGENTS.md` → Know your role, "a
   session started by the owner directly"). Carry the decision out under the project's rules: a roadmap to start,
-  a "no" or "later" recorded in the roadmap, an `owner_queue` entry settled in its `source` file (WORKFLOW §8.6),
+  a "no" recorded in the roadmap, a "later" moved to `roadmaps/roadmap-later.md` as a new item, an `owner_queue` entry
+  settled in its `source` file so it leaves the queue (WORKFLOW §8.6, never re-worded in place),
   a release word recorded (hard rule 1), or one change through the full chain on its own branch and pull request,
   merged on green through the project's merge path. Then comment what was done (PR, merge SHA, roadmap line) and
   close the issue as completed. An issue it cannot act on (unclear, contradicts `change.md` or a standing order,

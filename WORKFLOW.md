@@ -409,6 +409,9 @@ context/backlog/roadmap-<slug>/<change-id>/change.md   §4 format with `status: 
   `foundation/archive/<YYYY-MM-DD>-roadmap.md`, `git mv roadmaps/roadmap-<slug>.md roadmap.md`, set
   `status: ready`, then take its ready entries as above. The backlog folder stays until it is empty, then is removed.
 - An entry that got done or rejected elsewhere moves into that change's archive folder as `backlog-input.md`.
+- **The later roadmap** (`roadmaps/roadmap-later.md`, slug `later`) is the one place for what the owner put off: every
+  `later` answer to an owner-queue entry lands there as a new item (§8.6). It is queued like any other, but it is
+  never promoted as a whole and puts no "start" word in the owner queue; an item leaves it when the owner raises it.
 
 ### 5.2 Closing a roadmap
 
@@ -727,13 +730,30 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   ```
 
   `answer` is `yes`, `no` or `later`; the prose still says the decision and wins where the two differ (the coordinator
-  asks in a comment). The coordinator settles the entry it names in the file `source` points to, citing the issue:
-  `yes`: it carries the decision out and ticks the entry `— done: #N` (with the thread, PR or merge SHA when there is
-  one); `no`: it ticks the entry `— declined: #N` and records what follows in the roadmap (an item `dropped`, a queued
-  roadmap left waiting); `later`: it leaves the entry open and appends `(later: #N)`, so the entry keeps its `id` and
-  stays in the queue. An `entry` that is not in the current `state.json` (already settled, or an unknown id) gets a
-  comment saying so, and the issue is closed when the entry was settled. An issue without the line is read as prose,
-  as before.
+  asks in a comment). **An answered entry leaves the owner queue in the settling commit, whatever the answer:** the
+  owner decided, so nothing they answered stays on their list. The coordinator settles the entry it names in the file
+  `source` points to, citing the issue, and never re-words it in place (an aggregator would show a re-worded entry as
+  changed since the answer and ask again):
+  - `yes`: it carries the decision out and ticks the entry `— done: #N` (with the thread, PR or merge SHA when there
+    is one). What is left that only the owner can do and the owner did not confirm goes to the later roadmap as a new
+    item (`Mode: owner`, as below), unless it gates a release or a deploy: then it is a new entry under
+    `## Before the next release` that names just that step and cites `#N`;
+  - `no`: it ticks the entry `— declined: #N` and records what follows in the roadmap (an item `dropped`, a queued
+    roadmap left waiting);
+  - `later`: it **moves the item to the later roadmap**, `context/foundation/roadmaps/roadmap-later.md` (created on
+    first use as a queued roadmap, §5.1, with its own prefix, `trigger: "the owner picks an item up"`), as a new item
+    with the next number of that roadmap's prefix: a row (`proposed`, or `blocked (…)` for `Mode: owner`), an item
+    block that says where it came from (`from <old ID> in <roadmap>, owner-word #N`), and the item's backlog entry
+    moved with `git mv` to `context/backlog/roadmap-later/<change-id>/`. The old row becomes `carried (to
+    roadmaps/roadmap-later.md <new ID>, #N)` and the entry is ticked `— later: #N → <new ID>`. The new item is
+    detached from the old one: it keeps no old ID, and the later roadmap never adds a "start queued roadmap" word
+    to the owner queue (§12.1). The owner raises an item from it when they want it.
+
+  Then it regenerates `state.json` in the same commit, comments what it did and closes the issue. An `entry` that is
+  not in the current `state.json` (already settled, or an unknown id) gets a comment saying so, and the issue is
+  closed when the entry was settled. An issue without the line is read as prose, as before. Before 0.37.0 a `later`
+  answer left the entry open with `(later: #N)`; the doctor notes such an entry (`owner-entry-put-off`) until it is
+  moved.
 - **Not in `state.json`.** Open owner-word issues live on the forge; an aggregator reads both (`state.json` for what
   waits for the owner, the forge for the words already given). With the line, it tells which entries an open issue
   already answers (its `entry`) and shows them as answered until the entry leaves the queue.
@@ -875,7 +895,7 @@ recorded, and the owner work the package-update routine records in `context/work
 
 | `kind` | Comes from |
 | --- | --- |
-| `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word); every queued roadmap (the word to start it, with its `trigger`) |
+| `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word); every queued roadmap except `roadmap-later.md` (the word to start it, with its `trigger`) |
 | `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps; `routines.packageUpdates.hold` entries with `owner` (a bump held for the owner's decision, routines/package-updates.md) |
 | `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry; `**Owner step:**` / `**Owner check:**` lines of an open change's `## Roadmap handoff`; `routines.packageUpdates.ownerSteps` entries without `confirmed` |
 | `secret` | a `step` (or an owner hold) whose text names a secret, key, token, credential or password, also inside an environment variable name (`SOFTURE_EMAIL_KEY_SECRET`) |

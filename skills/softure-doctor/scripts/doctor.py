@@ -44,6 +44,8 @@ and as the job summary, so a reader of the forge API sees the codes on the main 
   owner-word-wake-invalid         context/workflow.json `autonomy.ownerWordWake` is not one of "routine", "heartbeat",
                                   "none" (WORKFLOW.md §8.6); an autonomous project that leaves the key out gets a note
                                   (`owner-word-wake-undeclared`), not a failure
+  owner-entry-put-off             (a note, not a failure) an open owner entry that still carries `(later: #N)`;
+                                  a "later" answer moves the item to roadmaps/roadmap-later.md (WORKFLOW.md §8.6)
 
 `--fix` repairs what is mechanical (an archived change's status; an archived index row whose target
 moved or was deleted on purpose, found through git history; a dropped Progress item, normalised) and prints every edit; see doctor_fix.py. It is a dry run unless
@@ -578,6 +580,27 @@ def check_owner_word_wake(reader) -> list[Finding]:
                     "(WORKFLOW.md §8.6)")]
 
 
+# An owner entry the project still keeps open after a "later" answer, the shape WORKFLOW §8.6 used before 0.37.0.
+PUT_OFF_RE = re.compile(r"\(later: #\d+")
+
+
+def check_put_off_entries(reader) -> list[Finding]:
+    """Open owner entries that carry `(later: #N)`: a "later" answer moves the item to roadmap-later.md (§8.6)."""
+    findings: list[Finding] = []
+    for path in [ROADMAP_PATH, *_files(reader, QUEUED_DIR, r"^roadmap-.+\.md$")]:
+        text = reader.read(path)
+        if text is None:
+            continue
+        put_off = [line for line in open_checkboxes(sections(text).get(OWNER_SECTION, [])) if PUT_OFF_RE.search(line)]
+        if put_off:
+            findings.append(Finding("owner-entry-put-off", path,
+                                    f"{len(put_off)} open owner entr{'y' if len(put_off) == 1 else 'ies'} still "
+                                    "carry `(later: #N)`: move each item to context/foundation/roadmaps/"
+                                    "roadmap-later.md under a new ID and tick the entry `— later: #N → <new ID>` "
+                                    "(WORKFLOW.md §8.6)", severity="note"))
+    return findings
+
+
 def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[Finding]:
     """Every finding for the project `reader` sees. `root` (a git checkout) enables the history check.
 
@@ -588,7 +611,8 @@ def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[F
         return []
     findings: list[Finding] = []
     for check in (check_main_roadmap, check_archived_changes, check_archived_roadmaps,
-                  check_queued_and_backlog, check_roadmap_shape, check_indexes, check_ci, check_owner_word_wake):
+                  check_queued_and_backlog, check_roadmap_shape, check_indexes, check_ci, check_owner_word_wake,
+                  check_put_off_entries):
         findings += check(reader)
     findings += check_state(reader, root)
     return apply_baseline(reader, findings) if baseline else findings
