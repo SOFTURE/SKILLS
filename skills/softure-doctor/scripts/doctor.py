@@ -567,8 +567,9 @@ def check_owner_word_wake(reader) -> list[Finding]:
         if workflow.get("mode") != "autonomous":
             return []
         return [Finding("owner-word-wake-undeclared", WORKFLOW_PATH,
-                        'autonomy.ownerWordWake is not set: declare "routine" (routines/owner-word-wake.md is set up), '
-                        '"heartbeat" or "none" (WORKFLOW.md §8.6)', severity="note")]
+                        'autonomy.ownerWordWake is not set: declare "routine" only once routines/owner-word-wake.md is '
+                        'set up and its GitHub trigger is verified, else "heartbeat" or "none" (WORKFLOW.md §8.6)',
+                        severity="note")]
     value = autonomy["ownerWordWake"]
     if value in OWNER_WORD_WAKES:
         return []

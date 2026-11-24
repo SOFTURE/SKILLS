@@ -221,6 +221,7 @@ class DoctorTest(unittest.TestCase):
         code, report = self.project.doctor()
         self.assertEqual(code, 0, report)
         self.assertEqual([note["code"] for note in report["notes"]], ["owner-word-wake-undeclared"])
+        self.assertIn("its GitHub trigger is verified", report["notes"][0]["message"])
 
     def test_manual_project_without_owner_word_wake_is_silent(self) -> None:
         self.set_owner_word_wake("manual", {})

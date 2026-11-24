@@ -105,8 +105,9 @@ or languages.
                                     // (routines/roadmap-heartbeat.md, a fresh session per fire). `idleHours` (issue mode):
                                     // the heartbeat is deleted after this many hours with an empty queue; null keeps it
     "ownerWordWake": "routine"      // what wakes the project on an owner-word issue (§8.6): "routine" (the GitHub-triggered
-                                    // routines/owner-word-wake.md is set up), "heartbeat" (only the roadmap heartbeat, while
-                                    // a run works), "none"; the doctor notes it when missing, fails on any other value
+                                    // routines/owner-word-wake.md is set up and its trigger verified; "none" until then),
+                                    // "heartbeat" (only the roadmap heartbeat, while a run works), "none"; the doctor
+                                    // notes it when missing, fails on any other value
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -712,7 +713,10 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   the issue waits for the owner). It never releases or deploys: a release word is recorded for the next run. The
   project declares the wake-up in `workflow.json` → `autonomy.ownerWordWake` (`"routine"`, `"heartbeat"` or
   `"none"`, §2), because the routine itself cannot be read from the repository; the doctor notes an autonomous
-  project that leaves it out, so an aggregator can show which projects wake on their own.
+  project that leaves it out, so an aggregator can show which projects wake on their own. `"routine"` is declared
+  only once the task shows its GitHub trigger (or the owner confirmed it): a task created with a tool that offers
+  only a cron schedule or a one-shot run has no trigger and never fires, and the trigger can be added only in the
+  routines web UI or with a tool that explicitly supports it. Until then the value is `"none"`.
 - **Answering a queue entry.** An issue that answers one `owner_queue` entry (§12.1) may carry, next to the prose, one
   machine-readable line that names the entry by its `id` and the answer:
 

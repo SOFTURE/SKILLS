@@ -41,7 +41,12 @@ Learned from routines that ran for weeks in several adopting projects:
 
 The roadmap heartbeat is created by the coordinator when an autonomous run starts and deleted when it ends; its file
 has its own setup brief. The owner-word wake is set up once per repository with a GitHub trigger, and the project
-declares it in `context/workflow.json` → `autonomy.ownerWordWake`; its file has its own setup brief. The
+declares it in `context/workflow.json` → `autonomy.ownerWordWake`; its file has its own setup brief. That trigger can
+be added only in the routines web UI (claude.ai/code/routines) or with a tool that explicitly supports GitHub event
+triggers: a task created with a cron-or-one-shot tool has no trigger and never fires, so the project declares
+`"routine"` only once the task shows the trigger (or the owner confirmed it) and `"none"` until then. To test it, open
+one `owner-word` issue and check that the routine's run shows up in the task's runs and its claim comment lands on the
+issue; no run means no working trigger (`owner-word-wake.md` → Testing it). The
 package-update routine is set up once per project:
 
 Paste this into the project's main chat (or any session of the project that can create scheduled tasks). Replace

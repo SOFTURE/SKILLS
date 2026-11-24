@@ -97,18 +97,27 @@ No artifacts and no dashboards. Then end the session.
 The routine itself cannot be read from the repository, so the project declares how its owner-word issues wake it in
 `context/workflow.json` → `autonomy.ownerWordWake`:
 
-- `"routine"`: this routine is set up for the repository;
+- `"routine"`: this routine is set up for the repository and its GitHub trigger is verified (the task shows it, or
+  the owner confirmed it); a task without a verified trigger counts as `"none"`;
 - `"heartbeat"`: no routine; the roadmap heartbeat (`roadmap-heartbeat.md`) and the coordinator pick the issues up,
   only while a run works;
 - `"none"`: nothing wakes the project; an issue waits for the next session someone opens.
 
 The doctor writes a note (not a failure) when an autonomous project leaves the key out, and fails on any other value
-(`owner-word-wake-invalid`), so an aggregator can tell which projects wake on their own.
+(`owner-word-wake-invalid`), so an aggregator can tell which projects wake on their own. The doctor cannot see the
+trigger; the test below can.
 
 ## Setting it up
 
 Once per repository, by the owner or any session of the project that can create scheduled tasks. The Claude GitHub
 App must be installed on the repository: the web form for scheduled tasks offers to install it when it is missing.
+
+**The GitHub trigger is the routine.** A scheduled task without it never fires, however it was created. Many
+task-creation tools offer only a cron schedule or a one-shot run; a task made with such a tool has no trigger at
+all. A GitHub event trigger can be added only in the routines web UI (claude.ai/code/routines) or with a tool that
+explicitly supports GitHub event triggers. A session that cannot add it either creates nothing, or creates the task
+and hands the owner the exact UI steps and the task link; it never reports the routine as set up or working, and
+it leaves `autonomy.ownerWordWake` at `"none"`. `"routine"` is declared only after the trigger is verified (step 3).
 
 Paste this into the project's main chat (or any session that can create scheduled tasks). Replace `<owner>/<repo>`
 and, in a hosted project, `<coordinator session id>` (leave `none` otherwise):
@@ -118,18 +127,27 @@ Set up the SOFTURE owner-word wake routine for <owner>/<repo>, as
 node_modules/@softure-ai/skills/routines/owner-word-wake.md describes (read it first; from SOFTURE/SKILLS on GitHub
 if node_modules is missing):
 1. List this account's scheduled tasks. If one already wakes on owner-word issues for this repository, do not
-   create a second: tell me its name and id. Do not delete it yourself.
-2. Create one scheduled task:
-   - name: "<PROJECT> · Owner-word wake" (the repository name in capitals),
-   - trigger: GitHub event on <owner>/<repo>, issues, actions "opened" and "labeled" (no schedule),
-   - a fresh session on every fire (create_new_session_on_fire: true), never bound to an existing session,
-   - this repository attached, nothing else,
-   - the routine prompt below, verbatim, with the placeholders filled in.
-   If this session cannot create scheduled tasks or GitHub triggers, give me the steps for
-   claude.ai/code/routines instead (New task, the prompt, Trigger: + GitHub event, the repository, Issues, opened
-   and labeled) and stop.
-3. Set context/workflow.json → autonomy.ownerWordWake to "routine" through the project's merge path.
-4. Report the task id and the prompt it holds. Do not run it now.
+   create a second: tell me its name and id, and go to step 3 for it. Do not delete it yourself.
+2. Check your tools first. A GitHub event trigger can be added only in the routines web UI
+   (claude.ai/code/routines) or with a tool that explicitly supports GitHub event triggers; a tool that offers
+   only a cron schedule or a one-shot run cannot add it, and a task without the trigger never fires.
+   - With such a tool, create one scheduled task:
+     - name: "<PROJECT> · Owner-word wake" (the repository name in capitals),
+     - trigger: GitHub event on <owner>/<repo>, issues, actions "opened" and "labeled" (no schedule),
+     - a fresh session on every fire (create_new_session_on_fire: true), never bound to an existing session,
+     - this repository attached, nothing else,
+     - the routine prompt below, verbatim, with the placeholders filled in.
+   - Without one, either create nothing, or create the task with the fields above except the trigger. Then give
+     me the exact steps to finish it in claude.ai/code/routines (open the task, or New task with the prompt;
+     Trigger: + GitHub event; repository <owner>/<repo>; event Issues; actions opened and labeled; save), plus
+     the task link when there is one. Do not call the routine set up or working.
+3. Verify the trigger: read the task back and check that it shows a GitHub trigger on <owner>/<repo> (issues,
+   opened and labeled), or ask me to confirm it in claude.ai/code/routines. Only then set
+   context/workflow.json -> autonomy.ownerWordWake to "routine" through the project's merge path. Until the
+   trigger is verified the value is "none": set it so when the key is missing or says anything else.
+4. Report the task id and link, the trigger as the task shows it (or "missing: waiting for the owner's UI
+   steps"), the prompt it holds and the ownerWordWake value. Do not run it now. To test it, I open one
+   owner-word issue and look for the routine's run.
 ```
 
 Routine prompt:
@@ -147,3 +165,10 @@ no other repository, and never disable or edit this scheduled task.
 The prompt stays the same when the steps change: the next fire reads the new `owner-word-wake.md` from the
 `@softure-ai/skills` version the project has installed. When the coordinator's session changes (a new hosted
 project chat), edit the session id in the prompt or set it to `none`.
+
+## Testing it
+
+After the trigger is verified, open one issue labelled `owner-word` in the repository (a harmless decision, e.g.
+"Record in the roadmap that the owner-word wake routine works.") and look for the routine's run in
+claude.ai/code/routines (the task's runs) and for its claim comment on the issue within a few minutes. No run means no
+working trigger: set `autonomy.ownerWordWake` back to `"none"` and fix the trigger in the UI.
