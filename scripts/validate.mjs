@@ -8,6 +8,8 @@
 // - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
 // - any shipped file tells a coordinator to bind a routine to its own session (routines run in a fresh session)
+// - the owner-word wake setup brief lets a task without a verified GitHub trigger count as set up, or the routines
+//   README does not say how to test that routine (a cron-or-one-shot tool creates a task that never fires)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -90,6 +92,22 @@ for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".
   if (!/Never disable, edit or delete this routine/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never disable, edit or delete this routine"`);
   if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
 }
+
+// The owner-word wake fires only through a GitHub event trigger, which most task-creation tools cannot add.
+const wake = fs.readFileSync(path.join(routinesDir, "owner-word-wake.md"), "utf8");
+const brief = wake.slice(wake.indexOf("## Setting it up"), wake.indexOf("Routine prompt:"));
+const WAKE_BRIEF = [
+  [/only in the routines web UI \(claude\.ai\/code\/routines\) or with a tool that\s+explicitly supports GitHub event\s+triggers/, "say the GitHub trigger can be added only in the routines web UI or with a tool that explicitly supports it"],
+  [/exact steps to finish it in claude\.ai\/code\/routines/, "hand the owner the exact UI steps when the session cannot add the trigger"],
+  [/never reports the routine as set up or working/, "forbid reporting a routine without a trigger as working"],
+  [/Verify the trigger[\s\S]*Only then set[\s\S]*"routine"/, "verify the trigger before setting autonomy.ownerWordWake to \"routine\""],
+  [/Until the\s+trigger is verified the value is "none"/, "keep autonomy.ownerWordWake at \"none\" until the trigger is verified"],
+];
+for (const [pattern, what] of WAKE_BRIEF) {
+  if (!pattern.test(brief)) errors.push(`routines/owner-word-wake.md: the setup brief does not ${what}`);
+}
+if (!/## Testing it/.test(wake)) errors.push('routines/owner-word-wake.md: no "Testing it" section');
+if (!/To test it, open\s+one `owner-word` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the owner-word wake routine");
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);

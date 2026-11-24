@@ -109,8 +109,11 @@ function ownerWordWakeNotice(workflowConfig) {
     "  1. install the Claude GitHub App on the repository (https://github.com/apps/claude);",
     "  2. paste the setup brief from node_modules/@softure-ai/skills/routines/owner-word-wake.md (\"Setting it up\")",
     "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (opened, labeled),",
-    "     a fresh session per event;",
-    `  3. set "autonomy": { "ownerWordWake": "routine" } in ${WORKFLOW_CONFIG_PATH}.`,
+    "     a fresh session per event. The GitHub trigger can be added only in claude.ai/code/routines or with a tool",
+    "     that explicitly supports GitHub event triggers; a cron-or-one-shot task has no trigger and never fires;",
+    `  3. once the task shows the GitHub trigger (or you confirmed it in the UI), set`,
+    `     "autonomy": { "ownerWordWake": "routine" } in ${WORKFLOW_CONFIG_PATH}; until then set "none";`,
+    "  4. test it: open one owner-word issue and check that the routine's run shows up.",
     'Without the routine, declare "heartbeat" (picked up only while a run works) or "none".',
   ].join("\n");
 }
