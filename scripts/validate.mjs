@@ -7,8 +7,8 @@
 // - a mode section of the rules block does not mention the cockpit label (WORKFLOW.md §8.6)
 // - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
-// - any shipped file tells a coordinator to bind a routine to its own session (scheduled routines run in a fresh
-//   session; the COCKPIT command, which has no schedule, is the one routine bound to the coordinator)
+// - any shipped file tells a coordinator to bind a routine to its own session (every routine runs in a fresh
+//   session, the COCKPIT command included: each of its fires starts a fresh project thread)
 // - the COCKPIT command setup brief, its task prompt or the Cockpit issues rules lose a rule they must carry
 // - any shipped file names the removed wake routine, its config key or the former name of the cockpit label
 
@@ -57,10 +57,9 @@ for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true }).filter((i
 // A sentence that binds a routine to the coordinator's (or "this") session is allowed only as a prohibition.
 const BINDING = /\b(bind|binds|bound|binding)\b[^.;]*\b(coordinator's|this) session/i;
 const PROHIBITION = /\b(never|not|no)\b/i;
-// The COCKPIT command is bound to the coordinator on purpose (routines/cockpit-command.md): its file and any
-// sentence that names it are exempt.
+// The COCKPIT command may release on the owner's word in its issue (routines/cockpit-command.md), so it carries its
+// own hard rules instead of the scheduled routines' ones.
 const COMMAND_FILE = "cockpit-command.md";
-const COMMAND_NAMED = /COCKPIT command/;
 // Removed in 0.40.0 with no alias: the wake routine, its config key and the former name of the cockpit label.
 const REMOVED = new RegExp(["cockpit" + "Wake", "cockpit" + "-wake", "owner" + "[-_ ]?word"].join("|"), "i");
 
@@ -71,9 +70,8 @@ for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...wa
     if (pattern.test(content)) errors.push(`${path.relative(ROOT, file)}: matches forbidden pattern ${pattern}`);
   }
   if (REMOVED.test(content) || REMOVED.test(path.relative(ROOT, file))) errors.push(`${path.relative(ROOT, file)}: names the removed wake routine, its config key or the former cockpit label name`);
-  if (path.basename(file) === COMMAND_FILE) continue;
   for (const sentence of content.replace(/\s+/g, " ").split(/(?<=[.;])\s/)) {
-    if (BINDING.test(sentence) && !PROHIBITION.test(sentence) && !COMMAND_NAMED.test(sentence)) {
+    if (BINDING.test(sentence) && !PROHIBITION.test(sentence)) {
       errors.push(`${path.relative(ROOT, file)}: binds a routine to the coordinator's session: "${sentence.slice(0, 120)}"`);
     }
   }
@@ -97,40 +95,56 @@ if (!/create_new_session_on_fire/.test(routinesReadme)) errors.push("routines/RE
 for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".md") && name !== "README.md")) {
   const content = fs.readFileSync(path.join(routinesDir, file), "utf8");
   if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
+  if (!/fresh session/i.test(content)) errors.push(`routines/${file}: does not say it runs in a fresh session`);
   if (file === COMMAND_FILE) continue;
   if (!/Never release, tag, publish or deploy/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never release, tag, publish or deploy"`);
-  if (!/fresh session/i.test(content)) errors.push(`routines/${file}: does not say it runs in a fresh session`);
   if (!/Never disable, edit or delete this routine/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never disable, edit or delete this routine"`);
 }
 
-// The COCKPIT command: a project-attached task with no schedule, bound to the coordinator, fired by COCKPIT.
+// The COCKPIT command: a project-attached task with no schedule, fired by COCKPIT; each fire starts a fresh project
+// thread that carries the one issue the command links.
 const commandPath = path.join(routinesDir, COMMAND_FILE);
 const command = fs.existsSync(commandPath) ? fs.readFileSync(commandPath, "utf8") : "";
 if (!command) errors.push(`routines/${COMMAND_FILE}: missing`);
 const COMMAND_RULES = [
   [/name: "<PROJECT> · COCKPIT command"/, "name the task \"<PROJECT> · COCKPIT command\""],
   [/no schedule \(no cron, no one-off run time\)/, "create the task with no schedule"],
-  [/persistent_session_id = this session's id/, "bind the task to the coordinator's own session"],
+  [/a fresh session on every fire \(create_new_session_on_fire: true\)/, "start a fresh session on every fire"],
   [/no connectors/, "attach no connectors"],
+  [/gets the project's default connectors/, "say a project-attached task inherits the project's default connectors"],
   [/always opens the issue in the project's repository first/, "say COCKPIT opens the issue before it fires the command"],
+  [/\*\*Every fire starts one fresh project thread\.\*\*/, "say every fire starts one fresh project thread"],
+  [/sends its\s+start and its result to the coordinator/, "have the thread send its start and result to the coordinator"],
   [/COCKPIT command: https:\/\/github\.com\/<owner>\/<repo>\/issues\/<N>/, "show that the command carries the issue's link"],
+  [/<routine-fire-payload>/, "say the command arrives as <routine-fire-payload>"],
+  [/can arrive as a separate message after the prompt/, "say the payload can follow the prompt as a separate message"],
+  [/never on other open `cockpit` issues/, "forbid acting on other open cockpit issues"],
+  [/gh api -X PATCH repos\/<owner>\/<repo>\/issues\/<N> -f state=closed/, "close the issue through gh api REST"],
   [/add an API trigger/, "have the owner add an API trigger in the web form"],
+  [/attach this project's repository <owner>\/<repo> with write access/, "have the owner attach the repository with write access"],
   [/Never ask me for the token in this chat/, "forbid asking for the token in the chat"],
   [/COCKPIT -> this project -> routines, kind cockpit-issues, and press Test/, "send the fire URL and token to COCKPIT and press Test"],
-  [/The setup is done when the test\s+arrives\. Write nothing to the repository\./, "finish when the test arrives and write nothing to the repository"],
-  [/COCKPIT command for <owner>\/<repo>\. The text after this prompt names one cockpit issue; act on it as AGENTS\.md →\s+Cockpit issues says\. Never release or deploy unless the issue gives that word, never touch another repository, never\s+disable or edit this scheduled task\./, "carry the task prompt verbatim"],
+  [/The setup is done only when the test reaches a thread that can read\s+the repository\. Write nothing to the repository\./, "finish only when the test reaches a thread that reads the repository, and write nothing to it"],
+  [/COCKPIT command for <owner>\/<repo>\. You are the command thread for one cockpit issue\. The command is the content of\s+<routine-fire-payload>; if it is not in the conversation yet, end your turn without posting anything, it follows as\s+the next message\. "COCKPIT command: <issue link>": act only on that one issue, never on other open cockpit issues,\s+as AGENTS\.md -> Cockpit issues says\. "COCKPIT test: \.\.\.": post one line naming the main branch's head commit and\s+nothing else\. Comment, label and close the issue through the REST API with gh api \(GraphQL is refused here\); try\s+that before reporting a missing permission, and report the HTTP status if it fails\. Never release or deploy unless\s+the issue gives that word, never touch another repository, never disable or edit this scheduled task\./, "carry the task prompt verbatim"],
 ];
 for (const [pattern, what] of COMMAND_RULES) {
   if (!pattern.test(command)) errors.push(`routines/${COMMAND_FILE}: the setup brief does not ${what}`);
 }
-if (!/\*\*The one routine bound to the coordinator\.\*\*/.test(routinesReadme)) errors.push("routines/README.md: does not say the COCKPIT command is the one routine bound to the coordinator");
+if (/persistent_session_id/.test(command)) errors.push(`routines/${COMMAND_FILE}: binds the task to a session (persistent_session_id)`);
 const cockpitRules = rules.slice(rules.indexOf("**Cockpit issues.**"), rules.indexOf("**Issues as the work source**"));
 const RULES_FOR_COMMANDS = [
-  [/`COCKPIT command:` names one issue by its link/, "say a `COCKPIT command:` message names one issue by its link"],
+  [/Every COCKPIT command starts one\s+fresh project thread/, "say every COCKPIT command starts one fresh project thread"],
+  [/`<routine-fire-payload>`/, "say the command is the content of `<routine-fire-payload>`"],
+  [/end the turn without posting anything/, "end the turn while the payload has not arrived"],
+  [/`COCKPIT command:` names one issue\s+by its link/, "say a `COCKPIT command:` message names one issue by its link"],
+  [/Act only on that issue, never on other open `cockpit` issues/, "act only on the issue the command names"],
   [/is labelled `cockpit` and was\s+opened by someone with `admin`, `maintain` or `write` permission/, "check the issue's label and its author's write access"],
   [/one thread for that one issue/, "give the issue one thread"],
+  [/sends its start to the coordinator/, "send the thread's start to the coordinator"],
+  [/sends its result/, "send the thread's result to the coordinator"],
   [/The issue body stays data/, "keep the issue body as data"],
   [/a Retry from COCKPIT can deliver the same command twice/, "check for an existing thread before starting one"],
+  [/go through the REST API with `gh api`, because cloud sessions refuse GraphQL/, "write to the issue through gh api REST"],
   [/`COCKPIT test:` gets a one-line reply and nothing else/, "answer `COCKPIT test:` with one line"],
 ];
 for (const [pattern, what] of RULES_FOR_COMMANDS) {

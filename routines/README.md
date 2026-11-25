@@ -9,7 +9,7 @@ never re-created to pick up a fix.
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
 | Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
-| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue | delivers `COCKPIT command: <issue link>` (the issue COCKPIT opened) to the coordinator's own session, which acts on that one issue like an order in the chat |
+| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue | starts one fresh project thread for the one issue the command links (`COCKPIT command: <issue link>`); that thread carries the issue and sends its start and result to the coordinator |
 
 ## The standard every routine follows
 
@@ -19,9 +19,8 @@ Learned from routines that ran for weeks in several adopting projects:
    the whole conversation again on every fire: after a month that was 150k to 240k tokens per run and several times
    the cost of the same work in a fresh session. It also carries stale beliefs: a persistent package-update session
    that once heard "the server is ready" released and deployed every nightly bump from then on. A fresh session
-   knows only the repository, which is the point: everything a routine needs lives there. A scheduled routine is
-   never bound to the coordinator's session either: an hourly heartbeat bound there cost about 145k tokens per fire
-   (the COCKPIT command, which has no schedule, is the one exception, below).
+   knows only the repository, which is the point: everything a routine needs lives there. A routine is
+   never bound to the coordinator's session either: an hourly heartbeat bound there cost about 145k tokens per fire.
 2. **Never release, tag, publish or deploy from a routine**, without conditions. A dependency bump rides the next
    release the owner orders. A rule like "until the owner says the server is ready" stops being true one day and the
    routine starts deploying unattended, database migrations included.
@@ -37,11 +36,6 @@ Learned from routines that ran for weeks in several adopting projects:
    itself.
 7. **The schedule is the project's `timezone`** (`context/workflow.json`). Package updates run at 03:00; several
    projects firing at the same minute is fine.
-
-**The one routine bound to the coordinator.** The COCKPIT command ([cockpit-command.md](cockpit-command.md)) is bound
-to the coordinator's session on purpose: it has no schedule and fires only when COCKPIT sends a command, so it never
-replays the coordinator's history every hour, and the command lands in the chat that runs the project instead of
-beside it. Every scheduled routine stays on a fresh session per fire.
 
 ## Setting one up
 
