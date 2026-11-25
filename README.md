@@ -147,9 +147,9 @@ the facts for the roadmap report, changes nothing). Every routine runs in a fres
 coordinator's; the project's scheduled task only points at the file, so a routine improves with every bump of this
 package. The **COCKPIT command** (`routines/cockpit-command.md`) is a task with no schedule that COCKPIT fires through
 an API trigger after it opens a `cockpit` issue, with the issue's link: each fire starts one fresh project thread that
-acts only on that issue and sends its start and result to the coordinator. The task needs the project's repository
-attached with write access. `routines/README.md`
-has the prompt that sets one up (WORKFLOW §13).
+acts only on that issue and sends its start and result to the coordinator. Its task is bound to the session of the
+chat that sets it up, because only a bound task can be fired over the API. The task needs the project's repository
+attached with write access. `routines/README.md` has the prompt that sets one up (WORKFLOW §13).
 
 ## The chain
 

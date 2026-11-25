@@ -8,7 +8,8 @@
 // - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
 // - any shipped file tells a coordinator to bind a routine to its own session (every routine runs in a fresh
-//   session, the COCKPIT command included: each of its fires starts a fresh project thread)
+//   session; the COCKPIT command's task is bound to the chat that sets it up only so its API trigger can be fired,
+//   and each of its fires still starts a fresh project thread)
 // - the COCKPIT command setup brief, its task prompt or the Cockpit issues rules lose a rule they must carry
 // - any shipped file names the removed wake routine, its config key or the former name of the cockpit label
 
@@ -109,7 +110,9 @@ if (!command) errors.push(`routines/${COMMAND_FILE}: missing`);
 const COMMAND_RULES = [
   [/name: "<PROJECT> · COCKPIT command"/, "name the task \"<PROJECT> · COCKPIT command\""],
   [/no schedule \(no cron, no one-off run time\)/, "create the task with no schedule"],
-  [/a fresh session on every fire \(create_new_session_on_fire: true\)/, "start a fresh session on every fire"],
+  [/bound to this chat's session \(persistent_session_id = this session\), not a fresh session per fire/, "bind the task to the creating chat's session"],
+  [/only a\s+bound task can be fired over the API/, "say why the task is bound"],
+  [/each fire still starts its own project thread, and nothing lands in this\s+chat's session/, "say each fire still starts its own project thread"],
   [/no connectors/, "attach no connectors"],
   [/gets the project's default connectors/, "say a project-attached task inherits the project's default connectors"],
   [/always opens the issue in the project's repository first/, "say COCKPIT opens the issue before it fires the command"],
@@ -130,7 +133,8 @@ const COMMAND_RULES = [
 for (const [pattern, what] of COMMAND_RULES) {
   if (!pattern.test(command)) errors.push(`routines/${COMMAND_FILE}: the setup brief does not ${what}`);
 }
-if (/persistent_session_id/.test(command)) errors.push(`routines/${COMMAND_FILE}: binds the task to a session (persistent_session_id)`);
+if (/create_new_session_on_fire/.test(command)) errors.push(`routines/${COMMAND_FILE}: creates the task with a fresh session per fire (its API trigger is then refused)`);
+if (!/\*\*The one difference: the COCKPIT command\.\*\* Its task is bound/.test(routinesReadme)) errors.push("routines/README.md: does not name the COCKPIT command's bound task as the one difference");
 const cockpitRules = rules.slice(rules.indexOf("**Cockpit issues.**"), rules.indexOf("**Issues as the work source**"));
 const RULES_FOR_COMMANDS = [
   [/Every COCKPIT command starts one\s+fresh project thread/, "say every COCKPIT command starts one fresh project thread"],

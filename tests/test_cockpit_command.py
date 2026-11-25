@@ -2,8 +2,9 @@
 
     python3 -m unittest discover -s tests
 
-COCKPIT opens a `cockpit` issue and fires a project-attached task; every fire starts one fresh project thread that
-carries the one issue the command links and sends its start and result to the coordinator. These tests cover the setup
+COCKPIT opens a `cockpit` issue and fires a project-attached task bound to the session of the chat that set it up
+(only a bound task can be fired over the API); every fire still starts one fresh project thread that carries the one
+issue the command links and sends its start and result to the coordinator. These tests cover the setup
 brief, the task prompt, the Cockpit issues rules of the managed AGENTS.md block,
 the removal of the former wake routine and its config key (no alias, no fallback), and the release gate
 (scripts/validate.mjs) that keeps all of it in place.
@@ -60,18 +61,31 @@ class SetupBriefTest(unittest.TestCase):
         self.assertIn("`COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>`", self.text)
         self.assertLess(self.text.index("always opens the issue"), self.text.index("routine's API trigger"))
 
-    def test_every_fire_starts_a_fresh_thread_never_the_coordinators_session(self) -> None:
+    def test_every_fire_starts_a_fresh_thread_never_the_coordinators_chat(self) -> None:
         self.assertIn("**Every fire starts one fresh project thread.**", self.text)
         self.assertIn("sends its\nstart and its result to the coordinator", self.text)
-        self.assertNotIn("persistent_session_id", self.text)
         self.assertNotRegex(self.text, r"bound to (the|this) coordinator")
+        self.assertNotRegex(self.text, r"(land|reach)s? (in )?the coordinator's (own )?chat")
 
     def test_task_is_attached_to_the_project_with_no_schedule(self) -> None:
         self.assertIn("with your scheduling tool, so it is attached to this project", self.brief)
         self.assertIn('name: "<PROJECT> · COCKPIT command"', self.brief)
         self.assertIn("no schedule (no cron, no one-off run time)", self.brief)
-        self.assertIn("a fresh session on every fire (create_new_session_on_fire: true)", self.brief)
         self.assertIn("no connectors", self.brief)
+
+    def test_task_is_bound_to_the_creating_chats_session_for_the_api_trigger(self) -> None:
+        brief = " ".join(self.brief.split())
+        self.assertIn("bound to this chat's session (persistent_session_id = this session), not a fresh session per "
+                      "fire: only a bound task can be fired over the API (a fire on a fresh-session task attached to a "
+                      "project is refused with HTTP 403 \"this project is paused\"); each fire still starts its own "
+                      "project thread, and nothing lands in this chat's session;", brief)
+        self.assertNotIn("create_new_session_on_fire", self.text)
+
+    def test_a_paused_refusal_points_to_recreating_the_task_bound(self) -> None:
+        testing = " ".join(self.text[self.text.index("## Testing it"):].split())
+        self.assertIn("HTTP 403 \"this project is paused\" means the task was created with a fresh session per fire: "
+                      "delete it, create it again bound (setup step 2), add the API trigger and the repository in the "
+                      "web form, and put the new fire URL and token into COCKPIT.", testing)
 
     def test_owner_adds_the_trigger_and_attaches_the_repository_and_never_hands_the_token_to_the_chat(self) -> None:
         self.assertIn("Never ask me for the token in this chat", self.brief)
@@ -119,10 +133,15 @@ class SetupBriefTest(unittest.TestCase):
         self.assertNotIn("Issue: Opened", self.text)
         self.assertNotIn("claimed", self.text)
 
-    def test_readme_has_no_exception_for_the_command(self) -> None:
+    def test_readme_names_the_one_difference_without_routing_commands_to_the_coordinator(self) -> None:
         readme = read("routines/README.md")
         self.assertIn("[cockpit-command.md](cockpit-command.md)", readme)
+        self.assertIn("**The one difference: the COCKPIT command.** Its task is bound to the session of the chat that "
+                      "sets it up\n   (`persistent_session_id`), because only a bound task can be fired over its API "
+                      "trigger.", readme)
+        self.assertIn("Each fire still starts\n   its own fresh project thread", readme)
         self.assertNotIn("bound to the coordinator.**", readme)
+        self.assertNotRegex(readme, r"coordinator's (own )?chat")
         self.assertNotIn("one exception", readme)
         self.assertNotIn("one exception", read("README.md"))
         workflow = read("WORKFLOW.md")
@@ -243,7 +262,8 @@ class ReleaseGateTest(unittest.TestCase):
     def test_brief_without_each_rule_fails(self) -> None:
         cases = {
             "no schedule": ("no schedule (no cron, no one-off run time)", "every hour"),
-            "fresh": ("a fresh session on every fire (create_new_session_on_fire: true)", "the coordinator's session"),
+            "bound": ("bound to this chat's session (persistent_session_id = this session)", "a fresh session on every fire"),
+            "why bound": ("only a\n     bound task can be fired over the API", "a bound task is cheaper"),
             "issue link": ("COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>", "COCKPIT command: <text>"),
             "repository": ("attach this project's repository <owner>/<repo> with write access", "save"),
             "payload": ("can arrive as a separate message after the prompt", "arrives with the prompt"),
@@ -253,7 +273,7 @@ class ReleaseGateTest(unittest.TestCase):
             "token": ("Never ask me for the token in this chat", "Paste the token here"),
             "done on test": ("The setup is done only when the test reaches a thread", "The setup is done when the task exists"),
             "prompt": ("never touch another repository", "touch any repository"),
-            "persistent": ("- no connectors (remove", "- persistent_session_id = this session's id;\n   - no connectors (remove"),
+            "fresh": ("- no connectors (remove", "- create_new_session_on_fire: true;\n   - no connectors (remove"),
         }
         for name, (old, new) in cases.items():
             with self.subTest(name=name):
@@ -281,6 +301,12 @@ class ReleaseGateTest(unittest.TestCase):
         result = validate(("WORKFLOW.md", "### 8.6 Cockpit issues", "### 8.6 Cockpit issues (" + "cockpit" + "Wake)"))
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("names the removed wake routine", result.stderr)
+
+    def test_readme_without_the_one_difference_fails(self) -> None:
+        result = validate(("routines/README.md", "**The one difference: the COCKPIT command.** Its task is bound",
+                           "The COCKPIT command's task is like any other"))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("does not name the COCKPIT command's bound task", result.stderr)
 
     def test_binding_the_command_to_the_coordinator_fails(self) -> None:
         result = validate(("routines/README.md", "## Setting one up",
