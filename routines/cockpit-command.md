@@ -73,7 +73,10 @@ if node_modules is missing).
 2. Create one scheduled task with your scheduling tool, so it is attached to this project:
    - name: "<PROJECT> · COCKPIT command" (the repository name in capitals);
    - no schedule (no cron, no one-off run time);
-   - a fresh session on every fire (create_new_session_on_fire: true);
+   - bound to this chat's session (persistent_session_id = this session), not a fresh session per fire: only a
+     bound task can be fired over the API (a fire on a fresh-session task attached to a project is refused with
+     HTTP 403 "this project is paused"); each fire still starts its own project thread, and nothing lands in this
+     chat's session;
    - no connectors (remove every connector the tool attaches by default);
    - the task prompt below, verbatim, with <owner>/<repo> filled in.
 3. Report the task's name, id and link, and give me these steps. Never ask me for the token in this chat:
@@ -109,5 +112,7 @@ which moves with every bump of `@softure-ai/skills`.
 
 COCKPIT → the project → routines → Test fires the trigger with `COCKPIT test: ...`. A new project thread whose one
 line names the main branch's head commit is the proof. No thread means the fire does not reach the project: check
-that COCKPIT holds the current fire URL and token. A thread that cannot read the repository (HTTP 403 on clone or
+that COCKPIT holds the current fire URL and token. A fire refused with HTTP 403 "this project is paused" means the
+task was created with a fresh session per fire: delete it, create it again bound (setup step 2), add the API trigger
+and the repository in the web form, and put the new fire URL and token into COCKPIT. A thread that cannot read the repository (HTTP 403 on clone or
 REST) means the task has no repository attached with write access: attach it in the web form and test again.

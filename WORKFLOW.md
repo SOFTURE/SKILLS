@@ -717,8 +717,9 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
 - **The COCKPIT command.** Between runs, an issue reaches the project only through COCKPIT. COCKPIT always opens the
   issue first (labelled `cockpit`, the record of the decision) and then fires the project's COCKPIT command
   (`routines/cockpit-command.md`): a scheduled task named `<PROJECT> · COCKPIT command`, created by the project's main
-  chat so it is attached to the project, with no schedule, no connectors, an API trigger and the project's repository
-  attached with write access (without it the thread gets HTTP 403 on the repository). **Every fire starts one fresh
+  chat so it is attached to the project and bound to that chat's session (only a bound task can be fired over the
+  API), with no schedule, no connectors, an API trigger and the project's repository attached with write access
+  (without it the thread gets HTTP 403 on the repository). **Every fire starts one fresh
   project thread**, the command thread for one issue. The command arrives as `<routine-fire-payload>`, sometimes as
   a separate message after the task prompt; until it is there the thread posts nothing. `COCKPIT command:
   https://github.com/<owner>/<repo>/issues/<N>` links the one issue, and the thread acts only on that issue, never on
@@ -1122,8 +1123,10 @@ A routine is a scheduled session that keeps a project healthy without the owner.
 short pointer prompt, so a routine follows the installed `@softure-ai/skills` version and is never re-created to pick
 up a fix. `routines/README.md` lists the routines, the prompt that sets one up, and the standard every routine follows:
 
-- **a fresh session on every fire** for every routine, the COCKPIT command included, never one persistent session: a persistent session re-reads its whole history on
-  every run, gets more expensive each night and carries stale beliefs;
+- **a fresh session on every fire** for every routine, never one persistent session: a persistent session re-reads its whole history on
+  every run, gets more expensive each night and carries stale beliefs. The one difference is the COCKPIT command:
+  its task is bound to the session of the chat that sets it up, because only a bound task can be fired over the
+  API, and each fire still starts its own fresh project thread (§8.6);
 - **never release, tag, publish or deploy**, without conditions: a dependency bump rides the next release the owner
   orders (§8, Releases);
 - **state in the repository**, not in memory (`routines.*` in `workflow.json`, §2);

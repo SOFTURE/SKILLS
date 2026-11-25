@@ -9,7 +9,7 @@ never re-created to pick up a fix.
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
 | Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
-| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue | starts one fresh project thread for the one issue the command links (`COCKPIT command: <issue link>`); that thread carries the issue and sends its start and result to the coordinator |
+| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue (the task is bound, for the API trigger) | starts one fresh project thread for the one issue the command links (`COCKPIT command: <issue link>`); that thread carries the issue and sends its start and result to the coordinator |
 
 ## The standard every routine follows
 
@@ -21,6 +21,9 @@ Learned from routines that ran for weeks in several adopting projects:
    that once heard "the server is ready" released and deployed every nightly bump from then on. A fresh session
    knows only the repository, which is the point: everything a routine needs lives there. A routine is
    never bound to the coordinator's session either: an hourly heartbeat bound there cost about 145k tokens per fire.
+   **The one difference: the COCKPIT command.** Its task is bound to the session of the chat that sets it up
+   (`persistent_session_id`), because only a bound task can be fired over its API trigger. Each fire still starts
+   its own fresh project thread, so the binding only lets the fire through.
 2. **Never release, tag, publish or deploy from a routine**, without conditions. A dependency bump rides the next
    release the owner orders. A rule like "until the owner says the server is ready" stops being true one day and the
    routine starts deploying unattended, database migrations included.
