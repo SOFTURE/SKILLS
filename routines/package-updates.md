@@ -84,6 +84,14 @@ step 5.
   regenerated `context/state.json` in the same pull request, then `npx softure-skills doctor`, which must exit 0.
   A new skills version can change what `state.json` holds; skipping the regeneration turns the `context-doctor`
   check red. Check that the installed version equals the lockfile and the newest on npm.
+- **`autonomy.cockpitWake`:** this routine never writes `"routine"`, also when release notes ask a project to set
+  the key: only the setup brief in `routines/cockpit-wake.md` writes it, after its test issue was claimed. A key
+  that is already set stays as it is. When the key is missing, write `"none"` and record the owner step "set up
+  the cockpit wake routine (routines/cockpit-wake.md → Setting it up)" in the same pull request: with a live
+  roadmap a line under `## Owner decisions and checks`
+  (`- [ ] Owner step: set up the cockpit wake routine (routines/cockpit-wake.md → Setting it up) (<YYYY-MM-DD>)`),
+  with none an `ownerSteps` entry (step 5). An `autonomy` key that WORKFLOW §2 no longer lists is removed in the
+  same pull request, with no note.
 - **The `context-doctor` check run on the main branch** (WORKFLOW §12.2): check that the main branch's head has one
   (`gh api repos/<owner>/<repo>/commits/<mainBranch>/check-runs?check_name=context-doctor`; with a fine-grained
   token that cannot read check runs, the latest workflow runs of that head through the Actions API and their

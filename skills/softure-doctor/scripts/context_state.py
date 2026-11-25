@@ -298,12 +298,32 @@ def roadmap_rows(text: str) -> list[dict]:
     return rows
 
 
+# A line that starts another list item (a checkbox, a bullet or a numbered item), indented or not.
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+
+
 def open_checkboxes(lines: list[str]) -> list[str]:
-    out = []
+    """The text of every unticked checkbox, joined with the indented lines that continue it.
+
+    A roadmap wraps long items at a fixed width; the item goes on in indented lines up to the next list item,
+    heading or blank line. Those lines are part of the text, with whitespace collapsed to single spaces.
+    """
+    out: list[str] = []
+    current: list[str] | None = None
     for line in lines:
         match = CHECKBOX_RE.match(line)
-        if match and match.group("mark") == " ":
-            out.append(match.group("text").strip())
+        if match:
+            current = [match.group("text").strip()] if match.group("mark") == " " else None
+            if current is not None:
+                out.append("")
+        elif current is not None and line[:1].isspace() and line.strip() \
+                and not LIST_ITEM_RE.match(line) and not line.lstrip().startswith("#"):
+            current.append(line.strip())
+        else:
+            current = None
+            continue
+        if current is not None:
+            out[-1] = re.sub(r"\s+", " ", " ".join(current)).strip()
     return out
 
 
