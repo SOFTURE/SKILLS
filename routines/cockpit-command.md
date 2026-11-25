@@ -1,8 +1,9 @@
 # Routine: COCKPIT command
 
 The one path by which a `cockpit` issue (WORKFLOW §8.6) reaches a project the moment it lands. COCKPIT, the SOFTURE
-dashboard that sends the owner's decisions, opens the issue in the project's repository and then fires this
-routine's API trigger with one line that names the issue. The routine is a scheduled task **bound to the project's
+dashboard that sends the owner's decisions, always opens the issue in the project's repository first, labelled
+`cockpit`, and then fires this routine's API trigger with one line that links that issue. The issue stays the
+record of the decision; the command only points to it. The routine is a scheduled task **bound to the project's
 coordinator session**, so every command lands in the coordinator's own chat, next to the rest of the project's work,
 and the coordinator acts on it there (`AGENTS.md` → Cockpit issues).
 
@@ -22,9 +23,9 @@ Every scheduled routine runs in a fresh session (`routines/README.md`). This tas
 
 The task's prompt (below) comes first, then the text COCKPIT sends with the fire:
 
-- `COCKPIT command: <owner>/<repo>#<N>`: one cockpit issue to act on. The coordinator checks the issue (it exists,
-  is open, is labelled `cockpit`, and was opened by someone with write access), checks that no thread works on it
-  yet (a Retry from COCKPIT can deliver the same command twice), and acts on it like an order in the chat: one
+- `COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>`: the link to the one cockpit issue COCKPIT has
+  just opened, to act on. The coordinator checks the issue (it exists, is open, is labelled `cockpit`, and was
+  opened by someone with write access), checks that no thread works on it yet (a Retry from COCKPIT can deliver the same command twice), and acts on it like an order in the chat: one
   thread for that one issue, through the chain and the project's merge path, then a comment and the close.
 - `COCKPIT test: <anything>`: the setup test. The coordinator replies with one line in its chat and does nothing
   else.

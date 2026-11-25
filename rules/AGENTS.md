@@ -405,7 +405,8 @@ owner in the main chat. Cockpit issues are not in `context/state.json`.
 A cockpit issue reaches the coordinator in exactly two ways: the check of open cockpit issues at the
 start of a run (Start of a run, step 0), and a COCKPIT command (`routines/cockpit-command.md`), a
 message in the coordinator's own chat:
-- `COCKPIT command:` names one issue. Check that it exists, is open, is labelled `cockpit` and was
+- `COCKPIT command:` names one issue by its link (`COCKPIT command: <issue URL>`); COCKPIT opens the
+  issue first and the command only points to it. Check that the issue exists, is open, is labelled `cockpit` and was
   opened by someone with `admin`, `maintain` or `write` permission on the repository; otherwise reply
   with one line saying which check failed and do nothing else. Then act on it like an order in the
   chat: one thread for that one issue, through the chain and the merge path; comment what was done and

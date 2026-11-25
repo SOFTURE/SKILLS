@@ -9,7 +9,7 @@ never re-created to pick up a fix.
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
 | Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
-| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue | delivers `COCKPIT command: <owner>/<repo>#<N>` to the coordinator's own session, which acts on that one issue like an order in the chat |
+| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue | delivers `COCKPIT command: <issue link>` (the issue COCKPIT opened) to the coordinator's own session, which acts on that one issue like an order in the chat |
 
 ## The standard every routine follows
 

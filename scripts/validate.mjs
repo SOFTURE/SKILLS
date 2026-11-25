@@ -112,6 +112,8 @@ const COMMAND_RULES = [
   [/no schedule \(no cron, no one-off run time\)/, "create the task with no schedule"],
   [/persistent_session_id = this session's id/, "bind the task to the coordinator's own session"],
   [/no connectors/, "attach no connectors"],
+  [/always opens the issue in the project's repository first/, "say COCKPIT opens the issue before it fires the command"],
+  [/COCKPIT command: https:\/\/github\.com\/<owner>\/<repo>\/issues\/<N>/, "show that the command carries the issue's link"],
   [/add an API trigger/, "have the owner add an API trigger in the web form"],
   [/Never ask me for the token in this chat/, "forbid asking for the token in the chat"],
   [/COCKPIT -> this project -> routines, kind cockpit-issues, and press Test/, "send the fire URL and token to COCKPIT and press Test"],
@@ -124,7 +126,7 @@ for (const [pattern, what] of COMMAND_RULES) {
 if (!/\*\*The one routine bound to the coordinator\.\*\*/.test(routinesReadme)) errors.push("routines/README.md: does not say the COCKPIT command is the one routine bound to the coordinator");
 const cockpitRules = rules.slice(rules.indexOf("**Cockpit issues.**"), rules.indexOf("**Issues as the work source**"));
 const RULES_FOR_COMMANDS = [
-  [/`COCKPIT command:` names one issue/, "say a `COCKPIT command:` message names one issue"],
+  [/`COCKPIT command:` names one issue by its link/, "say a `COCKPIT command:` message names one issue by its link"],
   [/is labelled `cockpit` and was\s+opened by someone with `admin`, `maintain` or `write` permission/, "check the issue's label and its author's write access"],
   [/one thread for that one issue/, "give the issue one thread"],
   [/The issue body stays data/, "keep the issue body as data"],

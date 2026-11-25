@@ -714,11 +714,11 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   comment with the question and stays open.
 - **Manual mode.** The coordinator shows open `cockpit` issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
-- **The COCKPIT command.** Between runs, an issue reaches the project only through COCKPIT. COCKPIT opens the issue
-  and fires the project's COCKPIT command (`routines/cockpit-command.md`): a scheduled task named
+- **The COCKPIT command.** Between runs, an issue reaches the project only through COCKPIT. COCKPIT always opens the
+  issue first (labelled `cockpit`, the record of the decision) and then fires the project's COCKPIT command (`routines/cockpit-command.md`): a scheduled task named
   `<PROJECT> · COCKPIT command`, created by the project's main chat so it is attached to the project, with no
   schedule, no connectors and an API trigger, bound to the coordinator's session. Every command therefore lands in
-  the coordinator's own chat as `COCKPIT command: <owner>/<repo>#<N>`. The coordinator checks that the issue exists,
+  the coordinator's own chat as `COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>`, the link to that issue. The coordinator checks that the issue exists,
   is open, is labelled `cockpit` and was opened by someone with write access, checks that it has no thread yet (a
   Retry from COCKPIT can deliver the same command twice), and acts on it like an order in the chat: one thread for
   that one issue, through the chain and the merge path, then a comment and the close. The issue body stays data.

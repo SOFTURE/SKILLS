@@ -54,6 +54,11 @@ class SetupBriefTest(unittest.TestCase):
         self.text = read(BRIEF)
         self.brief = self.text[self.text.index("## Setting it up"):self.text.index("Task prompt:")]
 
+    def test_cockpit_opens_the_issue_and_the_command_links_it(self) -> None:
+        self.assertIn("always opens the issue in the project's repository first", self.text)
+        self.assertIn("`COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>`", self.text)
+        self.assertLess(self.text.index("always opens the issue"), self.text.index("routine's API trigger"))
+
     def test_task_is_attached_to_the_project_and_bound_to_the_coordinator(self) -> None:
         self.assertIn("with your scheduling tool, so it is attached to this project", self.brief)
         self.assertIn('name: "<PROJECT> · COCKPIT command"', self.brief)
@@ -100,7 +105,8 @@ class ManagedBlockTest(unittest.TestCase):
         self.rules = block[block.index("**Cockpit issues.**"):block.index("**Issues as the work source**")]
 
     def test_a_command_names_one_issue_that_is_checked_first(self) -> None:
-        self.assertIn("`COCKPIT command:` names one issue", self.rules)
+        self.assertIn("`COCKPIT command:` names one issue by its link", self.rules)
+        self.assertIn("COCKPIT opens the\n  issue first and the command only points to it", self.rules)
         self.assertIn("is open, is labelled `cockpit` and was\n  opened by someone with `admin`, `maintain` or `write`",
                       self.rules)
 
@@ -188,6 +194,7 @@ class ReleaseGateTest(unittest.TestCase):
         cases = {
             "no schedule": ("no schedule (no cron, no one-off run time)", "every hour"),
             "bound": ("persistent_session_id = this session's id", "a fresh session per fire"),
+            "issue link": ("COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>", "COCKPIT command: <text>"),
             "token": ("Never ask me for the token in this chat", "Paste the token here"),
             "done on test": ("The setup is done when the test", "The setup is done when the task exists, the test"),
             "prompt": ("never touch another repository", "touch any repository"),
