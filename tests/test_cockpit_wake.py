@@ -56,6 +56,11 @@ class InstallerNoticeTest(unittest.TestCase):
         self.assertIn("open one cockpit issue and check that the routine's run shows up", out)
         self.assertLess(out.index("once the task shows the GitHub trigger"), out.index('"cockpitWake": "routine"'))
 
+    def test_installer_creates_only_the_cockpit_label(self) -> None:
+        out = install({**self.BASE, "mode": "autonomous"})
+        self.assertIn("label cockpit (created on the forge when gh can)", out)
+        self.assertEqual(out.count("(created on the forge when gh can)"), 1)
+
     def test_declared_project_gets_no_notice(self) -> None:
         for value in ("routine", "heartbeat", "none"):
             with self.subTest(value=value):
