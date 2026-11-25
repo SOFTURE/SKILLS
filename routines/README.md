@@ -9,7 +9,7 @@ never re-created to pick up a fix.
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
 | Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
-| Owner-word wake | [owner-word-wake.md](owner-word-wake.md) | GitHub trigger on issues (opened, labeled), once per repository | picks up an open `owner-word` issue whose author can write to the repository the moment it lands, also in an idle project: hands it to the coordinator or carries the decision out itself; never releases or deploys |
+| Owner-word wake | [owner-word-wake.md](owner-word-wake.md) | GitHub trigger on `Issue: Opened` with the wake label (`autonomy.ownerWordWakeLabel`, default `cockpit`), no connectors, once per repository | picks up an open `owner-word` issue whose author can write to the repository the moment it lands, also in an idle project: hands it to the coordinator or carries the decision out itself; never releases or deploys |
 
 ## The standard every routine follows
 
@@ -43,9 +43,12 @@ The roadmap heartbeat is created by the coordinator when an autonomous run start
 has its own setup brief. The owner-word wake is set up once per repository with a GitHub trigger, and the project
 declares it in `context/workflow.json` → `autonomy.ownerWordWake`; its file has its own setup brief. That trigger can
 be added only in the routines web UI (claude.ai/code/routines) or with a tool that explicitly supports GitHub event
-triggers: a task created with a cron-or-one-shot tool has no trigger and never fires, so the project declares
-`"routine"` only once the task shows the trigger (or the owner confirmed it) and `"none"` until then. To test it, open
-one `owner-word` issue and check that the routine's run shows up in the task's runs and its claim comment lands on the
+triggers, in the same call that creates the task (`Issue: Opened` from the start: a trigger whose event is edited later
+never fires on issues), filtered on the wake label (`autonomy.ownerWordWakeLabel`, default `cockpit`) and with no
+connectors; the task is named `<PROJECT> · COCKPIT command` (`<PROJECT> · Owner-word wake` with the label
+`owner-word`). A task created with a cron-or-one-shot tool has no trigger and never fires, so the project declares
+`"routine"` only once the task shows the trigger and a test issue was claimed, and `"none"` until then. To test it, open
+one `owner-word` issue (with the wake label too) and check that the routine's run shows up in the task's runs and its claim comment lands on the
 issue; no run means no working trigger (`owner-word-wake.md` → Testing it). The
 package-update routine is set up once per project:
 

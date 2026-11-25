@@ -16,6 +16,16 @@ The main branch is `--main-branch`, else `mainBranch` in `context/workflow.json`
 The doctor reports each problem as `ci-doctor-trigger`; the installer prints the fix. A workflow without the job
 is not this module's business (the installer prints the missing job). Exit 1 when a problem is found.
 
+    ci_config.py --protection [--root <dir>] [--main-branch <name>] [--json]
+
+`--protection` asks the forge (through `gh`, read-only) whether the main branch requires the project's CI before a
+merge: every job that runs on pull requests is a required status check (classic branch protection or a ruleset), and
+nobody bypasses them (administrators included). Each problem is `FAIL main-checks-not-required <branch>: <what>`.
+With `autonomy.ownerWordWake: "routine"` it also checks that the labels `owner-word` and the wake label
+(`autonomy.ownerWordWakeLabel`, default `cockpit`) exist: `FAIL owner-word-wake-label-missing`.
+Exit 0 when all of it holds, 1 on a problem, 75 when it cannot tell (no forge, or a token that cannot read branch
+protection: that needs admin on the repository). `doctor --protection` runs the same (WORKFLOW.md §12.2).
+
 The YAML reader is a small subset (block mappings and sequences, flow lists, quoted scalars, block scalars): enough
 for workflow files, with no dependency. A file it cannot read is skipped, never reported.
 """
@@ -338,11 +348,217 @@ def fix_text(branch: str) -> str:
             f"(WORKFLOW.md §12.2)")
 
 
+# ---------------------------------------------------------------- required checks on the main branch
+
+PROTECTION_CODE = "main-checks-not-required"
+LABEL_CODE = "owner-word-wake-label-missing"
+WAKE_LABEL_DEFAULT = "cockpit"
+
+
+def wake_label(reader) -> str | None:
+    """The owner-word wake label when the project declares the routine (`autonomy.ownerWordWake: "routine"`)."""
+    try:
+        workflow = json.loads(reader.read(WORKFLOW_CONFIG) or "{}")
+    except ValueError:
+        return None
+    autonomy = workflow.get("autonomy") if isinstance(workflow, dict) else None
+    if not isinstance(autonomy, dict) or autonomy.get("ownerWordWake") != "routine":
+        return None
+    label = autonomy.get("ownerWordWakeLabel", WAKE_LABEL_DEFAULT)
+    return label if isinstance(label, str) and label.strip() else None
+EXPRESSION_RE = re.compile(r"\$\{\{")
+
+
+def pull_request_jobs(text: str) -> list[str]:
+    """The check names of a workflow's jobs that run on pull requests (the job's `name:`, else its id).
+
+    A name built from an expression (`${{ matrix.os }}`) cannot be required by a fixed name and is left out; a
+    matrix job's check names carry a ` (<values>)` suffix, which `required_problems` accepts."""
+    try:
+        document = load(text)
+    except (YamlError, IndexError):
+        return []
+    if not isinstance(document, dict):
+        return []
+    on = document.get("on", document.get("true"))
+    if not any(event in _triggers(on) for event in PR_EVENTS):
+        return []
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return []
+    names = []
+    for job_id, job in jobs.items():
+        name = job.get("name") if isinstance(job, dict) and isinstance(job.get("name"), str) else str(job_id)
+        if not EXPRESSION_RE.search(name):
+            names.append(name)
+    return names
+
+
+def ci_jobs(reader) -> list[str]:
+    """Every job of the project's workflows that runs on pull requests, in file order, without repeats."""
+    out: list[str] = []
+    for name, is_dir in reader.listdir(WORKFLOWS_DIR):
+        if is_dir or not re.search(r"\.ya?ml$", name):
+            continue
+        for job in pull_request_jobs(reader.read(f"{WORKFLOWS_DIR}/{name}") or ""):
+            if job not in out:
+                out.append(job)
+    return out
+
+
+def _covers(required: set[str], job: str) -> bool:
+    return any(context == job or context.startswith(f"{job} (") for context in required)
+
+
+def required_problems(protection: dict, jobs: list[str], branch: str) -> list[str]:
+    """What lets a pull request merge into `branch` with a failing check.
+
+    `protection` is what `read_protection` found: `required` (the required check names, None when nothing on the
+    branch requires a check), `admins` (True: nobody bypasses; False: administrators or listed actors bypass;
+    None: unknown). Returns one line per problem; empty when every job is required and nobody bypasses."""
+    required = protection.get("required")
+    if not jobs:
+        return [f"no workflow under {WORKFLOWS_DIR}/ runs a job on pull requests, so nothing can be required "
+                f"before a merge into `{branch}`"]
+    if not required:
+        return [f"`{branch}` requires no status checks, so a pull request can merge with a failing check: "
+                f"require {', '.join(f'`{job}`' for job in jobs)} (branch protection or a ruleset)"]
+    found = []
+    missing = [job for job in jobs if not _covers(set(required), job)]
+    if missing:
+        found.append(f"`{branch}` does not require {', '.join(f'`{job}`' for job in missing)}: add "
+                     f"{'it' if len(missing) == 1 else 'them'} to the required status checks")
+    if protection.get("admins") is False:
+        found.append(f"administrators (or the actors a ruleset lists) can bypass the required checks on "
+                     f"`{branch}`: turn on \"Do not allow bypassing the above settings\" (classic protection: "
+                     f"include administrators), or empty the ruleset's bypass list")
+    return found
+
+
+def read_protection(api, branch: str | None) -> dict:
+    """The main branch's required checks, through `api(path) -> parsed JSON | None` (a `gh api` call).
+
+    Reads classic branch protection (needs admin on the repository) and the rules that rulesets apply to the
+    branch (readable with read access). `readable` is False when neither could be read: the token cannot see
+    branch protection, so the answer is unknown rather than "nothing required"."""
+    repo = api("repos/{owner}/{repo}")
+    if not isinstance(repo, dict):
+        return {"reachable": False, "readable": False, "required": None, "admins": None, "branch": branch}
+    branch = branch or repo.get("default_branch") or DEFAULT_MAIN_BRANCHES[0]
+    admin = bool((repo.get("permissions") or {}).get("admin"))
+    required: set[str] = set()
+    admins: list[bool | None] = []
+    readable = admin
+    classic = api(f"repos/{{owner}}/{{repo}}/branches/{branch}/protection")
+    if isinstance(classic, dict):
+        readable = True
+        checks = classic.get("required_status_checks") or {}
+        names = set(checks.get("contexts") or []) | {c.get("context") for c in checks.get("checks") or []
+                                                      if isinstance(c, dict) and c.get("context")}
+        if names:
+            required |= names
+            admins.append(bool((classic.get("enforce_admins") or {}).get("enabled")))
+    rules = api(f"repos/{{owner}}/{{repo}}/rules/branches/{branch}")
+    if isinstance(rules, list):
+        readable = True
+        for rule in rules:
+            if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+                continue
+            names = {c.get("context") for c in (rule.get("parameters") or {}).get("required_status_checks") or []
+                     if isinstance(c, dict) and c.get("context")}
+            if not names:
+                continue
+            required |= names
+            ruleset = api(f"repos/{{owner}}/{{repo}}/rulesets/{rule.get('ruleset_id')}")
+            bypass = ruleset.get("bypass_actors") if isinstance(ruleset, dict) else None
+            admins.append(None if bypass is None else not bypass)
+    verdict = False if False in admins else (None if None in admins or not admins else True)
+    return {"reachable": True, "readable": readable, "required": sorted(required) or None, "admins": verdict,
+            "branch": branch}
+
+
+def gh_api(root: str):
+    """`gh api <path>` from `root` as a callable (`$SOFTURE_GH` names another binary); None on any failure."""
+    import subprocess
+
+    def call(path: str):
+        try:
+            out = subprocess.run([os.environ.get("SOFTURE_GH", "gh"), "api", path], cwd=root,
+                                 capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if out.returncode != 0:
+            return None
+        try:
+            return json.loads(out.stdout)
+        except ValueError:
+            return None
+    return call
+
+
+def protection_report(reader, api, branch: str | None) -> tuple[int, dict]:
+    """(exit code, report): 0 every pull-request job is required and nobody bypasses, 1 problems, 75 unknown.
+
+    `branch` None means the repository's default branch."""
+    jobs = ci_jobs(reader)
+    protection = read_protection(api, branch)
+    branch = protection["branch"] or "the main branch"
+    report = {"branch": branch, "jobs": jobs, "required": protection["required"], "admins": protection["admins"],
+              "problems": [], "unknown": None}
+    if not protection["reachable"]:
+        report["unknown"] = "the forge cannot be reached from here (no `gh`, no GitHub remote or no credentials)"
+        return 75, report
+    if not protection["readable"]:
+        report["unknown"] = ("this token cannot read the branch protection (it needs admin on the repository) and "
+                             "no ruleset applies required checks; ask someone with admin to run it")
+        return 75, report
+    report["problems"] = required_problems(protection, jobs, branch)
+    label = wake_label(reader)
+    report["label_problems"] = []
+    if label:
+        from urllib.parse import quote
+
+        for name in dict.fromkeys(("owner-word", label)):
+            if not isinstance(api(f"repos/{{owner}}/{{repo}}/labels/{quote(name, safe='')}"), dict):
+                report["label_problems"].append(
+                    f"the label `{name}` does not exist, so the owner-word wake trigger (filtered on `{label}`) "
+                    f"never fires: `gh label create {name}` (routines/owner-word-wake.md)")
+    if report["label_problems"]:
+        return 1, report
+    if not report["problems"] and protection["admins"] is None:
+        report["unknown"] = "who may bypass the ruleset could not be read; check its bypass list"
+    return (1 if report["problems"] else 0), report
+
+
+def protection_main(root: str, branch: str | None, as_json: bool) -> int:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from context_state import FsReader
+
+    code, report = protection_report(FsReader(root), gh_api(root), branch)
+    branch = report["branch"]
+    if as_json:
+        print(json.dumps(report, indent=2))
+        return code
+    for problem in report["problems"]:
+        print(f"FAIL {PROTECTION_CODE} {branch}: {problem}")
+    for problem in report.get("label_problems", []):
+        print(f"FAIL {LABEL_CODE} {WORKFLOW_CONFIG}: {problem}")
+    if report["unknown"]:
+        print(f"UNKNOWN {PROTECTION_CODE} {branch}: {report['unknown']}")
+    if code == 0 or (code == 1 and not report["problems"]):
+        print(f"required checks on `{branch}`: {', '.join(report['required'] or [])} (every pull-request job; "
+              f"no bypass{'' if report['admins'] else ' known'})")
+    return code
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     as_json = "--json" in args
     root = args[args.index("--root") + 1] if "--root" in args else os.getcwd()
     explicit = args[args.index("--main-branch") + 1] if "--main-branch" in args else None
+    if "--protection" in args:
+        configured = main_branches(root, explicit)
+        return protection_main(root, configured[0] if len(configured) == 1 else None, as_json)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from context_state import FsReader
 
