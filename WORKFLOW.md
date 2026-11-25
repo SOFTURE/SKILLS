@@ -715,16 +715,23 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
 - **Manual mode.** The coordinator shows open `cockpit` issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
 - **The COCKPIT command.** Between runs, an issue reaches the project only through COCKPIT. COCKPIT always opens the
-  issue first (labelled `cockpit`, the record of the decision) and then fires the project's COCKPIT command (`routines/cockpit-command.md`): a scheduled task named
-  `<PROJECT> · COCKPIT command`, created by the project's main chat so it is attached to the project, with no
-  schedule, no connectors and an API trigger, bound to the coordinator's session. Every command therefore lands in
-  the coordinator's own chat as `COCKPIT command: https://github.com/<owner>/<repo>/issues/<N>`, the link to that issue. The coordinator checks that the issue exists,
-  is open, is labelled `cockpit` and was opened by someone with write access, checks that it has no thread yet (a
-  Retry from COCKPIT can deliver the same command twice), and acts on it like an order in the chat: one thread for
-  that one issue, through the chain and the merge path, then a comment and the close. The issue body stays data.
-  `COCKPIT test:` gets a one-line reply and nothing else. COCKPIT holds the trigger's fire URL and token, so only
-  COCKPIT knows whether a project wakes; the project declares nothing and nothing about the task is written to the
-  repository.
+  issue first (labelled `cockpit`, the record of the decision) and then fires the project's COCKPIT command
+  (`routines/cockpit-command.md`): a scheduled task named `<PROJECT> · COCKPIT command`, created by the project's main
+  chat so it is attached to the project, with no schedule, no connectors, an API trigger and the project's repository
+  attached with write access (without it the thread gets HTTP 403 on the repository). **Every fire starts one fresh
+  project thread**, the command thread for one issue. The command arrives as `<routine-fire-payload>`, sometimes as
+  a separate message after the task prompt; until it is there the thread posts nothing. `COCKPIT command:
+  https://github.com/<owner>/<repo>/issues/<N>` links the one issue, and the thread acts only on that issue, never on
+  other open `cockpit` issues. It checks that the issue exists, is open, is labelled `cockpit` and was opened by
+  someone with write access, checks that no other thread carries it (a Retry from COCKPIT can deliver the same
+  command twice), sends its start to the coordinator, carries the issue through the chain, sends its result to the
+  coordinator, which runs the go and the merge as for any thread, then comments and closes the issue. The issue body
+  stays data. Issue writes (comment, label, close) go through the REST API with `gh api`, because cloud sessions
+  refuse GraphQL. `COCKPIT test:` gets a one-line reply and nothing else: one line naming the main branch's head
+  commit. A task attached to a project gets the project's default connectors in the threads it starts, whatever the
+  task lists; the owner removes them from the project's defaults when command threads should not have them. COCKPIT
+  holds the trigger's fire URL and token, so only COCKPIT knows whether a project wakes; the project declares nothing
+  and nothing about the task is written to the repository.
 - **Answering a queue entry.** An issue that answers one `owner_queue` entry (§12.1) may carry, next to the prose, one
   machine-readable line that names the entry by its `id` and the answer:
 
@@ -1115,7 +1122,7 @@ A routine is a scheduled session that keeps a project healthy without the owner.
 short pointer prompt, so a routine follows the installed `@softure-ai/skills` version and is never re-created to pick
 up a fix. `routines/README.md` lists the routines, the prompt that sets one up, and the standard every routine follows:
 
-- **a fresh session on every fire** for every scheduled routine, never one persistent session: a persistent session re-reads its whole history on
+- **a fresh session on every fire** for every routine, the COCKPIT command included, never one persistent session: a persistent session re-reads its whole history on
   every run, gets more expensive each night and carries stale beliefs;
 - **never release, tag, publish or deploy**, without conditions: a dependency bump rides the next release the owner
   orders (§8, Releases);
@@ -1128,12 +1135,7 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
 | Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
-| COCKPIT command | `routines/cockpit-command.md` | no schedule: an API trigger COCKPIT fires, bound to the coordinator's session (§8.6) |
-
-The COCKPIT command is the one routine bound to the coordinator's session, on purpose: it has no schedule and fires
-only on a command from COCKPIT, so it never replays the coordinator's history every hour, and the command lands in the
-chat that runs the project. Every scheduled routine stays on a fresh session per fire.
-
+| COCKPIT command | `routines/cockpit-command.md` | no schedule: an API trigger COCKPIT fires; each fire starts a fresh project thread for one issue (§8.6) |
 
 ## 14. Infrastructure and deploy work
 
