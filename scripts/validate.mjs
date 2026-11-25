@@ -106,6 +106,11 @@ const WAKE_BRIEF = [
 for (const [pattern, what] of WAKE_BRIEF) {
   if (!pattern.test(brief)) errors.push(`routines/cockpit-wake.md: the setup brief does not ${what}`);
 }
+// The nightly bump applies what release notes ask for; it must never declare a wake routine that does not exist.
+const packageUpdates = fs.readFileSync(path.join(routinesDir, "package-updates.md"), "utf8");
+if (!/this routine never writes `"routine"`/.test(packageUpdates)) errors.push('routines/package-updates.md: does not forbid writing autonomy.cockpitWake "routine"');
+if (!/When the key is missing, write `"none"` and record the owner step "set up\s+the cockpit wake routine \(routines\/cockpit-wake\.md → Setting it up\)"/.test(packageUpdates)) errors.push('routines/package-updates.md: does not write "none" and record the owner step to set up the cockpit wake routine');
+
 if (!/## Testing it/.test(wake)) errors.push('routines/cockpit-wake.md: no "Testing it" section');
 if (!/To test it, open\s+one `cockpit` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the cockpit wake routine");
 

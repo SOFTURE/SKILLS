@@ -179,5 +179,30 @@ class SetupBriefGateTest(unittest.TestCase):
         self.assertIn("does not say how to test the cockpit wake routine", result.stderr)
 
 
+class PackageUpdateWakeKeyTest(unittest.TestCase):
+    """The nightly bump never declares `autonomy.cockpitWake: "routine"` (SOFTURE/SKILLS#100)."""
+
+    ROUTINE = "routines/package-updates.md"
+
+    def test_brief_names_none_and_the_owner_step(self) -> None:
+        with open(os.path.join(ROOT, self.ROUTINE), encoding="utf-8") as fh:
+            text = fh.read()
+        section = text[text.index("**`autonomy.cockpitWake`:**"):text.index("**The `context-doctor` check run")]
+        self.assertIn('never writes `"routine"`', section)
+        self.assertIn('write `"none"`', section)
+        self.assertIn("routines/cockpit-wake.md → Setting it up", section)
+
+    def test_brief_without_each_rule_fails(self) -> None:
+        cases = {
+            "never routine": ('this routine never writes `"routine"`', 'this routine writes `"routine"`'),
+            "none and owner step": ('write `"none"` and record the owner step', 'write `"routine"`'),
+        }
+        for name, (old, new) in cases.items():
+            with self.subTest(name=name):
+                result = validate((self.ROUTINE, old, new))
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn("routines/package-updates.md", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
