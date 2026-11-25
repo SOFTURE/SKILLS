@@ -32,7 +32,7 @@ repository, in both modes; a local checkout counts when its `origin` is on GitHu
 `v*` tag (git mode), else the value a closed roadmap recorded in `state.json`, labelled `(roadmap)`.
 `SOFTURE_GH` names another `gh` binary.
 
-`--owner` prints only the owner queue across all projects, oldest first, with each entry's `id` (an owner-word issue
+`--owner` prints only the owner queue across all projects, oldest first, with each entry's `id` (a cockpit issue
 names the entry it answers by that id, WORKFLOW §8.6). `--json` prints the same data
 for another tool (`last_release` is the version; `last_release_source` is `release`, `tag` or `roadmap`;
 with `--source api`, `doctor_check` is the check run's status, `doctor_check_url` its page and `doctor_check_codes`

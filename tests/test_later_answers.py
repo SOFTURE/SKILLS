@@ -42,7 +42,7 @@ updated: 2026-11-24
 
 ### LT-1: Pick the payment provider
 - **Status:** blocked (owner: put off, #12)
-- **From:** PY-1 in roadmap-payments.md, owner-word #12
+- **From:** PY-1 in roadmap-payments.md, cockpit #12
 """
 
 
