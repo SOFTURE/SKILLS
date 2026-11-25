@@ -241,6 +241,19 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual([f["code"] for f in report["failures"]], ["owner-word-wake-invalid"])
         self.assertIn('autonomy.ownerWordWake is true', report["failures"][0]["message"])
 
+    def test_the_wake_label_must_be_one_label_name(self) -> None:
+        for label in ("cockpit", "owner-word"):
+            with self.subTest(label=label):
+                self.set_owner_word_wake("autonomous", {"ownerWordWake": "routine", "ownerWordWakeLabel": label})
+                code, report = self.project.doctor()
+                self.assertEqual(code, 0, report)
+        for label in ("", "cockpit,owner-word", ["cockpit"]):
+            with self.subTest(label=label):
+                self.set_owner_word_wake("autonomous", {"ownerWordWake": "routine", "ownerWordWakeLabel": label})
+                code, report = self.project.doctor()
+                self.assertEqual(code, 1)
+                self.assertIn("autonomy.ownerWordWakeLabel", report["failures"][0]["message"])
+
     def test_change_branch_editing_its_change_keeps_the_state_fresh(self) -> None:
         rel = "context/changes/search-titles/change.md"
         self.project.write(rel, self.project.read(rel).replace("status: implementing", "status: implemented"))

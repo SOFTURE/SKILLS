@@ -12,6 +12,7 @@
 //   softure-skills doctor --fix [--write]   mechanical repairs of history (dry run unless --write)
 //   softure-skills doctor --sweep [--json]  worklist of the judgement cases, with evidence (read-only)
 //   softure-skills doctor --baseline        last resort: accept today's failures; the file only shrinks
+//   softure-skills doctor --protection      does the main branch require every pull-request CI job (forge, `gh`)
 //   softure-skills state [write|print|check] regenerate context/state.json (default: write)
 //   softure-skills portfolio [<repo> ...] [--owner] [--json]   read-only table across many repositories
 //
@@ -78,26 +79,39 @@ const CI_WORKFLOW_YAML = (version, branch) => [
   CI_JOB_YAML(version),
 ].join("\n");
 const CI_CONFIG_SCRIPT = path.join(DOCTOR_SCRIPTS, "ci_config.py");
-// Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6). Issues with the
-// older label `owner-word` still count; the installer only creates the current one.
-const OWNER_WORD_LABEL = {
-  name: "cockpit",
+// Issues with these labels carry an owner decision the coordinator acts on (WORKFLOW.md §8.6): `cockpit`, the label
+// COCKPIT writes, and the older `owner-word`, which still counts. The installer creates both.
+const OWNER_WORD_LABELS = ["cockpit", "owner-word"].map((name) => ({
+  name,
   color: "5319e7",
   description: "An owner decision the coordinator acts on (SOFTURE workflow)",
-};
-const LABEL_COMMAND = `gh label create ${OWNER_WORD_LABEL.name} --color ${OWNER_WORD_LABEL.color} --description "${OWNER_WORD_LABEL.description}"`;
+}));
+const OWNER_WORD_LABEL = OWNER_WORD_LABELS[0];
+const labelCommand = (label) => `gh label create ${label.name} --color ${label.color} --description "${label.description}"`;
 
-// Creates the owner-word label on the project's forge when it can (GitHub through an authenticated gh,
+// Creates one owner-word label on the project's forge when it can (GitHub through an authenticated gh,
 // outside CI, once per checkout). Returns [action line, whether the label is known to exist].
-function ensureOwnerWordLabel(projectRoot, previous, options) {
-  if ((previous.labels ?? []).includes(OWNER_WORD_LABEL.name)) return [null, true];
-  if (options.isDryRun) return [`label ${OWNER_WORD_LABEL.name} (created on the forge when gh can)`, false];
+function ensureLabel(label, projectRoot, previous, options) {
+  if ((previous.labels ?? []).includes(label.name)) return [null, true];
+  if (options.isDryRun) return [`label ${label.name} (created on the forge when gh can)`, false];
   if (process.env.CI) return [null, false];
-  const result = spawnSync("gh", ["label", "create", OWNER_WORD_LABEL.name, "--color", OWNER_WORD_LABEL.color,
-    "--description", OWNER_WORD_LABEL.description], { cwd: projectRoot, encoding: "utf8", timeout: 15000 });
-  if (result.status === 0) return [`label ${OWNER_WORD_LABEL.name} created on the forge`, true];
+  const result = spawnSync("gh", ["label", "create", label.name, "--color", label.color,
+    "--description", label.description], { cwd: projectRoot, encoding: "utf8", timeout: 15000 });
+  if (result.status === 0) return [`label ${label.name} created on the forge`, true];
   if (/already exists/i.test(result.stderr ?? "")) return [null, true];
-  return [`label ${OWNER_WORD_LABEL.name}: not created here; run once in the repository: ${LABEL_COMMAND}`, false];
+  return [`label ${label.name}: not created here; run once in the repository: ${labelCommand(label)}`, false];
+}
+
+// Both owner-word labels. Returns [action lines, the label names known to exist].
+function ensureOwnerWordLabels(projectRoot, previous, options) {
+  const actions = [];
+  const existing = [];
+  for (const label of OWNER_WORD_LABELS) {
+    const [action, exists] = ensureLabel(label, projectRoot, previous, options);
+    if (action) actions.push(action);
+    if (exists) existing.push(label.name);
+  }
+  return [actions, existing];
 }
 
 // The one-time setup of the owner-word wake routine (WORKFLOW.md §8.6), printed until an autonomous project
@@ -109,12 +123,13 @@ function ownerWordWakeNotice(workflowConfig) {
     "To have the project pick it up by itself, set up the owner-word wake routine once:",
     "  1. install the Claude GitHub App on the repository (https://github.com/apps/claude);",
     "  2. paste the setup brief from node_modules/@softure-ai/skills/routines/owner-word-wake.md (\"Setting it up\")",
-    "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (opened, labeled),",
-    "     a fresh session per event. The GitHub trigger can be added only in claude.ai/code/routines or with a tool",
-    "     that explicitly supports GitHub event triggers; a cron-or-one-shot task has no trigger and never fires;",
+    "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (Issue: Opened,",
+    "     filtered on the label autonomy.ownerWordWakeLabel, default cockpit), no connectors, a fresh session per event.",
+    "     The GitHub trigger can be added only in claude.ai/code/routines or with a tool that explicitly supports",
+    "     GitHub event triggers, in the call that creates the task; a cron-or-one-shot task has no trigger and never fires;",
     `  3. once the task shows the GitHub trigger (or you confirmed it in the UI), set`,
     `     "autonomy": { "ownerWordWake": "routine" } in ${WORKFLOW_CONFIG_PATH}; until then set "none";`,
-    "  4. test it: open one owner-word issue and check that the routine's run shows up.",
+    "  4. test it: open one owner-word issue and check that the routine's run shows up (label it owner-word and the wake label).",
     'Without the routine, declare "heartbeat" (picked up only while a run works) or "none".',
   ].join("\n");
 }
@@ -346,8 +361,8 @@ function install(options) {
   const pinAction = pinProject(projectRoot, workflowConfig, options);
   if (pinAction) actions.push(pinAction);
 
-  const [labelAction, hasLabel] = ensureOwnerWordLabel(projectRoot, previous, options);
-  if (labelAction) actions.push(labelAction);
+  const [labelActions, existingLabels] = ensureOwnerWordLabels(projectRoot, previous, options);
+  actions.push(...labelActions);
 
   if (!options.isDryRun) {
     fs.mkdirSync(path.join(projectRoot, ".claude"), { recursive: true });
@@ -360,7 +375,7 @@ function install(options) {
       rules: ruleSections,
       mode,
       gitignore: shouldIgnore,
-      labels: hasLabel ? [OWNER_WORD_LABEL.name] : [],
+      labels: existingLabels,
     };
     // A re-install that changes nothing keeps the old timestamp, so a committed manifest
     // does not dirty every fresh clone or worktree after `npm ci`.

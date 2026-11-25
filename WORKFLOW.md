@@ -104,10 +104,13 @@ or languages.
                                     // is also the heartbeat that starts unblocked items and nudges stalled threads
                                     // (routines/roadmap-heartbeat.md, a fresh session per fire). `idleHours` (issue mode):
                                     // the heartbeat is deleted after this many hours with an empty queue; null keeps it
-    "ownerWordWake": "routine"      // what wakes the project on an owner-word issue (§8.6): "routine" (the GitHub-triggered
+    "ownerWordWake": "routine",     // what wakes the project on an owner-word issue (§8.6): "routine" (the GitHub-triggered
                                     // routines/owner-word-wake.md is set up and its trigger verified; "none" until then),
                                     // "heartbeat" (only the roadmap heartbeat, while a run works), "none"; the doctor
                                     // notes it when missing, fails on any other value
+    "ownerWordWakeLabel": "cockpit" // the label the owner-word wake trigger filters on and that marks an owner-word issue
+                                    // for it (§8.6): "cockpit" (default, the label COCKPIT adds), "owner-word" without
+                                    // COCKPIT; it also names the task ("<PROJECT> · COCKPIT command" / "· Owner-word wake")
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -672,7 +675,8 @@ runs in a checkout and reads the block itself.
 | branch | `<change-id>` in a worktree | the branch the harness assigns; the change-id lives in `context/changes/` and `change.md` → `branch:` |
 | Phase A | `wt-open.sh` + worktree | in the thread's own checkout, no `git worktree add` (`softure-worktree` → Cloud session) |
 | reports / heartbeat | `CronCreate` | the roadmap heartbeat, `routines/roadmap-heartbeat.md`: a fresh session per fire that sends the coordinator the facts; without a scheduling tool, a setup thread creates it from the brief in that file |
-| close | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged; on the merge result the coordinator checks it and resolves it if still open |
+| main CI after the merge | `wt-main-ci.py <merge SHA>` | the same, from the thread, on scheduled wake-ups until it finishes; the heartbeat reads it on `<main>`'s head |
+| close | `claude stop` + worktree removal | the thread resolves itself after its pull request is merged and the main branch's CI on the merge commit is green; on the merge result the coordinator checks it and resolves it if still open |
 
 **When PR events do not arrive.** A thread checks at session start whether pull request activity can
 reach it (the subscription succeeds, the forge app has access to the repository). If not, after every
@@ -680,6 +684,16 @@ push it checks its pull request's checks itself until they finish (a scheduled w
 minutes, at most about 60 minutes) instead of ending the turn waiting for an event. The coordinator
 records in memory which forge events do not arrive in this project, and nudges a thread whose go has
 produced no merge SHA within 30 minutes.
+
+**The main branch's CI after a merge.** A pull request green at READY does not prove the merged result: the main
+branch's own run on the merge commit does. After `wt-roadmap.py done` the thread reads that run with
+`softure-worktree/scripts/wt-main-ci.py <merge SHA>` (`green`, `red`, `flaky`, `running`, `none`, `superseded`;
+read-only, through `gh`) until it finishes, and sends the verdict with the run link. `red` or `flaky` on its merge is
+the thread's to fix, as a new change, never the next item's. The heartbeat puts the verdict on `<main>`'s head into
+every report, and the coordinator starts a fix thread when it is red or flaky and nobody fixes it yet. A test that
+fails once and passes on a re-run (`flaky`) is a bug, never a timing failure: it is fixed like a red one. Nothing
+merges past a red check either: the main branch requires every pull-request CI job as a status check, administrators
+included, and `npx softure-skills doctor --protection` (§12.2) names what is missing.
 
 **Startable set.** On every merge result and every report the coordinator recomputes, from
 `roadmap.md` on `origin/<main>`, every item that is not done, has no thread and has all prerequisites
@@ -710,8 +724,10 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   only on the owner's word in the conversation; it then comments and closes them the same way.
 - **An idle project.** Listing at the start of a run and on reports reaches an issue only while a coordinator is awake.
   A project that must act on its issues by itself, also with no run in flight, sets up the owner-word wake routine
-  (`routines/owner-word-wake.md`): a scheduled task with a GitHub trigger on issue events (opened, labeled) that
-  starts a fresh session per event. That session lists the open owner-word issues, acts only on those whose author
+  (`routines/owner-word-wake.md`): a scheduled task with a GitHub trigger on `Issue: Opened`, filtered on the wake label
+  (`autonomy.ownerWordWakeLabel`, default `"cockpit"`: COCKPIT labels each issue it opens `cockpit` next to
+  `owner-word`; a project without COCKPIT sets `"owner-word"`), with no connectors, that starts a fresh session per
+  event. That session lists the open issues labelled `owner-word` or the wake label, acts only on those whose author
   can write to the repository, claims each with a comment so two fires never both act, and then hands it to the
   coordinator's session or, with no coordinator reachable, does both jobs itself (manual mode: it only comments that
   the issue waits for the owner). It never releases or deploys: a release word is recorded for the next run. The
@@ -942,6 +958,15 @@ its own `change.md` without touching `state.json`, and stays green.
 | `baseline-stale` | `context/doctor-baseline.json` lists a failure that no longer occurs (remove it), or is unreadable |
 | `ci-doctor-trigger` | a workflow's `context-doctor` job does not run on every push to `mainBranch` (no `push` trigger for it, a `paths`/`paths-ignore` filter, an `if:` on the job), so the main branch's head has no check run; never baselined |
 
+**Required checks.** `npx softure-skills doctor --protection` asks the forge, read-only through `gh`, whether a pull
+request can merge into `mainBranch` with a failing check. Every job of a workflow that runs on `pull_request` must be
+a required status check (classic branch protection or a ruleset; a matrix job's `<name> (<values>)` checks count), and
+nobody may bypass them: classic protection with "include administrators" on, a ruleset with an empty bypass list.
+Each gap is `FAIL main-checks-not-required <branch>: <what>` (exit 1); exit 75 when it cannot tell (no forge, or a
+token without admin on the repository, which reading classic protection needs). It is not part of the CI run, whose
+token cannot read branch protection: `softure-init` runs it and lists each gap as an owner step, and it runs again
+whenever a red check reached the main branch through a merge.
+
 **Mechanical repairs.** `npx softure-skills doctor --fix` prints the edits that need no judgement, and the failures
 left after them; `--fix --write` applies them, only under `context/`, and a second run changes nothing:
 
@@ -1115,7 +1140,7 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
 | Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
-| Owner-word wake | `routines/owner-word-wake.md` | GitHub trigger on issues (opened, labeled), once per repository |
+| Owner-word wake | `routines/owner-word-wake.md` | GitHub trigger on `Issue: Opened` with the wake label (default `cockpit`), once per repository |
 
 
 ## 14. Infrastructure and deploy work

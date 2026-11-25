@@ -107,7 +107,7 @@ for (const [pattern, what] of WAKE_BRIEF) {
   if (!pattern.test(brief)) errors.push(`routines/owner-word-wake.md: the setup brief does not ${what}`);
 }
 if (!/## Testing it/.test(wake)) errors.push('routines/owner-word-wake.md: no "Testing it" section');
-if (!/To test it, open\s+one `cockpit` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the owner-word wake routine");
+if (!/To test it, open\s+one `owner-word` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the owner-word wake routine");
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);

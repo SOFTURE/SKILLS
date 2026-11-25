@@ -57,6 +57,10 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 - **Threads to nudge:** an item whose go produced no merge SHA for 30 minutes; an item whose branch or pull request
   has not moved for 45 minutes or more.
 - **Owner-word issues:** every open issue labelled `cockpit` or `owner-word` (number and title).
+- **Main branch CI:** `python3 .claude/skills/softure-worktree/scripts/wt-main-ci.py --no-fetch` (or the same script
+  under `node_modules/@softure-ai/skills/skills/`) after the fetch above: the verdict on `origin/<main>`'s head
+  (`green`, `red`, `flaky`, `running`, `none`, `superseded`) with the link of each run that is not green. When the head
+  is `running`, also name the latest finished verdict on `<main>` if it was red.
 
 ### 3. Facts, issue mode
 
@@ -66,6 +70,7 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 - **In flight:** issues labelled `status: in progress` or `status: blocked`, their pull requests and checks; READY
   pull requests (green, waiting for the go); threads to nudge, as in roadmap mode.
 - **Owner-word issues:** as in roadmap mode.
+- **Main branch CI:** as in roadmap mode.
 - **Idle:** no open issue outside `cockpit` and `owner-word` and nothing in flight; say since when, from the last closed issue or
   merged pull request.
 
@@ -77,6 +82,7 @@ Send the coordinator's session the facts in one message (`send_message` or the h
 ```text
 Report due <HH:MM>: X of N on <main>; startable: <IDs | none>; READY: <ID> (PR #N) | none;
 nudge: <ID> (<why>) | none; owner-word: #N <title> | none;
+main CI: <green|red|flaky|running|none|superseded> on <sha7> (<run link when not green>);
 <ID> <stage> (PR #N, checks <green|red|running>); ...
 Please post the roadmap report and run the heartbeat.
 ```
@@ -85,12 +91,14 @@ Issue mode replaces the counter and the startable set with `open issues: <N>; ne
 <HH:MM> | busy`. Nothing moved since the last fire: one line (`Report due <HH:MM>: no change; <counter>`).
 
 Then end the session. When the tool to reach the coordinator's session is missing, the run's last message carries
-the same text, and nothing else is done.
+the same text, and nothing else is done. A red or flaky main branch is never "no change": it goes into the message on
+every fire until it is green again.
 
 ## What the coordinator does with it
 
-The coordinator (`AGENTS.md` → Roadmap reports, `softure-worktree-manager`) acts on every open owner-word issue
-first, starts a thread for every startable item (in issue mode: every well-founded new issue, one thread per issue),
+The coordinator (`AGENTS.md` → Roadmap reports, `softure-worktree-manager`) acts on every open owner-word issue (`cockpit` or `owner-word`)
+first, starts a fix thread when the main branch's CI is `red` or `flaky` and no thread is fixing it yet (ahead of new
+items), starts a thread for every startable item (in issue mode: every well-founded new issue, one thread per issue),
 gives the go to every READY thread, nudges the stalled ones, and posts the report in the standard shape. The routine
 never does any of that itself.
 

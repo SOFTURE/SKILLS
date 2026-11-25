@@ -6,6 +6,10 @@
     doctor.py --sweep [--json] [--no-forge]  every remaining failure as a worklist with evidence (read-only;
                                           asks the forge through `gh` about post-merge steps unless --no-forge)
     doctor.py --baseline                  last resort: accept today's failures in context/doctor-baseline.json
+    doctor.py --protection [--json]       asks the forge through `gh` whether the main branch requires every
+                                          pull-request CI job before a merge, administrators included
+                                          (`main-checks-not-required`), and whether the owner-word wake label
+                                          exists (`owner-word-wake-label-missing`); exit 75 when it cannot tell
     npx softure-skills doctor [...]      (the same, from the installed package)
 
 Adopting projects run it in a CI job named `context-doctor`, documentation-only changes included (that is where the
@@ -42,7 +46,7 @@ and as the job summary, so a reader of the forge API sees the codes on the main 
                                   `if:` on the job), so the main branch's head has no `context-doctor` check run;
                                   see ci_config.py (a project without the job gets the installer's notice instead)
   owner-word-wake-invalid         context/workflow.json `autonomy.ownerWordWake` is not one of "routine", "heartbeat",
-                                  "none" (WORKFLOW.md §8.6); an autonomous project that leaves the key out gets a note
+                                  "none", or `autonomy.ownerWordWakeLabel` is not one label name (WORKFLOW.md §8.6); an autonomous project that leaves the key out gets a note
                                   (`owner-word-wake-undeclared`), not a failure
   owner-entry-put-off             (a note, not a failure) an open owner entry that still carries `(later: #N)`;
                                   a "later" answer moves the item to roadmaps/roadmap-later.md (WORKFLOW.md §8.6)
@@ -573,11 +577,17 @@ def check_owner_word_wake(reader) -> list[Finding]:
                         'set up and its GitHub trigger is verified, else "heartbeat" or "none" (WORKFLOW.md §8.6)',
                         severity="note")]
     value = autonomy["ownerWordWake"]
-    if value in OWNER_WORD_WAKES:
-        return []
-    return [Finding("owner-word-wake-invalid", WORKFLOW_PATH,
-                    f'autonomy.ownerWordWake is {json.dumps(value)}; use "routine", "heartbeat" or "none" '
-                    "(WORKFLOW.md §8.6)")]
+    found = []
+    if value not in OWNER_WORD_WAKES:
+        found.append(Finding("owner-word-wake-invalid", WORKFLOW_PATH,
+                             f'autonomy.ownerWordWake is {json.dumps(value)}; use "routine", "heartbeat" or "none" '
+                             "(WORKFLOW.md §8.6)"))
+    label = autonomy.get("ownerWordWakeLabel", "cockpit")
+    if not isinstance(label, str) or not label.strip() or "," in label:
+        found.append(Finding("owner-word-wake-invalid", WORKFLOW_PATH,
+                             f'autonomy.ownerWordWakeLabel is {json.dumps(label)}; use one label name, "cockpit" '
+                             '(default) or "owner-word" (WORKFLOW.md §8.6)'))
+    return found
 
 
 # An owner entry the project still keeps open after a "later" answer, the shape WORKFLOW §8.6 used before 0.37.0.
@@ -866,12 +876,13 @@ def main(argv: list[str] | None = None) -> int:
     do_sweep = _take(args, "--sweep")
     no_forge = _take(args, "--no-forge")
     do_baseline = _take(args, "--baseline")
+    do_protection = _take(args, "--protection")
     root = None
     if "--root" in args:
         k = args.index("--root")
         root = os.path.abspath(args[k + 1])
         del args[k:k + 2]
-    if args or (write and not fix) or sum((fix, do_sweep, do_baseline)) > 1 or (no_forge and not do_sweep):
+    if args or (write and not fix) or sum((fix, do_sweep, do_baseline, do_protection)) > 1 or (no_forge and not do_sweep):
         print(__doc__, file=sys.stderr)
         return 2
     top = subprocess.run(["git", "-C", root or os.getcwd(), "rev-parse", "--show-toplevel"],
@@ -880,6 +891,9 @@ def main(argv: list[str] | None = None) -> int:
     root = root or toplevel or os.getcwd()
     git_root = root if toplevel and toplevel == os.path.realpath(root) else None
     reader = FsReader(root)
+    if do_protection:
+        branches = ci_config.main_branches_from(reader)
+        return ci_config.protection_main(root, branches[0] if len(branches) == 1 else None, as_json)
     if not reader.exists("context"):
         if as_json:
             print(json.dumps({"root": root, "failures": [], "notes": ["no context/ directory"]}, indent=2))

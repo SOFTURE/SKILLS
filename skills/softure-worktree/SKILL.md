@@ -141,8 +141,12 @@ Read `mode` at A0 (`python3 <S>/wt_config.py mode`; WORKFLOW §8, the project's
      - `"push"`: Phase B as written (its `wt-roadmap.py done` included), then
        push `<main>` through the pre-push hook (step 6's "no push" does not
        apply). A rejected push → fetch, merge `origin/<main>`, push again;
-  4. report the merge (SHA, PR) to the coordinator or the project chat, and
-     close the session's thread when the harness has one.
+  4. read the main branch's CI on the merge commit (`python3 <S>/wt-main-ci.py
+     <merge SHA>`, Phase B step 8) until it finishes; `red` or `flaky` → a new
+     change that fixes it, started now;
+  5. report the merge (SHA, PR) and that CI verdict with its run link to the
+     coordinator or the project chat, and close the session's thread when the
+     harness has one, once the verdict is `green` (or `superseded`).
 
   Still never, in this mode too: `--no-verify`, a force push, a tag or release
   while `release.owner` is true, a production deploy, merging a branch that is
@@ -792,7 +796,7 @@ first). Output lines and exit codes:
 
 | exit | meaning | do |
 | --- | --- | --- |
-| `0` | green (flaky tests that passed on retry are listed as `flaky:`) | on to A3.9. A flaky test in a file your change touched is yours: remove the cause, don't raise retries |
+| `0` | green (flaky tests that passed on retry are listed as `flaky:`) | on to A3.9. A test that fails once and passes on a retry is a bug, never a timing failure: in a file your change touched it is yours (remove the cause, don't raise retries); otherwise it goes into READY as `flaky:` with its run link and the coordinator queues its fix as its own change |
 | `1` | red — or the run could not start | **`new-red:` lines are yours** (reds absent from `<main>`'s latest result). Fix them before READY (see it red first — the run itself is the red), commit `fix(<change-id>): integration — <what>` after full gates, run A3.8 again with the same name. **Reds already on `<main>`** (`red:` but not `new-red:`) are not the item's to fix: report them in READY; the coordinator queues them as their own row. When the command cannot tell new from old, treat every red as yours unless you show it red on `<main>` (scratchpad worktree detached at `origin/<main>`, the same script with name `<change-id>-baseline`) |
 | `75` | no result in time | nothing is lost — the run continues. Follow the printed link, wait for it to finish, read its result. Running A3.8 again starts a **new** run — do that only when the run itself failed to start or died (`--fresh`). Never report READY without a result |
 | `78` | integration not configured | READY says `integration: not configured`; suggest configuring it in the report |
@@ -1020,6 +1024,14 @@ merge at the end.
 7. **Report:** merge SHA, conflicts and how they were resolved, what waits for
    the release (and the roadmap section it is written in), worktree and branch
    removed, `<main>` not pushed.
+8. **Once `<main>` is pushed (or the pull request merged on the forge), read its CI
+   on the merge commit:** `python3 <S>/wt-main-ci.py <merge SHA>`. `running` or
+   `none`: look again in a few minutes (a scheduled wake-up, never a sleep in the
+   turn), for at most about 60 minutes. `red` or `flaky`: the merge broke the main
+   branch or exposed a flaky test, and it is this change's to fix: open a new
+   change for it now, never leave it to the next item. Report the verdict with the
+   run link; the thread is done only when it is `green` (or `superseded` by a newer
+   green run).
 
 ### After a release: `wt-roadmap.py released <tag>`
 

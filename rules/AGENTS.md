@@ -40,6 +40,9 @@ it (`wt-roadmap.py`, and `context_state.py write --staged` in `softure-archive` 
 in the same commit as the markdown; never edit it by hand. CI runs `npx softure-skills doctor` in the job `context-doctor` (keep that name), on `pull_request` and on `push` to
 the main branch with no paths filter and no condition, which fails on drift in `context/` and on a `context-doctor`
 job that misses pushes to the main branch (`ci-doctor-trigger`): fix the file it names, never the check.
+The main branch requires every pull-request CI job as a status check before a merge, administrators
+included: `npx softure-skills doctor --protection` asks the forge and names what is missing
+(`main-checks-not-required`); only the owner (or an admin token) can turn it on, so it goes to the owner.
 
 **Every change goes through the chain, however small.** A one-line fix reported in chat is a change
 too (`roadmap_item: null`). `new`, `plan`, `plan-review`, `implement`, `impl-review` and `archive` are
@@ -217,6 +220,10 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - Posts every thread's result in the main chat as it arrives (condensed, decision first).
 - **Checks open owner-word issues on every report and every wake-up**, before the startable set, and
   acts on new ones (Owner-word issues, below).
+- **Watches the main branch's CI.** Every report carries the verdict of `wt-main-ci.py` on
+  `origin/<main>`'s head (the heartbeat sends it). `red` or `flaky` with no thread already fixing it
+  gets a fix thread in that firing (one change, the failing test and the run link in its brief),
+  ahead of new items; a thread's own red merge stays that thread's.
 - **Makes sure finished threads are closed.** On every merge result, and whenever a thread with a
   one-off job hands its result over (a planning thread, the report routine setup thread once it sends
   the routine id back, a report thread), check that the thread is resolved and resolve it yourself
@@ -246,13 +253,19 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   Without a coordinator, merge at READY.
 - After the go: merge (below), then record the roadmap state on the main branch
   (`wt-roadmap.py done <change-id>`) and send the merge result to the coordinator.
+- **Then read the main branch's CI on your merge commit:** `wt-main-ci.py <merge SHA>` until it
+  finishes (`running`/`none`: a scheduled wake-up every few minutes, at most about 60 minutes, as
+  below), and send its verdict with the run link to the coordinator. `red` or `flaky` on your merge
+  is yours: open a new change that fixes it (its own pull request), never leave it to the next item
+  or to the heartbeat. `superseded` passes when the newer commit's run is green.
 - **Watch your own CI when PR events cannot reach you.** At session start, check whether pull request
   activity can reach the thread (the subscription succeeds, the forge app has access to the
   repository). If not, after every push check the pull request's checks yourself until they finish:
   a scheduled wake-up every few minutes, for at most about 60 minutes, then report what is still
   pending. Never end the turn waiting for an event that cannot arrive.
 - **Close the thread only when the work is really done: its pull request is merged into the main
-  branch** (`set_thread_resolved` or the equivalent). A thread with an open pull request stays open,
+  branch and the main branch's CI on the merge commit is green** (`set_thread_resolved` or the
+  equivalent). A thread with an open pull request stays open,
   READY included. It stays open also while an owner action gates its result.
 
 **Merging.**
@@ -290,10 +303,13 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   to hold their merges until it lands. Under `remergeMain: "on-conflict"` the go never asks for
   "Update branch" or a merge of the main branch: the thread merges on `wt-merge-check.py`'s verdict.
 - Hooks stay on: never `--no-verify`, never force-push, never disable or loosen a test to get green.
+- **A test that fails once and passes on a re-run is a bug, never a timing failure.** Never record it
+  as "flaky", "unrelated" or "load" and move on: fix its cause in the same thread when the change
+  touches it, otherwise open its own change (issue mode: an issue) with the test name and the run link.
   Long hooks run in the background with the longest timeout; a hung one is killed by its PID and
   re-run.
-- The main branch is already tested: do not re-run gates on it to review it. The full integration
-  suite runs per `integration.cadence`, never per push.
+- Do not re-run gates on the main branch to review it; read its CI instead (`wt-main-ci.py`). The
+  full integration suite runs per `integration.cadence`, never per push.
 
 **Roadmap reports** (coordinator, pasted into the main chat, times in `timezone`):
 - When: after every batch of thread starts (an ad-hoc post), and every `autonomy.reports.every`
@@ -320,7 +336,8 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
   1. title: `Roadmap report <roadmap name>, <HH:MM>`;
   2. one sentence on what is done, with the **current** counter `X of N on <main>`. N is the number of
      roadmap items; X rises with every merged roadmap item. Work outside the roadmap and a merge that
-     only sets an item to blocked do not count;
+     only sets an item to blocked do not count; then the main branch's CI on its head
+     (`CI on <main>: green`, or `red`/`flaky`/`running` with the run link and the fix thread);
   3. one table with **only the items not done yet**, always these four columns in this order:
      - **ID**: the roadmap item ID, an uppercase prefix of two or three letters plus a number (`FC-5`,
        `SA-12`, `CMP-3`); in issue mode the issue number (`#42`). Bold, nothing else in the cell.
@@ -340,7 +357,7 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 
   ```markdown
   **Roadmap report softure-auth, 14:00**
-  Done: 47 of 50 on master (latest SA-31, SA-59).
+  Done: 47 of 50 on master (latest SA-31, SA-59). CI on master: green.
 
   | ID | What it does | Stage | Link |
   | --- | --- | --- | --- |
@@ -389,7 +406,8 @@ or a standing order) gets one comment with the question and stays open; the ques
 owner in the main chat. Owner-word issues are not work items: they never get a thread of their own
 unless the decision itself needs one, and they are not in `context/state.json`.
 A project that sets `autonomy.ownerWordWake: "routine"` also has the owner-word wake routine
-(`routines/owner-word-wake.md`): a GitHub-triggered session that claims a new owner-word issue and hands it to the
+(`routines/owner-word-wake.md`, triggered on `Issue: Opened` with the label `autonomy.ownerWordWakeLabel`, default
+`cockpit`, which COCKPIT adds next to `owner-word`): a GitHub-triggered session that claims a new owner-word issue and hands it to the
 coordinator, or acts on it itself when no coordinator is reachable. An issue claimed by that routine
 (`<!-- owner-word-wake: claimed -->`) is acted on once, by whoever the claim handed it to.
 

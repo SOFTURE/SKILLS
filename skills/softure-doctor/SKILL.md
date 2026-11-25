@@ -11,7 +11,7 @@ description: >
   agent settles to zero. Use in CI, before an archive or roadmap commit, or when the user says
   "check the context", "run the doctor", "what waits for me", "refresh the state", "clean up the
   history", "sweep the doctor to zero".
-argument-hint: "[doctor [--fix [--write] | --sweep | --baseline] | state write|print|check] [--root <dir>] [--json] [--staged]"
+argument-hint: "[doctor [--fix [--write] | --sweep | --baseline | --protection] | state write|print|check] [--root <dir>] [--json] [--staged]"
 allowed-tools:
   - Read
   - Bash
@@ -28,6 +28,7 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 | `python3 <S>/doctor.py --fix [--write]` | the mechanical repairs of history, printed edit by edit; a dry run unless `--write` |
 | `python3 <S>/doctor.py --sweep [--json]` | every remaining failure as a worklist entry with evidence pointers; read-only |
 | `python3 <S>/doctor.py --baseline` | last resort only: accept today's failures in `context/doctor-baseline.json`; it only shrinks |
+| `python3 <S>/doctor.py --protection [--json]` | asks the forge (`gh`, read-only) whether the main branch requires every pull-request CI job before a merge, administrators included (`FAIL main-checks-not-required` per gap), and, with `ownerWordWake: "routine"`, whether the labels `owner-word` and the wake label exist (`FAIL owner-word-wake-label-missing`); exit 75 when it cannot tell. Same as `npx softure-skills doctor --protection` |
 | `python3 <S>/context_state.py write` | regenerate `context/state.json` from the working tree |
 | `python3 <S>/context_state.py write --staged` | regenerate it from what is staged, and stage it (use right before a commit) |
 | `python3 <S>/context_state.py print` / `check` | show it / exit 1 when it is missing or stale |
@@ -46,6 +47,9 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
   one plain line of the job's log (for readers with Actions: read only) and as the job summary. A project with history adds it after the rollout (WORKFLOW §12.4):
   `--fix --write`, the sweep to zero, the owner's short list, then the CI job. Drift happens in the documents, so a CI that skips doc-only
   changes misses it.
+- **`softure-init`**, and whenever a red check reached the main branch through a merge: `doctor --protection`.
+  It is not part of the CI run (a CI token cannot read branch protection); a gap goes to the owner, who turns on
+  the required checks (classic protection with "include administrators", or a ruleset with an empty bypass list).
 - **`softure-archive`** (on the main branch) and **`softure-roadmap`** (record, `--queue`, `--promote`,
   `--close`): `context_state.py write --staged` right before the commit, then `doctor.py`; each fixes
   what it owns and names the rest in its report.
@@ -71,7 +75,7 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `state-missing` / `state-stale` | `context_state.py write`, commit `context/state.json` |
 | `baseline-stale` | a baselined failure is fixed: `doctor.py --baseline` rewrites the file without it (commit it) |
 | `ci-doctor-trigger` | the workflow's `context-doctor` job misses pushes to `mainBranch`: give its `on:` `pull_request` and `push` with `branches: [<mainBranch>]`, drop any `paths`/`paths-ignore` filter and the job's `if:` (never baselined) |
-| `owner-word-wake-invalid` | `autonomy.ownerWordWake` in `context/workflow.json` holds another value: set `"routine"` (the owner-word wake routine is set up and its GitHub trigger verified, `routines/owner-word-wake.md`; `"none"` until then), `"heartbeat"` or `"none"` (never baselined). An autonomous project without the key gets the note `owner-word-wake-undeclared`, not a failure |
+| `owner-word-wake-invalid` | `autonomy.ownerWordWake` in `context/workflow.json` holds another value: set `"routine"` (the owner-word wake routine is set up and its GitHub trigger verified, `routines/owner-word-wake.md`; `"none"` until then), `"heartbeat"` or `"none"` (never baselined); also when `autonomy.ownerWordWakeLabel` is not one label name (default `"cockpit"`, `"owner-word"` without COCKPIT). An autonomous project without the key gets the note `owner-word-wake-undeclared`, not a failure |
 | `owner-entry-put-off` | a note, not a failure: an open `## Owner decisions and checks` entry that still carries `(later: #N)` (the settle shape before 0.37.0). Move the item to `roadmaps/roadmap-later.md` under a new ID and tick the entry `— later: #N → <new ID>` (WORKFLOW §8.6) |
 
 ## Mechanical repairs: `--fix`
