@@ -21,8 +21,7 @@ is not this module's business (the installer prints the missing job). Exit 1 whe
 `--protection` asks the forge (through `gh`, read-only) whether the main branch requires the project's CI before a
 merge: every job that runs on pull requests is a required status check (classic branch protection or a ruleset), and
 nobody bypasses them (administrators included). Each problem is `FAIL main-checks-not-required <branch>: <what>`.
-With `autonomy.ownerWordWake: "routine"` it also checks that the labels `owner-word` and the wake label
-(`autonomy.ownerWordWakeLabel`, default `cockpit`) exist: `FAIL owner-word-wake-label-missing`.
+With `autonomy.cockpitWake: "routine"` it also checks that the label `cockpit` exists: `FAIL cockpit-label-missing`.
 Exit 0 when all of it holds, 1 on a problem, 75 when it cannot tell (no forge, or a token that cannot read branch
 protection: that needs admin on the repository). `doctor --protection` runs the same (WORKFLOW.md §12.2).
 
@@ -351,21 +350,18 @@ def fix_text(branch: str) -> str:
 # ---------------------------------------------------------------- required checks on the main branch
 
 PROTECTION_CODE = "main-checks-not-required"
-LABEL_CODE = "owner-word-wake-label-missing"
-WAKE_LABEL_DEFAULT = "cockpit"
+LABEL_CODE = "cockpit-label-missing"
+COCKPIT_LABEL = "cockpit"
 
 
-def wake_label(reader) -> str | None:
-    """The owner-word wake label when the project declares the routine (`autonomy.ownerWordWake: "routine"`)."""
+def wake_declared(reader) -> bool:
+    """Whether the project declares the cockpit wake routine (`autonomy.cockpitWake: "routine"`)."""
     try:
         workflow = json.loads(reader.read(WORKFLOW_CONFIG) or "{}")
     except ValueError:
-        return None
+        return False
     autonomy = workflow.get("autonomy") if isinstance(workflow, dict) else None
-    if not isinstance(autonomy, dict) or autonomy.get("ownerWordWake") != "routine":
-        return None
-    label = autonomy.get("ownerWordWakeLabel", WAKE_LABEL_DEFAULT)
-    return label if isinstance(label, str) and label.strip() else None
+    return isinstance(autonomy, dict) and autonomy.get("cockpitWake") == "routine"
 EXPRESSION_RE = re.compile(r"\$\{\{")
 
 
@@ -513,16 +509,11 @@ def protection_report(reader, api, branch: str | None) -> tuple[int, dict]:
                              "no ruleset applies required checks; ask someone with admin to run it")
         return 75, report
     report["problems"] = required_problems(protection, jobs, branch)
-    label = wake_label(reader)
     report["label_problems"] = []
-    if label:
-        from urllib.parse import quote
-
-        for name in dict.fromkeys(("owner-word", label)):
-            if not isinstance(api(f"repos/{{owner}}/{{repo}}/labels/{quote(name, safe='')}"), dict):
-                report["label_problems"].append(
-                    f"the label `{name}` does not exist, so the owner-word wake trigger (filtered on `{label}`) "
-                    f"never fires: `gh label create {name}` (routines/owner-word-wake.md)")
+    if wake_declared(reader) and not isinstance(api(f"repos/{{owner}}/{{repo}}/labels/{COCKPIT_LABEL}"), dict):
+        report["label_problems"].append(
+            f"the label `{COCKPIT_LABEL}` does not exist, so the cockpit wake trigger (filtered on it) never fires: "
+            f"`gh label create {COCKPIT_LABEL}` (routines/cockpit-wake.md)")
     if report["label_problems"]:
         return 1, report
     if not report["problems"] and protection["admins"] is None:

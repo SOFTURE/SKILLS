@@ -74,7 +74,7 @@ OWNER_KINDS = (
 )
 
 SETTLE = {
-    "owner-word-wake-invalid": 'set context/workflow.json `autonomy.ownerWordWake` to "routine", "heartbeat" or '
+    "cockpit-wake-invalid": 'set context/workflow.json `autonomy.cockpitWake` to "routine", "heartbeat" or '
                                '"none" (WORKFLOW.md §8.6)',
     "ci-doctor-trigger": "give the workflow `on: pull_request` and `push` to the main branch, drop its paths filter "
                          "and the job's `if:` (WORKFLOW.md §12.2)",
@@ -85,7 +85,7 @@ SETTLE = {
     "archived-roadmap-open-items": "set the row's status to `done` when the evidence shows it shipped, "
                                    "`carried (to <path>)` when a later roadmap took it, or `dropped (<reason>)`",
     "archived-roadmap-open-checks": "tick it with its evidence (`— done: <sha | release | path>`), as obsolete "
-                                    "(`— obsolete: <reason>`), or carry it to a live roadmap or an owner-word issue "
+                                    "(`— obsolete: <reason>`), or carry it to a live roadmap or a cockpit issue "
                                     "and tick it with where it went (`— carried to <path | #N>`)",
 }
 
@@ -98,7 +98,7 @@ SETTLE_SUPERSEDED = {
 
 SETTLE_OWNER = {
     "archived-roadmap-open-checks": "the owner's: carry it to the live roadmap's `## Owner decisions and checks` (or "
-                                    "an owner-word issue) and tick it `— carried to <path | #N>`",
+                                    "a cockpit issue) and tick it `— carried to <path | #N>`",
     "archived-change-status": "mechanical: `doctor --fix --write`",
     "index-missing-file": "point the row at the file's current path, or drop the row",
     "roadmap-archived-not-removed": "remove roadmap.md (the close moved it)",

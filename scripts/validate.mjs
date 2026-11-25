@@ -4,11 +4,11 @@
 // - a skill name does not start with "softure-" or has no description
 // - any shipped file mentions third-party course branding (this package is original work)
 // - any shipped file contains Polish diacritics (everything shipped is English)
-// - a mode section of the rules block does not mention the owner-word label (WORKFLOW.md §8.6)
+// - a mode section of the rules block does not mention the cockpit label (WORKFLOW.md §8.6)
 // - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
 // - any shipped file tells a coordinator to bind a routine to its own session (routines run in a fresh session)
-// - the owner-word wake setup brief lets a task without a verified GitHub trigger count as set up, or the routines
+// - the cockpit wake setup brief lets a task without a verified GitHub trigger count as set up, or the routines
 //   README does not say how to test that routine (a cron-or-one-shot tool creates a task that never fires)
 
 import fs from "node:fs";
@@ -73,14 +73,14 @@ for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...wa
 const rules = fs.readFileSync(path.join(ROOT, "rules", "AGENTS.md"), "utf8");
 for (const mode of ["manual", "autonomous"]) {
   const section = rules.split(/\n(?=## )/).find((part) => part.startsWith(`## Operating mode: ${mode}`)) ?? "";
-  if (!section.includes("`owner-word`")) errors.push(`rules/AGENTS.md: "Operating mode: ${mode}" does not mention the \`owner-word\` label`);
+  if (!section.includes("`cockpit`")) errors.push(`rules/AGENTS.md: "Operating mode: ${mode}" does not mention the \`cockpit\` label`);
 }
 // Infrastructure and deploy rules bind in both modes, so the pointer lives in the shared part of the block (WORKFLOW.md §14).
 const sharedRules = rules.slice(0, rules.indexOf("## Operating mode: "));
 if (!/WORKFLOW §14/.test(sharedRules)) errors.push('rules/AGENTS.md: the shared part does not point to WORKFLOW §14 (infrastructure and deploy work)');
 if (!/^## 14\. Infrastructure and deploy work$/m.test(fs.readFileSync(path.join(ROOT, "WORKFLOW.md"), "utf8"))) errors.push("WORKFLOW.md: missing section 14, Infrastructure and deploy work");
 const startOfRun = rules.slice(rules.indexOf("**Start of a run.**"), rules.indexOf("**Messages to the owner"));
-if (!/owner-word/.test(startOfRun)) errors.push('rules/AGENTS.md: "Start of a run" does not act on `owner-word` issues first');
+if (!/cockpit/.test(startOfRun)) errors.push('rules/AGENTS.md: "Start of a run" does not act on `cockpit` issues first');
 
 const routinesDir = path.join(ROOT, "routines");
 const routinesReadme = fs.readFileSync(path.join(routinesDir, "README.md"), "utf8");
@@ -93,21 +93,21 @@ for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".
   if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
 }
 
-// The owner-word wake fires only through a GitHub event trigger, which most task-creation tools cannot add.
-const wake = fs.readFileSync(path.join(routinesDir, "owner-word-wake.md"), "utf8");
+// The cockpit wake fires only through a GitHub event trigger, which most task-creation tools cannot add.
+const wake = fs.readFileSync(path.join(routinesDir, "cockpit-wake.md"), "utf8");
 const brief = wake.slice(wake.indexOf("## Setting it up"), wake.indexOf("Routine prompt:"));
 const WAKE_BRIEF = [
   [/only in the routines web UI \(claude\.ai\/code\/routines\) or with a tool that\s+explicitly supports GitHub event\s+triggers/, "say the GitHub trigger can be added only in the routines web UI or with a tool that explicitly supports it"],
   [/exact steps to finish it in claude\.ai\/code\/routines/, "hand the owner the exact UI steps when the session cannot add the trigger"],
   [/never reports the routine as set up or working/, "forbid reporting a routine without a trigger as working"],
-  [/Verify the trigger[\s\S]*Only then set[\s\S]*"routine"/, "verify the trigger before setting autonomy.ownerWordWake to \"routine\""],
-  [/Until the\s+trigger is verified the value is "none"/, "keep autonomy.ownerWordWake at \"none\" until the trigger is verified"],
+  [/Verify the trigger[\s\S]*Only then set[\s\S]*"routine"/, "verify the trigger before setting autonomy.cockpitWake to \"routine\""],
+  [/Until the\s+trigger is verified the value is "none"/, "keep autonomy.cockpitWake at \"none\" until the trigger is verified"],
 ];
 for (const [pattern, what] of WAKE_BRIEF) {
-  if (!pattern.test(brief)) errors.push(`routines/owner-word-wake.md: the setup brief does not ${what}`);
+  if (!pattern.test(brief)) errors.push(`routines/cockpit-wake.md: the setup brief does not ${what}`);
 }
-if (!/## Testing it/.test(wake)) errors.push('routines/owner-word-wake.md: no "Testing it" section');
-if (!/To test it, open\s+one `owner-word` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the owner-word wake routine");
+if (!/## Testing it/.test(wake)) errors.push('routines/cockpit-wake.md: no "Testing it" section');
+if (!/To test it, open\s+one `cockpit` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the cockpit wake routine");
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);

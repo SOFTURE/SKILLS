@@ -7,6 +7,6 @@
     "test": "npm test"
   },
   "autonomy": {
-    "ownerWordWake": "routine"
+    "cockpitWake": "routine"
   }
 }

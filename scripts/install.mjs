@@ -80,42 +80,42 @@ const CI_WORKFLOW_YAML = (version, branch) => [
 ].join("\n");
 const CI_CONFIG_SCRIPT = path.join(DOCTOR_SCRIPTS, "ci_config.py");
 // Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6).
-const OWNER_WORD_LABEL = {
-  name: "owner-word",
+const COCKPIT_LABEL = {
+  name: "cockpit",
   color: "5319e7",
   description: "An owner decision the coordinator acts on (SOFTURE workflow)",
 };
-const LABEL_COMMAND = `gh label create ${OWNER_WORD_LABEL.name} --color ${OWNER_WORD_LABEL.color} --description "${OWNER_WORD_LABEL.description}"`;
+const LABEL_COMMAND = `gh label create ${COCKPIT_LABEL.name} --color ${COCKPIT_LABEL.color} --description "${COCKPIT_LABEL.description}"`;
 
-// Creates the owner-word label on the project's forge when it can (GitHub through an authenticated gh,
+// Creates the cockpit label on the project's forge when it can (GitHub through an authenticated gh,
 // outside CI, once per checkout). Returns [action line, whether the label is known to exist].
-function ensureOwnerWordLabel(projectRoot, previous, options) {
-  if ((previous.labels ?? []).includes(OWNER_WORD_LABEL.name)) return [null, true];
-  if (options.isDryRun) return [`label ${OWNER_WORD_LABEL.name} (created on the forge when gh can)`, false];
+function ensureCockpitLabel(projectRoot, previous, options) {
+  if ((previous.labels ?? []).includes(COCKPIT_LABEL.name)) return [null, true];
+  if (options.isDryRun) return [`label ${COCKPIT_LABEL.name} (created on the forge when gh can)`, false];
   if (process.env.CI) return [null, false];
-  const result = spawnSync("gh", ["label", "create", OWNER_WORD_LABEL.name, "--color", OWNER_WORD_LABEL.color,
-    "--description", OWNER_WORD_LABEL.description], { cwd: projectRoot, encoding: "utf8", timeout: 15000 });
-  if (result.status === 0) return [`label ${OWNER_WORD_LABEL.name} created on the forge`, true];
+  const result = spawnSync("gh", ["label", "create", COCKPIT_LABEL.name, "--color", COCKPIT_LABEL.color,
+    "--description", COCKPIT_LABEL.description], { cwd: projectRoot, encoding: "utf8", timeout: 15000 });
+  if (result.status === 0) return [`label ${COCKPIT_LABEL.name} created on the forge`, true];
   if (/already exists/i.test(result.stderr ?? "")) return [null, true];
-  return [`label ${OWNER_WORD_LABEL.name}: not created here; run once in the repository: ${LABEL_COMMAND}`, false];
+  return [`label ${COCKPIT_LABEL.name}: not created here; run once in the repository: ${LABEL_COMMAND}`, false];
 }
 
-// The one-time setup of the owner-word wake routine (WORKFLOW.md §8.6), printed until an autonomous project
-// declares how its owner-word issues wake it. Returns the notice, or null when there is nothing to say.
-function ownerWordWakeNotice(workflowConfig) {
-  if (workflowConfig.mode !== "autonomous" || "ownerWordWake" in (workflowConfig.autonomy ?? {})) return null;
+// The one-time setup of the cockpit wake routine (WORKFLOW.md §8.6), printed until an autonomous project
+// declares how its cockpit issues wake it. Returns the notice, or null when there is nothing to say.
+function cockpitWakeNotice(workflowConfig) {
+  if (workflowConfig.mode !== "autonomous" || "cockpitWake" in (workflowConfig.autonomy ?? {})) return null;
   return [
-    `${WORKFLOW_CONFIG_PATH}: autonomy.ownerWordWake is not set, so an owner-word issue waits until a coordinator is awake.`,
-    "To have the project pick it up by itself, set up the owner-word wake routine once:",
+    `${WORKFLOW_CONFIG_PATH}: autonomy.cockpitWake is not set, so a cockpit issue waits until a coordinator is awake.`,
+    "To have the project pick it up by itself, set up the cockpit wake routine once:",
     "  1. install the Claude GitHub App on the repository (https://github.com/apps/claude);",
-    "  2. paste the setup brief from node_modules/@softure-ai/skills/routines/owner-word-wake.md (\"Setting it up\")",
+    "  2. paste the setup brief from node_modules/@softure-ai/skills/routines/cockpit-wake.md (\"Setting it up\")",
     "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (Issue: Opened,",
-    "     filtered on the label autonomy.ownerWordWakeLabel, default cockpit), no connectors, a fresh session per event.",
+    "     filtered on the label cockpit), named \"<PROJECT> · COCKPIT command\", no connectors, a fresh session per event.",
     "     The GitHub trigger can be added only in claude.ai/code/routines or with a tool that explicitly supports",
     "     GitHub event triggers, in the call that creates the task; a cron-or-one-shot task has no trigger and never fires;",
     `  3. once the task shows the GitHub trigger (or you confirmed it in the UI), set`,
-    `     "autonomy": { "ownerWordWake": "routine" } in ${WORKFLOW_CONFIG_PATH}; until then set "none";`,
-    "  4. test it: open one owner-word issue and check that the routine's run shows up (label it owner-word and the wake label).",
+    `     "autonomy": { "cockpitWake": "routine" } in ${WORKFLOW_CONFIG_PATH}; until then set "none";`,
+    "  4. test it: open one cockpit issue and check that the routine's run shows up.",
     'Without the routine, declare "heartbeat" (picked up only while a run works) or "none".',
   ].join("\n");
 }
@@ -347,7 +347,7 @@ function install(options) {
   const pinAction = pinProject(projectRoot, workflowConfig, options);
   if (pinAction) actions.push(pinAction);
 
-  const [labelAction, hasLabel] = ensureOwnerWordLabel(projectRoot, previous, options);
+  const [labelAction, hasLabel] = ensureCockpitLabel(projectRoot, previous, options);
   if (labelAction) actions.push(labelAction);
 
   if (!options.isDryRun) {
@@ -361,7 +361,7 @@ function install(options) {
       rules: ruleSections,
       mode,
       gitignore: shouldIgnore,
-      labels: hasLabel ? [OWNER_WORD_LABEL.name] : [],
+      labels: hasLabel ? [COCKPIT_LABEL.name] : [],
     };
     // A re-install that changes nothing keeps the old timestamp, so a committed manifest
     // does not dirty every fresh clone or worktree after `npm ci`.
@@ -377,7 +377,7 @@ function install(options) {
   if (fs.existsSync(path.join(projectRoot, WORKFLOW_CONFIG_PATH)) && !readWorkflowConfig(projectRoot).project) {
     console.log(`${prefix} ${WORKFLOW_CONFIG_PATH}: add "project": "<the name the project calls itself>" (context/state.json takes it from the active roadmap until then; softure-init asks for it)`);
   }
-  const wakeNotice = ownerWordWakeNotice(readWorkflowConfig(projectRoot));
+  const wakeNotice = cockpitWakeNotice(readWorkflowConfig(projectRoot));
   if (wakeNotice) console.log(`${prefix} ${wakeNotice}`);
   const ci = doctorInCi(projectRoot);
   const branch = readWorkflowConfig(projectRoot).mainBranch || null;
@@ -407,4 +407,4 @@ try {
   process.exit(isPostinstall ? 0 : 1);
 }
 
-export { CI_JOB, CI_LINE, OWNER_WORD_LABEL, hasCiJob, ownerWordWakeNotice, replaceManagedBlock, selectRuleSections };
+export { CI_JOB, CI_LINE, COCKPIT_LABEL, hasCiJob, cockpitWakeNotice, replaceManagedBlock, selectRuleSections };

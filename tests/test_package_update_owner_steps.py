@@ -3,7 +3,7 @@
     python3 -m unittest discover -s tests
 
 The package-update routine merges a bump with its owner step recorded (`## Before the next release` of the live
-roadmap, else an owner-word issue listed in `routines.packageUpdates.ownerSteps`) or holds it with such an issue
+roadmap, else a cockpit issue listed in `routines.packageUpdates.ownerSteps`) or holds it with such an issue
 (`routines.packageUpdates.hold`, `owner`). `context_state.py` turns each into an `owner_queue` entry, classifies an
 environment variable name such as `SOFTURE_EMAIL_KEY_SECRET` as a secret, and drops a step once the owner confirms it.
 """
@@ -120,7 +120,7 @@ class RoutineTextTest(unittest.TestCase):
     def test_owner_steps_are_recorded_or_held(self) -> None:
         self.assertIn("### 5. A step only the owner can take", self.routine)
         for part in ("## Before the next release", "routines.packageUpdates.ownerSteps", "\"owner\"",
-                     "owner-word", "only the secret is missing", "how existing data is treated", "confirmed"):
+                     "cockpit", "only the secret is missing", "how existing data is treated", "confirmed"):
             self.assertIn(part, self.routine)
 
     def test_report_names_the_step_on_its_decision_line(self) -> None:

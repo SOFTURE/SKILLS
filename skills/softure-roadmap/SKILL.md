@@ -78,7 +78,7 @@ Read the PRD in full, not in excerpts.
   open checks: the close **refuses** to archive while a `- [ ]` is left under `## Owner decisions and
   checks`. Settle each one first: tick it with its evidence (`— done: <sha | release | path>`), tick it
   as obsolete with the reason (`— obsolete: <reason>`), or carry it to the next or a queued roadmap's
-  owner section (or an `owner-word` issue) and tick it with where it went (`— carried to <path | #N>`).
+  owner section (or a `cockpit` issue) and tick it with where it went (`— carried to <path | #N>`).
   An archived roadmap with an open check is the doctor's `archived-roadmap-open-checks` and never an
   owner-queue entry, so nothing that waits for the owner may stay behind in it. Open
   `## Before the next release` steps stay: they wait for the release the close comes before.

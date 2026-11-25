@@ -7,6 +7,6 @@
     "test": "npm test"
   },
   "autonomy": {
-    "ownerWordWake": "webhook"
+    "cockpitWake": "webhook"
   }
 }

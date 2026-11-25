@@ -119,7 +119,7 @@ enough: without a record the next release fails at the secret check and nothing 
   - with a live roadmap (`context/foundation/roadmap.md`, the idle placeholder included): one line under
     `## Before the next release` (create it above `## Owner decisions and checks` if missing):
     `- [ ] Set the production secret SOFTURE_EMAIL_KEY_SECRET (@softure-ai/mailing 0.3.0, <YYYY-MM-DD>)`;
-  - with no live roadmap: an owner-word-style issue in the project's repository (label `owner-word`, the step, the
+  - with no live roadmap: a cockpit-style issue in the project's repository (label `cockpit`, the step, the
     package and version, the gate it blocks; neutral text, no secret values), and the entry
     `{ "package", "version", "issue": "#N", "since", "step" }` in `routines.packageUpdates.ownerSteps`.
 - **Hold, with an issue**, when the owner must choose how existing data is treated (a migration that rewrites or
@@ -131,7 +131,7 @@ Every one of these is regenerated into `context/state.json` (`npx softure-skills
 the `owner_queue` lists `## Before the next release` lines, `ownerSteps` entries and owner holds, with `kind:
 "secret"` when the step names a secret, key, token or password (`SOFTURE_EMAIL_KEY_SECRET` included).
 
-A step is settled once the owner confirms it (in the main chat, or an owner-word issue answering the entry's `id`,
+A step is settled once the owner confirms it (in the main chat, or a cockpit issue answering the entry's `id`,
 WORKFLOW §8.6): the session that hears it ticks the roadmap line `— done: <the owner's word or #N>` or sets
 `"confirmed": "<#N or YYYY-MM-DD>"` on the `ownerSteps` entry, and closes the issue; a release that ships the bump
 settles a `## Before the next release` line as well (`wt-roadmap.py released`, never this routine). The routine

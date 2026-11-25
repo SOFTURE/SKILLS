@@ -201,12 +201,11 @@ class ProtectionTest(unittest.TestCase):
         code, report = self.report({"repos/{owner}/{repo}": {**REPO, "default_branch": "master"}}, branch=None)
         self.assertEqual(report["branch"], "master")
 
-    def test_a_missing_wake_label_is_named_when_the_routine_is_declared(self) -> None:
-        workflow = json.dumps({"autonomy": {"ownerWordWake": "routine"}})
+    def test_a_missing_cockpit_label_is_named_when_the_routine_is_declared(self) -> None:
+        workflow = json.dumps({"autonomy": {"cockpitWake": "routine"}})
         reader = Reader({**self.READER.files, "context/workflow.json": workflow})
         protected = {"repos/{owner}/{repo}": REPO, "repos/{owner}/{repo}/branches/main/protection": {
-            "required_status_checks": {"contexts": ["test", "End-to-end"]}, "enforce_admins": {"enabled": True}},
-            "repos/{owner}/{repo}/labels/owner-word": {"name": "owner-word"}}
+            "required_status_checks": {"contexts": ["test", "End-to-end"]}, "enforce_admins": {"enabled": True}}}
         code, report = ci_config.protection_report(reader, protected.get, "main")
         self.assertEqual(code, 1)
         self.assertEqual(len(report["label_problems"]), 1)

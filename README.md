@@ -24,7 +24,7 @@ What the installer does (idempotent; re-run on every `npm install`):
 | `rules/AGENTS.md` | managed block in `AGENTS.md` (or `CLAUDE.md` if only that exists) |
 | ignore entries | managed block in `.gitignore`: installed skills are restored by `npm install`, not committed |
 | manifest | `.claude/softure-skills.json` |
-| label `owner-word` | created on the forge when an authenticated `gh` can (outside CI); otherwise the command is printed |
+| label `cockpit` | created on the forge when an authenticated `gh` can (outside CI); otherwise the command is printed |
 
 It never overwrites a skill folder it did not install. Flags: `--dry-run`, `--target <dir>`,
 `--no-gitignore` (commit the skills instead).
@@ -75,7 +75,7 @@ usually fails on history. Put it right, in this order, one pass per repository:
    when it can reach it, else by the agent (class `forge`). A check carried to another roadmap (`→ roadmap-x`)
    is ticked by `--fix`.
 3. The owner's short list: only real owner items (a decision about future work, a secret, account or
-   connector, a step outside the repository), carried to the live roadmap or an `owner-word` issue.
+   connector, a step outside the repository), carried to the live roadmap or a `cockpit` issue.
 4. The `context-doctor` job above, once the doctor is at zero.
 
 `npx softure-skills doctor --baseline` exists only as a last resort, for a project that cannot finish
@@ -143,8 +143,8 @@ rules it will work by. In a project that is not, it installs the skills and runs
 [routines/](routines/README.md) holds the scheduled sessions a project runs without the owner: the nightly
 **package updates** (every `@softure-ai/*` package and pin to the newest, one pull request, never a release or
 deploy) and the **roadmap heartbeat** of an autonomous run (reads the repository and the forge, hands the coordinator
-the facts for the roadmap report, changes nothing) and the **owner-word wake** (a GitHub trigger on issues that picks up
-a new `owner-word` issue in an idle project, declared in `autonomy.ownerWordWake`). Each runs in a fresh session, never in the coordinator's; the project's scheduled task only points at the file, so a routine improves
+the facts for the roadmap report, changes nothing) and the **cockpit wake** (a GitHub trigger on issues that picks up
+a new `cockpit` issue in an idle project, declared in `autonomy.cockpitWake`). Each runs in a fresh session, never in the coordinator's; the project's scheduled task only points at the file, so a routine improves
 with every bump of this package. `routines/README.md` has the prompt that sets one up (WORKFLOW §13).
 
 ## The chain

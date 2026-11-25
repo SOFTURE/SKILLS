@@ -104,13 +104,10 @@ or languages.
                                     // is also the heartbeat that starts unblocked items and nudges stalled threads
                                     // (routines/roadmap-heartbeat.md, a fresh session per fire). `idleHours` (issue mode):
                                     // the heartbeat is deleted after this many hours with an empty queue; null keeps it
-    "ownerWordWake": "routine",     // what wakes the project on an owner-word issue (§8.6): "routine" (the GitHub-triggered
-                                    // routines/owner-word-wake.md is set up and its trigger verified; "none" until then),
+    "cockpitWake": "routine"        // what wakes the project on a cockpit issue (§8.6): "routine" (the GitHub-triggered
+                                    // routines/cockpit-wake.md is set up and its trigger verified; "none" until then),
                                     // "heartbeat" (only the roadmap heartbeat, while a run works), "none"; the doctor
                                     // notes it when missing, fails on any other value
-    "ownerWordWakeLabel": "cockpit" // the label the owner-word wake trigger filters on and that marks an owner-word issue
-                                    // for it (§8.6): "cockpit" (default, the label COCKPIT adds), "owner-word" without
-                                    // COCKPIT; it also names the task ("<PROJECT> · COCKPIT command" / "· Owner-word wake")
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -433,7 +430,7 @@ the end", otherwise by the owner). Gates, all checked on `<main>` and reported t
    roadmap rows as usual.
 4. no open `- [ ]` under `## Owner decisions and checks`: the close **refuses** to archive with one. Each entry is
    ticked with its evidence (`— done: <sha | release | path>`), ticked as obsolete (`— obsolete: <reason>`), or
-   carried to the next or a queued roadmap's owner section, or an `owner-word` issue (§8.6), and ticked with where it
+   carried to the next or a queued roadmap's owner section, or a `cockpit` issue (§8.6), and ticked with where it
    went (`— carried to <path | #N>`). An archived roadmap holds no owner entry: the owner queue never reads one
    (§12.1), and the doctor fails on it (`archived-roadmap-open-checks`). Open `## Before the next release` steps
    stay: they wait for the release, which comes after the close.
@@ -617,7 +614,7 @@ the owner talks to and that starts **thread sessions**. The main-chat session is
 each thread carries one change.
 
 **One roadmap item = one change = one thread session**, however the work starts: a new roadmap, the
-owner's go on an existing roadmap ("implement the roadmap item by item"), an owner-word issue, a
+owner's go on an existing roadmap ("implement the roadmap item by item"), a cockpit issue, a
 resumed run. "Item by item" means one thread per item. Serial order comes from starting the next
 item's thread after the previous merge (the startable set, below), never from queueing items in one
 thread; "merges are serial" and `worktree.maxParallel` are about how many threads merge or run at
@@ -705,32 +702,31 @@ the set. It never derives the next start only from the thread that just merged.
 scoped to the project's own repository: attach a repository the run needs (for example SOFTURE/SKILLS
 to file a gap) before deciding it is out of reach.
 
-### 8.6 Owner-word issues
+### 8.6 Cockpit issues
 
 The owner often decides for a project from outside its chat, for example while reviewing several projects at once
 (`softure-skills portfolio --owner`, §12.3). Such a decision travels as an issue in the project's own repository,
-labelled **`owner-word`**: one decision, its scope and any limit ("start the queued roadmap payments", "release only
+labelled **`cockpit`**: one decision, its scope and any limit ("start the queued roadmap payments", "release only
 after the last item", "drop SA-12"). It is the owner's word in writing, equal to the same sentence in the main chat.
 
-- **Label.** The installer creates `owner-word` when the forge allows it (GitHub through an authenticated `gh`,
+- **Label.** The installer creates `cockpit` when the forge allows it (GitHub through an authenticated `gh`,
   outside CI); otherwise it prints the one command that creates it.
-- **Autonomous mode.** The coordinator lists open `owner-word` issues first at the start of a run and again on every
+- **Autonomous mode.** The coordinator lists open `cockpit` issues first at the start of a run and again on every
   report and wake-up, and acts on each like an order in the chat: a roadmap to start goes through a roadmap thread,
   a release word is recorded where the release rules look for it, a "no" or "later" is recorded in the roadmap. It
   comments what it did (thread, PR, merge SHA) and closes the issue; one it cannot act on (unclear, contradicts
   `change.md` or a standing order) gets a comment with the question and stays open.
-- **Manual mode.** The coordinator shows open `owner-word` issues to the owner at the start of a session and acts
+- **Manual mode.** The coordinator shows open `cockpit` issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
 - **An idle project.** Listing at the start of a run and on reports reaches an issue only while a coordinator is awake.
-  A project that must act on its issues by itself, also with no run in flight, sets up the owner-word wake routine
-  (`routines/owner-word-wake.md`): a scheduled task with a GitHub trigger on `Issue: Opened`, filtered on the wake label
-  (`autonomy.ownerWordWakeLabel`, default `"cockpit"`: COCKPIT labels each issue it opens `cockpit` next to
-  `owner-word`; a project without COCKPIT sets `"owner-word"`), with no connectors, that starts a fresh session per
-  event. That session lists the open issues labelled `owner-word` or the wake label, acts only on those whose author
+  A project that must act on its issues by itself, also with no run in flight, sets up the cockpit wake routine
+  (`routines/cockpit-wake.md`): a scheduled task named `<PROJECT> · COCKPIT command` with a GitHub trigger on `Issue: Opened`,
+  filtered on the label `cockpit`, with no connectors, that starts a fresh session per event. That session lists the
+  open issues labelled `cockpit`, acts only on those whose author
   can write to the repository, claims each with a comment so two fires never both act, and then hands it to the
   coordinator's session or, with no coordinator reachable, does both jobs itself (manual mode: it only comments that
   the issue waits for the owner). It never releases or deploys: a release word is recorded for the next run. The
-  project declares the wake-up in `workflow.json` → `autonomy.ownerWordWake` (`"routine"`, `"heartbeat"` or
+  project declares the wake-up in `workflow.json` → `autonomy.cockpitWake` (`"routine"`, `"heartbeat"` or
   `"none"`, §2), because the routine itself cannot be read from the repository; the doctor notes an autonomous
   project that leaves it out, so an aggregator can show which projects wake on their own. `"routine"` is declared
   only once the task shows its GitHub trigger (or the owner confirmed it): a task created with a tool that offers
@@ -742,7 +738,7 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   ```markdown
   Start the payments roadmap once the provider account is open.
 
-  <!-- owner-word: {"entry": "oq-bfe20288d8", "answer": "yes"} -->
+  <!-- cockpit: {"entry": "oq-bfe20288d8", "answer": "yes"} -->
   ```
 
   `answer` is `yes`, `no` or `later`; the prose still says the decision and wins where the two differ (the coordinator
@@ -759,7 +755,7 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   - `later`: it **moves the item to the later roadmap**, `context/foundation/roadmaps/roadmap-later.md` (created on
     first use as a queued roadmap, §5.1, with its own prefix, `trigger: "the owner picks an item up"`), as a new item
     with the next number of that roadmap's prefix: a row (`proposed`, or `blocked (…)` for `Mode: owner`), an item
-    block that says where it came from (`from <old ID> in <roadmap>, owner-word #N`), and the item's backlog entry
+    block that says where it came from (`from <old ID> in <roadmap>, cockpit #N`), and the item's backlog entry
     moved with `git mv` to `context/backlog/roadmap-later/<change-id>/`. The old row becomes `carried (to
     roadmaps/roadmap-later.md <new ID>, #N)` and the entry is ticked `— later: #N → <new ID>`. The new item is
     detached from the old one: it keeps no old ID, and the later roadmap never adds a "start queued roadmap" word
@@ -770,7 +766,7 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
   closed when the entry was settled. An issue without the line is read as prose, as before. Before 0.37.0 a `later`
   answer left the entry open with `(later: #N)`; the doctor notes such an entry (`owner-entry-put-off`) until it is
   moved.
-- **Not in `state.json`.** Open owner-word issues live on the forge; an aggregator reads both (`state.json` for what
+- **Not in `state.json`.** Open cockpit issues live on the forge; an aggregator reads both (`state.json` for what
   waits for the owner, the forge for the words already given). With the line, it tells which entries an open issue
   already answers (its `entry`) and shows them as answered until the entry leaves the queue.
 
@@ -918,7 +914,7 @@ recorded, and the owner work the package-update routine records in `context/work
 
 The idle placeholder `roadmap.md` (`status: idle` or `roadmap: none`) is no active roadmap, but a project between
 roadmaps still has owner steps: its open `## Owner decisions and checks` and `## Before the next release` entries
-feed `owner_queue` like the main roadmap's, so an owner-word issue can answer them by `id` (§8.6).
+feed `owner_queue` like the main roadmap's, so a cockpit issue can answer them by `id` (§8.6).
 
 An archived roadmap contributes nothing, with one exception: the newest one, while its `## Summary` records no
 `Release:` line, contributes its open `## Before the next release` steps (the close comes before the release, §5.2).
@@ -929,7 +925,7 @@ Entries from open changes are refreshed on every write and never make the file s
 rewrite. `id` is a short stable id (`oq-` and a hash of `source`, `item` and the entry's text when it first appeared):
 it is kept, like `since`, on every rewrite, also when only the entry's wording changed or it moved to another heading
 of the same file (the same item and kind, or text that is still close), so a reader follows one entry across scans
-without fingerprinting it and an owner-word issue can name the entry it answers (§8.6). Owner-word issues live on the
+without fingerprinting it and a cockpit issue can name the entry it answers (§8.6). Cockpit issues live on the
 forge, not here.
 
 `open_changes` and `updated_at` are refreshed on every write but never make the file stale: a change branch edits
@@ -1004,7 +1000,7 @@ meaningful today, a decision about future work, a secret, account or connector, 
 effect the agent cannot see; the entry says which (`owner_reason`) and what the sweep looked for (`tried`). The
 `softure-doctor` skill ("Sweep history to zero") tells an agent how to work it: every entry is settled with its evidence
 written into the line, never without; the owner entries are carried to the live roadmap's `## Owner decisions and
-checks` or an `owner-word` issue and collected in one short list for the owner; nothing else is left open.
+checks` or a `cockpit` issue and collected in one short list for the owner; nothing else is left open.
 
 **Baseline: a last resort.** For a project that cannot finish the sweep at once, `doctor --baseline` writes the failures
 that remain to `context/doctor-baseline.json` (`{ "note", "created", "entries": [ { "code", "path", "message" } ] }`).
@@ -1098,7 +1094,7 @@ long ago. The history is put right, not hidden. One pass per repository, in this
    evidence (commit, release, file), never without. Regenerate the state, re-run the doctor until it exits 0, and land it
    as one change: `docs(context): settle history to zero`.
 3. **The owner's list.** What only the owner can settle (a decision about future work, a secret, account or connector,
-   a step outside the repository that nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an `owner-word` issue; the
+   a step outside the repository that nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or a `cockpit` issue; the
    agent's report lists it once, short: `ID | what the owner decides or does | where it lives now`. Nothing else
    waits, so `portfolio --owner` shows only these and the live roadmaps' entries.
 4. **The CI job at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add the `context-doctor` job
@@ -1139,7 +1135,7 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
 | Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
-| Owner-word wake | `routines/owner-word-wake.md` | GitHub trigger on `Issue: Opened` with the wake label (default `cockpit`), once per repository |
+| Cockpit wake | `routines/cockpit-wake.md` | GitHub trigger on `Issue: Opened` with the label `cockpit`, once per repository |
 
 
 ## 14. Infrastructure and deploy work
