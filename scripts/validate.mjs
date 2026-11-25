@@ -4,7 +4,7 @@
 // - a skill name does not start with "softure-" or has no description
 // - any shipped file mentions third-party course branding (this package is original work)
 // - any shipped file contains Polish diacritics (everything shipped is English)
-// - a mode section of the rules block does not mention the owner-word label (WORKFLOW.md §8.6)
+// - a mode section of the rules block does not mention the cockpit label of owner-word issues (WORKFLOW.md §8.6)
 // - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
 // - any shipped file tells a coordinator to bind a routine to its own session (routines run in a fresh session)
@@ -73,7 +73,7 @@ for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...wa
 const rules = fs.readFileSync(path.join(ROOT, "rules", "AGENTS.md"), "utf8");
 for (const mode of ["manual", "autonomous"]) {
   const section = rules.split(/\n(?=## )/).find((part) => part.startsWith(`## Operating mode: ${mode}`)) ?? "";
-  if (!section.includes("`owner-word`")) errors.push(`rules/AGENTS.md: "Operating mode: ${mode}" does not mention the \`owner-word\` label`);
+  if (!section.includes("`cockpit`")) errors.push(`rules/AGENTS.md: "Operating mode: ${mode}" does not mention the \`cockpit\` label`);
 }
 // Infrastructure and deploy rules bind in both modes, so the pointer lives in the shared part of the block (WORKFLOW.md §14).
 const sharedRules = rules.slice(0, rules.indexOf("## Operating mode: "));

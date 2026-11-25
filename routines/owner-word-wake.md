@@ -118,7 +118,7 @@ The brief below has to be complete: a project session that follows it creates a 
 correction in the web form afterwards.
 
 **The wake label and the name.** COCKPIT, the SOFTURE dashboard that sends owner words, labels every issue it opens
-`cockpit` next to `owner-word`. The trigger filters on one label, `autonomy.ownerWordWakeLabel` in
+`cockpit` (only `owner-word` while the repository has no `cockpit` label). The trigger filters on one label, `autonomy.ownerWordWakeLabel` in
 `context/workflow.json` (default `"cockpit"`; a project without COCKPIT sets `"owner-word"`), and the task is named
 after it:
 

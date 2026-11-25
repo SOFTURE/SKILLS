@@ -81,7 +81,7 @@ you escalate. Talk to me in <chat language>; everything you write to the reposit
      filed in SOFTURE/SKILLS; only a release or a production deploy waits for my word;
    - for a hosted project (claude.ai project) whose instructions lack it, the pointer from
      WORKFLOW §8.5 with <owner>/<repo> filled in, ready to paste.
-6. Then follow "Start of a run" from AGENTS.md: act on open `owner-word` issues first, then adopt what is in flight (give the go to READY
+6. Then follow "Start of a run" from AGENTS.md: act on open owner-word issues (label `cockpit` or `owner-word`) first, then adopt what is in flight (give the go to READY
    threads, nudge stalled ones), then start threads for ready, parallel-safe items, then the report
    routine. With no roadmap and no issue queue, say so in one line and name what I give next (a
    goal for `softure-shape`, or an issue queue); do not invent work.

@@ -54,6 +54,11 @@ class InstallerNoticeTest(unittest.TestCase):
         self.assertIn("open one owner-word issue and check that the routine's run shows up", out)
         self.assertLess(out.index("once the task shows the GitHub trigger"), out.index('"ownerWordWake": "routine"'))
 
+    def test_installer_creates_the_cockpit_and_owner_word_labels(self) -> None:
+        out = install({**self.BASE, "mode": "autonomous"})
+        self.assertIn("label cockpit (created on the forge when gh can)", out)
+        self.assertIn("label owner-word (created on the forge when gh can)", out)
+
     def test_declared_project_gets_no_notice(self) -> None:
         for value in ("routine", "heartbeat", "none"):
             with self.subTest(value=value):
