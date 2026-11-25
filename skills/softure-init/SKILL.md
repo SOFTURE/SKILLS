@@ -116,6 +116,11 @@ start any work: no change, PRD or roadmap is created here.
    until a session confirms the pointer is present: a re-run of init in an autonomous project lists
    it again unless the owner confirmed it, and every hosted thread checks it at session start
    (`softure-worktree` → Cloud session), so nothing later assumes the paste happened.
+   With a GitHub remote, also run `npx softure-skills doctor --protection` (read-only, through `gh`):
+   every `FAIL main-checks-not-required` line (the main branch requires no status checks, misses a
+   pull-request job, or lets administrators bypass them) becomes an open owner step
+   (`[ ] require <jobs> on <main>, administrators included`), since only an admin can change branch
+   protection. `UNKNOWN` (no `gh`, or a token without admin) is listed the same way, as "check".
    Then stop: do not chain into other skills.
 
 ## `workflow.json`
@@ -178,6 +183,7 @@ Optional keys other than `research.sources` and `evidence` (step 6) are never wr
 - [ ] Gate commands use the repo's package manager.
 - [ ] The report lists the unresolved values the owner should fill in, and every inferred value.
 - [ ] With `mode: "autonomous"`: the §8.5 snippet is printed and the paste is an open owner step.
+- [ ] With a GitHub remote: `doctor --protection` ran, and each missing required check is an open owner step.
 
 ## Do not
 

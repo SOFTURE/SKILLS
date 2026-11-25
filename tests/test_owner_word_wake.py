@@ -42,7 +42,8 @@ class InstallerNoticeTest(unittest.TestCase):
         out = install({**self.BASE, "mode": "autonomous"})
         self.assertIn(NOTICE, out)
         self.assertIn("routines/owner-word-wake.md", out)
-        self.assertIn("GitHub trigger on issues (opened, labeled)", out)
+        self.assertIn("GitHub trigger on issues (Issue: Opened,", out)
+        self.assertIn("default cockpit), no connectors", out)
         self.assertIn('"autonomy": { "ownerWordWake": "routine" }', out)
 
     def test_setup_steps_declare_routine_only_after_the_trigger_is_verified(self) -> None:
@@ -62,6 +63,42 @@ class InstallerNoticeTest(unittest.TestCase):
     def test_manual_project_gets_no_notice(self) -> None:
         self.assertNotIn(NOTICE, install({**self.BASE, "mode": "manual"}))
         self.assertNotIn(NOTICE, install(self.BASE))
+
+
+class WakeBriefTest(unittest.TestCase):
+    """The setup brief creates a working routine by itself (#95): the trigger in the creating call, `Issue: Opened`,
+    filtered on the wake label (default `cockpit`), no connectors, a test issue before "routine"."""
+
+    def setUp(self) -> None:
+        with open(os.path.join(ROOT, "routines", "owner-word-wake.md"), encoding="utf-8") as fh:
+            self.text = fh.read()
+        self.brief = self.text[self.text.index("```text", self.text.index("## Setting it up")):
+                               self.text.index("Routine prompt:")]
+
+    def test_the_task_is_named_after_the_wake_label(self) -> None:
+        self.assertIn('   - name: "<PROJECT> · COCKPIT command" (the repository name in capitals);', self.brief)
+        self.assertIn('"<PROJECT> · Owner-word wake"', self.brief)
+
+    def test_the_trigger_is_created_with_the_task_on_issue_opened_with_the_label_filter(self) -> None:
+        self.assertIn("created in the same call that creates the task", self.brief)
+        self.assertIn("event category Issue, action opened (issues.opened)", self.brief)
+        self.assertIn('filter "Labels is one of <LABEL>"', self.brief)
+        self.assertIn("delete the trigger, save, add a new one, save", self.text)
+
+    def test_no_connectors_and_a_read_back(self) -> None:
+        self.assertIn("no connectors (remove every connector the tool attaches by default)", self.brief)
+        self.assertIn("no connector may be attached", self.brief)
+        self.assertIn("delete the task you created", self.brief)
+
+    def test_a_claimed_test_issue_comes_before_routine(self) -> None:
+        test_issue = self.brief.index('"Owner-word wake test"')
+        self.assertLess(test_issue, self.brief.index('autonomy.ownerWordWake to "routine"'))
+        self.assertIn("labelled owner-word and <LABEL>", self.brief)
+        self.assertIn("how many seconds", self.brief)
+
+    def test_the_routine_reads_the_wake_label_too(self) -> None:
+        self.assertIn("labelled owner-word or <LABEL>", self.text)
+        self.assertIn("`owner-word` or the wake label", self.text)
 
 
 def validate(edit: tuple[str, str, str] | None = None) -> subprocess.CompletedProcess:
@@ -97,7 +134,7 @@ class SetupBriefGateTest(unittest.TestCase):
                        "with any tool or"),
             "UI steps": ("exact steps to finish it in claude.ai/code/routines", "steps"),
             "never working": ("never reports the routine as set up or working", "reports what it made"),
-            "verify first": ("3. Verify the trigger:", "3. Look at the task:"),
+            "verify first": ("4. Verify the trigger:", "4. Look at the task:"),
             "none until verified": ('trigger is verified the value is "none"', 'task exists the value is "routine"'),
             "testing section": ("## Testing it", "## Afterwards"),
         }

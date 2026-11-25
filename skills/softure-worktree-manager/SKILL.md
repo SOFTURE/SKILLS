@@ -409,7 +409,7 @@ job), then:
 CronCreate(
   cron: "4,19,34,49 * * * *",            # every 15 min, off the :00/:30 marks
   recurring: true,
-  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; recompute the startable set over the whole roadmap (python3 <S>/wt-startable.py), and every START item without a session and without collision → M1–M3. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>, unless the release covers it; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in chatLanguage (default: language) and the times in the timezone from context/workflow.json; paste the content into the message, never a file to link.")
+  prompt: "Status for the owner + loop heartbeat (/softure-worktree-manager). If several of these fired while busy, do one. 1) bash <M>/wm-resume.sh + the latest commits of the worker branches. 2) Report as the status table (format under 'The report itself'); nothing moved → one line. 3) Resume the loop by the wm-resume actions (M0.1 table): MERGE → M5 and M6; NUDGE → SendMessage 'continue' (usage limit: after its reset time); RELAUNCH → claude stop + wm-launch.sh; wm-watch Monitor expired → re-arm with the IDs in flight; recompute the startable set over the whole roadmap (python3 <S>/wt-startable.py), and every START item without a session and without collision → M1–M3; read <main>'s CI (python3 <S>/wt-main-ci.py): red or flaky with no session fixing it → a fix session first, and the verdict goes into the report. Work until the roadmap is done / done_code. 4) End → M7 (integration suite on <main>, unless the release covers it; close the roadmap and push <main> only if the roadmap header orders it; tag, release and deploy never — those are the owner's) and CronDelete this job. Write the report in chatLanguage (default: language) and the times in the timezone from context/workflow.json; paste the content into the message, never a file to link.")
 ```
 
 This prompt is also the run's **heartbeat**: a worker stuck on a usage limit
@@ -552,8 +552,12 @@ points of this skill:
   ran `wt-roadmap.py done`; with `cloudState: "branch"` the branch wrote it at
   archive). Check it on `<main>`; if it still says `ready_to_merge`, run
   `python3 <S>/wt-roadmap.py done <change-id>` yourself.
-- **Report** per merge, three lines: merge SHA, conflicts and how resolved,
-  what waits for the release.
+- **Report** per merge, four lines: merge SHA, conflicts and how resolved,
+  what waits for the release, the main branch's CI on the merge commit
+  (`wt-main-ci.py <merge SHA>`: `green`, or `red`/`flaky` with the run link and
+  the change that fixes it). A merge whose CI is red is not finished: the thread
+  that merged it opens the fix; a red head nobody owns gets a fix thread at once.
+  A test that passed only on a re-run is a bug, never "a timing failure".
 
 ### M6 — Refill
 

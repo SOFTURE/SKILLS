@@ -12,6 +12,7 @@
 //   softure-skills doctor --fix [--write]   mechanical repairs of history (dry run unless --write)
 //   softure-skills doctor --sweep [--json]  worklist of the judgement cases, with evidence (read-only)
 //   softure-skills doctor --baseline        last resort: accept today's failures; the file only shrinks
+//   softure-skills doctor --protection      does the main branch require every pull-request CI job (forge, `gh`)
 //   softure-skills state [write|print|check] regenerate context/state.json (default: write)
 //   softure-skills portfolio [<repo> ...] [--owner] [--json]   read-only table across many repositories
 //
@@ -108,12 +109,13 @@ function ownerWordWakeNotice(workflowConfig) {
     "To have the project pick it up by itself, set up the owner-word wake routine once:",
     "  1. install the Claude GitHub App on the repository (https://github.com/apps/claude);",
     "  2. paste the setup brief from node_modules/@softure-ai/skills/routines/owner-word-wake.md (\"Setting it up\")",
-    "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (opened, labeled),",
-    "     a fresh session per event. The GitHub trigger can be added only in claude.ai/code/routines or with a tool",
-    "     that explicitly supports GitHub event triggers; a cron-or-one-shot task has no trigger and never fires;",
+    "     into the project's main chat; it creates a scheduled task with a GitHub trigger on issues (Issue: Opened,",
+    "     filtered on the label autonomy.ownerWordWakeLabel, default cockpit), no connectors, a fresh session per event.",
+    "     The GitHub trigger can be added only in claude.ai/code/routines or with a tool that explicitly supports",
+    "     GitHub event triggers, in the call that creates the task; a cron-or-one-shot task has no trigger and never fires;",
     `  3. once the task shows the GitHub trigger (or you confirmed it in the UI), set`,
     `     "autonomy": { "ownerWordWake": "routine" } in ${WORKFLOW_CONFIG_PATH}; until then set "none";`,
-    "  4. test it: open one owner-word issue and check that the routine's run shows up.",
+    "  4. test it: open one owner-word issue and check that the routine's run shows up (label it owner-word and the wake label).",
     'Without the routine, declare "heartbeat" (picked up only while a run works) or "none".',
   ].join("\n");
 }
