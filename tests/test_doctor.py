@@ -189,7 +189,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_each_case_fails_with_its_code(self) -> None:
-        self.assertEqual(len(CASES), 15)
+        self.assertEqual(len(CASES), 14)
         for case in CASES:
             with self.subTest(case=case):
                 project = Project()
@@ -209,37 +209,17 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(code, 0, report)
         self.assertEqual([note["code"] for note in report["notes"]], ["state-missing"])
 
-    def set_cockpit_wake(self, mode: str, autonomy: dict) -> None:
+    def test_an_autonomous_project_declares_nothing_about_waking(self) -> None:
+        """Only COCKPIT knows whether a project wakes (routines/cockpit-command.md); the doctor asks for nothing."""
         rel = "context/workflow.json"
         workflow = json.loads(self.project.read(rel))
-        workflow["mode"], workflow["autonomy"] = mode, autonomy
+        workflow["mode"] = "autonomous"
+        workflow.pop("autonomy", None)
         self.project.write(rel, json.dumps(workflow, indent=2) + "\n")
         self.project.state("write")  # state.json carries `mode`
-
-    def test_autonomous_project_without_cockpit_wake_gets_a_note(self) -> None:
-        self.set_cockpit_wake("autonomous", {})
-        code, report = self.project.doctor()
-        self.assertEqual(code, 0, report)
-        self.assertEqual([note["code"] for note in report["notes"]], ["cockpit-wake-undeclared"])
-        self.assertIn("its GitHub trigger is verified", report["notes"][0]["message"])
-
-    def test_manual_project_without_cockpit_wake_is_silent(self) -> None:
-        self.set_cockpit_wake("manual", {})
         code, report = self.project.doctor()
         self.assertEqual(code, 0, report)
         self.assertEqual(report["notes"], [])
-
-    def test_every_declared_cockpit_wake_passes_and_another_value_fails(self) -> None:
-        for value in ("routine", "heartbeat", "none"):
-            with self.subTest(value=value):
-                self.set_cockpit_wake("autonomous", {"cockpitWake": value})
-                code, report = self.project.doctor()
-                self.assertEqual((code, report["notes"]), (0, []), report)
-        self.set_cockpit_wake("manual", {"cockpitWake": True})
-        code, report = self.project.doctor()
-        self.assertEqual(code, 1)
-        self.assertEqual([f["code"] for f in report["failures"]], ["cockpit-wake-invalid"])
-        self.assertIn('autonomy.cockpitWake is true', report["failures"][0]["message"])
 
     def test_change_branch_editing_its_change_keeps_the_state_fresh(self) -> None:
         rel = "context/changes/search-titles/change.md"

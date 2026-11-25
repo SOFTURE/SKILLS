@@ -5,8 +5,5 @@
   "mainBranch": "main",
   "gates": {
     "test": "npm test"
-  },
-  "autonomy": {
-    "cockpitWake": "routine"
   }
 }

@@ -8,8 +8,7 @@
     doctor.py --baseline                  last resort: accept today's failures in context/doctor-baseline.json
     doctor.py --protection [--json]       asks the forge through `gh` whether the main branch requires every
                                           pull-request CI job before a merge, administrators included
-                                          (`main-checks-not-required`), and whether the label `cockpit`
-                                          exists (`cockpit-label-missing`); exit 75 when it cannot tell
+                                          (`main-checks-not-required`); exit 75 when it cannot tell
     npx softure-skills doctor [...]      (the same, from the installed package)
 
 Adopting projects run it in a CI job named `context-doctor`, documentation-only changes included (that is where the
@@ -45,9 +44,6 @@ and as the job summary, so a reader of the forge API sees the codes on the main 
                                   push to `mainBranch` (no `push` trigger for it, a `paths`/`paths-ignore` filter, an
                                   `if:` on the job), so the main branch's head has no `context-doctor` check run;
                                   see ci_config.py (a project without the job gets the installer's notice instead)
-  cockpit-wake-invalid         context/workflow.json `autonomy.cockpitWake` is not one of "routine", "heartbeat",
-                                  "none" (WORKFLOW.md §8.6); an autonomous project that leaves the key out gets a note
-                                  (`cockpit-wake-undeclared`), not a failure
   owner-entry-put-off             (a note, not a failure) an open owner entry that still carries `(later: #N)`;
                                   a "later" answer moves the item to roadmaps/roadmap-later.md (WORKFLOW.md §8.6)
 
@@ -91,7 +87,7 @@ from context_state import (  # noqa: E402
 
 ARCHIVE_DIR = "context/archive"
 BASELINE_PATH = "context/doctor-baseline.json"
-NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale", "ci-doctor-trigger", "cockpit-wake-invalid")
+NEVER_BASELINED = ("state-missing", "state-stale", "baseline-stale", "ci-doctor-trigger")
 BACKLOG_DIR = "context/backlog"
 CLOSED_STATUSES = ("done", "done_code", "dropped", "carried")
 SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
@@ -562,28 +558,6 @@ def check_ci(reader) -> list[Finding]:
             for path, found in ci_config.check(reader, branches)]
 
 
-COCKPIT_WAKES = ("routine", "heartbeat", "none")
-
-
-def check_cockpit_wake(reader) -> list[Finding]:
-    """How cockpit issues wake the project (WORKFLOW §8.6): declared, since the routine is not in the repository."""
-    workflow = read_workflow(reader)
-    autonomy = workflow.get("autonomy") if isinstance(workflow.get("autonomy"), dict) else {}
-    if "cockpitWake" not in autonomy:
-        if workflow.get("mode") != "autonomous":
-            return []
-        return [Finding("cockpit-wake-undeclared", WORKFLOW_PATH,
-                        'autonomy.cockpitWake is not set: declare "routine" only once routines/cockpit-wake.md is '
-                        'set up and its GitHub trigger is verified, else "heartbeat" or "none" (WORKFLOW.md §8.6)',
-                        severity="note")]
-    value = autonomy["cockpitWake"]
-    if value in COCKPIT_WAKES:
-        return []
-    return [Finding("cockpit-wake-invalid", WORKFLOW_PATH,
-                    f'autonomy.cockpitWake is {json.dumps(value)}; use "routine", "heartbeat" or "none" '
-                    "(WORKFLOW.md §8.6)")]
-
-
 # An owner entry the project still keeps open after a "later" answer, the shape WORKFLOW §8.6 used before 0.37.0.
 PUT_OFF_RE = re.compile(r"\(later: #\d+")
 
@@ -615,7 +589,7 @@ def run_checks(reader, root: str | None = None, baseline: bool = True) -> list[F
         return []
     findings: list[Finding] = []
     for check in (check_main_roadmap, check_archived_changes, check_archived_roadmaps,
-                  check_queued_and_backlog, check_roadmap_shape, check_indexes, check_ci, check_cockpit_wake,
+                  check_queued_and_backlog, check_roadmap_shape, check_indexes, check_ci,
                   check_put_off_entries):
         findings += check(reader)
     findings += check_state(reader, root)

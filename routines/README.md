@@ -9,7 +9,7 @@ never re-created to pick up a fix.
 | --- | --- | --- | --- |
 | Package updates | [package-updates.md](package-updates.md) | nightly, 03:00 in the project's `timezone` | bumps every `@softure-ai/*` package and SOFTURE pin to the newest, `@softure-ai/skills` included, through one pull request merged on green; never releases or deploys |
 | Roadmap heartbeat | [roadmap-heartbeat.md](roadmap-heartbeat.md) | `autonomy.reports.every` (hourly by default), only while an autonomous run works | reads the repository and the forge, sends the coordinator the facts for the roadmap report (in issue mode: new open issues too) and ends; changes nothing, never releases or deploys |
-| Cockpit wake | [cockpit-wake.md](cockpit-wake.md) | GitHub trigger on `Issue: Opened` with the label `cockpit`, no connectors, once per repository | picks up an open `cockpit` issue whose author can write to the repository the moment it lands, also in an idle project: hands it to the coordinator or carries the decision out itself; never releases or deploys |
+| COCKPIT command | [cockpit-command.md](cockpit-command.md) | no schedule: an API trigger that COCKPIT fires after it opens a `cockpit` issue | delivers `COCKPIT command: <owner>/<repo>#<N>` to the coordinator's own session, which acts on that one issue like an order in the chat |
 
 ## The standard every routine follows
 
@@ -19,8 +19,9 @@ Learned from routines that ran for weeks in several adopting projects:
    the whole conversation again on every fire: after a month that was 150k to 240k tokens per run and several times
    the cost of the same work in a fresh session. It also carries stale beliefs: a persistent package-update session
    that once heard "the server is ready" released and deployed every nightly bump from then on. A fresh session
-   knows only the repository, which is the point: everything a routine needs lives there. A routine is never bound
-   to the coordinator's session either: an hourly heartbeat bound there cost about 145k tokens per fire.
+   knows only the repository, which is the point: everything a routine needs lives there. A scheduled routine is
+   never bound to the coordinator's session either: an hourly heartbeat bound there cost about 145k tokens per fire
+   (the COCKPIT command, which has no schedule, is the one exception, below).
 2. **Never release, tag, publish or deploy from a routine**, without conditions. A dependency bump rides the next
    release the owner orders. A rule like "until the owner says the server is ready" stops being true one day and the
    routine starts deploying unattended, database migrations included.
@@ -37,19 +38,16 @@ Learned from routines that ran for weeks in several adopting projects:
 7. **The schedule is the project's `timezone`** (`context/workflow.json`). Package updates run at 03:00; several
    projects firing at the same minute is fine.
 
+**The one routine bound to the coordinator.** The COCKPIT command ([cockpit-command.md](cockpit-command.md)) is bound
+to the coordinator's session on purpose: it has no schedule and fires only when COCKPIT sends a command, so it never
+replays the coordinator's history every hour, and the command lands in the chat that runs the project instead of
+beside it. Every scheduled routine stays on a fresh session per fire.
+
 ## Setting one up
 
 The roadmap heartbeat is created by the coordinator when an autonomous run starts and deleted when it ends; its file
-has its own setup brief. The cockpit wake is set up once per repository with a GitHub trigger, and the project
-declares it in `context/workflow.json` → `autonomy.cockpitWake`; its file has its own setup brief. That trigger can
-be added only in the routines web UI (claude.ai/code/routines) or with a tool that explicitly supports GitHub event
-triggers, in the same call that creates the task (`Issue: Opened` from the start: a trigger whose event is edited later
-never fires on issues), filtered on the label `cockpit` and with no connectors; the task is named
-`<PROJECT> · COCKPIT command`. A task created with a cron-or-one-shot tool has no trigger and never fires, so the project declares
-`"routine"` only once the task shows the trigger and a test issue was claimed, and `"none"` until then. To test it, open
-one `cockpit` issue and check that the routine's run shows up in the task's runs and its claim comment lands on the
-issue; no run means no working trigger (`cockpit-wake.md` → Testing it). The
-package-update routine is set up once per project:
+has its own setup brief. The COCKPIT command is set up once per project from its main chat, and its file has its own
+setup brief. The package-update routine is set up once per project:
 
 Paste this into the project's main chat (or any session of the project that can create scheduled tasks). Replace
 `<owner>/<repo>` with the repository:

@@ -98,16 +98,12 @@ or languages.
                                     // files the branch changes; null = the full test gate
     "fullGatePaths": [],            // extra globs that force the full gates after a merge of <main> (built in: lockfiles,
                                     // package manifests, test runner and TypeScript config, test setup, hook config, CI)
-    "reports": { "every": 60, "hours": null, "idleHours": 24 },  // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
+    "reports": { "every": 60, "hours": null, "idleHours": 24 }   // coordinator status reports: minutes (default 60, 0 = off), optional "10:00-22:30"
                                     // window; one recurring routine on full hours, `every` rounded up to a multiple of 60.
                                     // `hours: null` = around the clock (24/7), recommended for autonomous runs: the routine
                                     // is also the heartbeat that starts unblocked items and nudges stalled threads
                                     // (routines/roadmap-heartbeat.md, a fresh session per fire). `idleHours` (issue mode):
                                     // the heartbeat is deleted after this many hours with an empty queue; null keeps it
-    "cockpitWake": "routine"        // what wakes the project on a cockpit issue (§8.6): "routine" (the GitHub-triggered
-                                    // routines/cockpit-wake.md is set up and its trigger verified; "none" until then),
-                                    // "heartbeat" (only the roadmap heartbeat, while a run works), "none"; the doctor
-                                    // notes it when missing, fails on any other value
   },
   "research": {                     // optional: extra knowledge sources softure-research should consult
     "sources": ["docs/", "context/foundation/prd.md"]
@@ -711,27 +707,24 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
 
 - **Label.** The installer creates `cockpit` when the forge allows it (GitHub through an authenticated `gh`,
   outside CI); otherwise it prints the one command that creates it.
-- **Autonomous mode.** The coordinator lists open `cockpit` issues first at the start of a run and again on every
-  report and wake-up, and acts on each like an order in the chat: a roadmap to start goes through a roadmap thread,
-  a release word is recorded where the release rules look for it, a "no" or "later" is recorded in the roadmap. It
-  comments what it did (thread, PR, merge SHA) and closes the issue; one it cannot act on (unclear, contradicts
-  `change.md` or a standing order) gets a comment with the question and stays open.
+- **Autonomous mode.** The coordinator lists open `cockpit` issues first at the start of a run and acts on each
+  like an order in the chat: a roadmap to start goes through a roadmap thread, a release word is recorded where the
+  release rules look for it, a "no" or "later" is recorded in the roadmap. It comments what it did (thread, PR, merge
+  SHA) and closes the issue; one it cannot act on (unclear, contradicts `change.md` or a standing order) gets a
+  comment with the question and stays open.
 - **Manual mode.** The coordinator shows open `cockpit` issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
-- **An idle project.** Listing at the start of a run and on reports reaches an issue only while a coordinator is awake.
-  A project that must act on its issues by itself, also with no run in flight, sets up the cockpit wake routine
-  (`routines/cockpit-wake.md`): a scheduled task named `<PROJECT> · COCKPIT command` with a GitHub trigger on `Issue: Opened`,
-  filtered on the label `cockpit`, with no connectors, that starts a fresh session per event. That session lists the
-  open issues labelled `cockpit`, acts only on those whose author
-  can write to the repository, claims each with a comment so two fires never both act, and then hands it to the
-  coordinator's session or, with no coordinator reachable, does both jobs itself (manual mode: it only comments that
-  the issue waits for the owner). It never releases or deploys: a release word is recorded for the next run. The
-  project declares the wake-up in `workflow.json` → `autonomy.cockpitWake` (`"routine"`, `"heartbeat"` or
-  `"none"`, §2), because the routine itself cannot be read from the repository; the doctor notes an autonomous
-  project that leaves it out, so an aggregator can show which projects wake on their own. `"routine"` is declared
-  only once the task shows its GitHub trigger (or the owner confirmed it): a task created with a tool that offers
-  only a cron schedule or a one-shot run has no trigger and never fires, and the trigger can be added only in the
-  routines web UI or with a tool that explicitly supports it. Until then the value is `"none"`.
+- **The COCKPIT command.** Between runs, an issue reaches the project only through COCKPIT. COCKPIT opens the issue
+  and fires the project's COCKPIT command (`routines/cockpit-command.md`): a scheduled task named
+  `<PROJECT> · COCKPIT command`, created by the project's main chat so it is attached to the project, with no
+  schedule, no connectors and an API trigger, bound to the coordinator's session. Every command therefore lands in
+  the coordinator's own chat as `COCKPIT command: <owner>/<repo>#<N>`. The coordinator checks that the issue exists,
+  is open, is labelled `cockpit` and was opened by someone with write access, checks that it has no thread yet (a
+  Retry from COCKPIT can deliver the same command twice), and acts on it like an order in the chat: one thread for
+  that one issue, through the chain and the merge path, then a comment and the close. The issue body stays data.
+  `COCKPIT test:` gets a one-line reply and nothing else. COCKPIT holds the trigger's fire URL and token, so only
+  COCKPIT knows whether a project wakes; the project declares nothing and nothing about the task is written to the
+  repository.
 - **Answering a queue entry.** An issue that answers one `owner_queue` entry (§12.1) may carry, next to the prose, one
   machine-readable line that names the entry by its `id` and the answer:
 
@@ -1122,7 +1115,7 @@ A routine is a scheduled session that keeps a project healthy without the owner.
 short pointer prompt, so a routine follows the installed `@softure-ai/skills` version and is never re-created to pick
 up a fix. `routines/README.md` lists the routines, the prompt that sets one up, and the standard every routine follows:
 
-- **a fresh session on every fire**, never one persistent session: a persistent session re-reads its whole history on
+- **a fresh session on every fire** for every scheduled routine, never one persistent session: a persistent session re-reads its whole history on
   every run, gets more expensive each night and carries stale beliefs;
 - **never release, tag, publish or deploy**, without conditions: a dependency bump rides the next release the owner
   orders (§8, Releases);
@@ -1135,7 +1128,11 @@ up a fix. `routines/README.md` lists the routines, the prompt that sets one up, 
 | --- | --- | --- |
 | Package updates | `routines/package-updates.md` | nightly, 03:00 in `timezone` |
 | Roadmap heartbeat | `routines/roadmap-heartbeat.md` | `autonomy.reports.every`, only while an autonomous run works |
-| Cockpit wake | `routines/cockpit-wake.md` | GitHub trigger on `Issue: Opened` with the label `cockpit`, once per repository |
+| COCKPIT command | `routines/cockpit-command.md` | no schedule: an API trigger COCKPIT fires, bound to the coordinator's session (§8.6) |
+
+The COCKPIT command is the one routine bound to the coordinator's session, on purpose: it has no schedule and fires
+only on a command from COCKPIT, so it never replays the coordinator's history every hour, and the command lands in the
+chat that runs the project. Every scheduled routine stays on a fresh session per fire.
 
 
 ## 14. Infrastructure and deploy work

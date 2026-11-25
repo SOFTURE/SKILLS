@@ -7,9 +7,10 @@
 // - a mode section of the rules block does not mention the cockpit label (WORKFLOW.md §8.6)
 // - the shared part of the rules block does not point to WORKFLOW.md §14 (infrastructure and deploy work)
 // - a routine in routines/ does not carry the hard rules every routine follows (WORKFLOW.md §13)
-// - any shipped file tells a coordinator to bind a routine to its own session (routines run in a fresh session)
-// - the cockpit wake setup brief lets a task without a verified GitHub trigger count as set up, or the routines
-//   README does not say how to test that routine (a cron-or-one-shot tool creates a task that never fires)
+// - any shipped file tells a coordinator to bind a routine to its own session (scheduled routines run in a fresh
+//   session; the COCKPIT command, which has no schedule, is the one routine bound to the coordinator)
+// - the COCKPIT command setup brief, its task prompt or the Cockpit issues rules lose a rule they must carry
+// - any shipped file names the removed wake routine, its config key or the former name of the cockpit label
 
 import fs from "node:fs";
 import path from "node:path";
@@ -56,6 +57,12 @@ for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true }).filter((i
 // A sentence that binds a routine to the coordinator's (or "this") session is allowed only as a prohibition.
 const BINDING = /\b(bind|binds|bound|binding)\b[^.;]*\b(coordinator's|this) session/i;
 const PROHIBITION = /\b(never|not|no)\b/i;
+// The COCKPIT command is bound to the coordinator on purpose (routines/cockpit-command.md): its file and any
+// sentence that names it are exempt.
+const COMMAND_FILE = "cockpit-command.md";
+const COMMAND_NAMED = /COCKPIT command/;
+// Removed in 0.40.0 with no alias: the wake routine, its config key and the former name of the cockpit label.
+const REMOVED = new RegExp(["cockpit" + "Wake", "cockpit" + "-wake", "owner" + "[-_ ]?word"].join("|"), "i");
 
 for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...walk(path.join(ROOT, "routines")), ...walk(path.join(ROOT, "scripts")).filter((file) => !file.endsWith("validate.mjs")), path.join(ROOT, "README.md"), path.join(ROOT, "WORKFLOW.md"), path.join(ROOT, "ONBOARD.md")]) {
   if (!/\.(md|sh|py|mjs|js|json|txt)$/.test(file)) continue;
@@ -63,8 +70,10 @@ for (const file of [...walk(skillsDir), ...walk(path.join(ROOT, "rules")), ...wa
   for (const pattern of FORBIDDEN) {
     if (pattern.test(content)) errors.push(`${path.relative(ROOT, file)}: matches forbidden pattern ${pattern}`);
   }
+  if (REMOVED.test(content) || REMOVED.test(path.relative(ROOT, file))) errors.push(`${path.relative(ROOT, file)}: names the removed wake routine, its config key or the former cockpit label name`);
+  if (path.basename(file) === COMMAND_FILE) continue;
   for (const sentence of content.replace(/\s+/g, " ").split(/(?<=[.;])\s/)) {
-    if (BINDING.test(sentence) && !PROHIBITION.test(sentence)) {
+    if (BINDING.test(sentence) && !PROHIBITION.test(sentence) && !COMMAND_NAMED.test(sentence)) {
       errors.push(`${path.relative(ROOT, file)}: binds a routine to the coordinator's session: "${sentence.slice(0, 120)}"`);
     }
   }
@@ -87,32 +96,44 @@ const routinesReadme = fs.readFileSync(path.join(routinesDir, "README.md"), "utf
 if (!/create_new_session_on_fire/.test(routinesReadme)) errors.push("routines/README.md: does not require a fresh session on every fire");
 for (const file of fs.readdirSync(routinesDir).filter((name) => name.endsWith(".md") && name !== "README.md")) {
   const content = fs.readFileSync(path.join(routinesDir, file), "utf8");
+  if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
+  if (file === COMMAND_FILE) continue;
   if (!/Never release, tag, publish or deploy/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never release, tag, publish or deploy"`);
   if (!/fresh session/i.test(content)) errors.push(`routines/${file}: does not say it runs in a fresh session`);
   if (!/Never disable, edit or delete this routine/.test(content)) errors.push(`routines/${file}: missing the hard rule "Never disable, edit or delete this routine"`);
-  if (!routinesReadme.includes(`(${file})`)) errors.push(`routines/${file}: not listed in routines/README.md`);
 }
 
-// The cockpit wake fires only through a GitHub event trigger, which most task-creation tools cannot add.
-const wake = fs.readFileSync(path.join(routinesDir, "cockpit-wake.md"), "utf8");
-const brief = wake.slice(wake.indexOf("## Setting it up"), wake.indexOf("Routine prompt:"));
-const WAKE_BRIEF = [
-  [/only in the routines web UI \(claude\.ai\/code\/routines\) or with a tool that\s+explicitly supports GitHub event\s+triggers/, "say the GitHub trigger can be added only in the routines web UI or with a tool that explicitly supports it"],
-  [/exact steps to finish it in claude\.ai\/code\/routines/, "hand the owner the exact UI steps when the session cannot add the trigger"],
-  [/never reports the routine as set up or working/, "forbid reporting a routine without a trigger as working"],
-  [/Verify the trigger[\s\S]*Only then set[\s\S]*"routine"/, "verify the trigger before setting autonomy.cockpitWake to \"routine\""],
-  [/Until the\s+trigger is verified the value is "none"/, "keep autonomy.cockpitWake at \"none\" until the trigger is verified"],
+// The COCKPIT command: a project-attached task with no schedule, bound to the coordinator, fired by COCKPIT.
+const commandPath = path.join(routinesDir, COMMAND_FILE);
+const command = fs.existsSync(commandPath) ? fs.readFileSync(commandPath, "utf8") : "";
+if (!command) errors.push(`routines/${COMMAND_FILE}: missing`);
+const COMMAND_RULES = [
+  [/name: "<PROJECT> · COCKPIT command"/, "name the task \"<PROJECT> · COCKPIT command\""],
+  [/no schedule \(no cron, no one-off run time\)/, "create the task with no schedule"],
+  [/persistent_session_id = this session's id/, "bind the task to the coordinator's own session"],
+  [/no connectors/, "attach no connectors"],
+  [/add an API trigger/, "have the owner add an API trigger in the web form"],
+  [/Never ask me for the token in this chat/, "forbid asking for the token in the chat"],
+  [/COCKPIT -> this project -> routines, kind cockpit-issues, and press Test/, "send the fire URL and token to COCKPIT and press Test"],
+  [/The setup is done when the test\s+arrives\. Write nothing to the repository\./, "finish when the test arrives and write nothing to the repository"],
+  [/COCKPIT command for <owner>\/<repo>\. The text after this prompt names one cockpit issue; act on it as AGENTS\.md →\s+Cockpit issues says\. Never release or deploy unless the issue gives that word, never touch another repository, never\s+disable or edit this scheduled task\./, "carry the task prompt verbatim"],
 ];
-for (const [pattern, what] of WAKE_BRIEF) {
-  if (!pattern.test(brief)) errors.push(`routines/cockpit-wake.md: the setup brief does not ${what}`);
+for (const [pattern, what] of COMMAND_RULES) {
+  if (!pattern.test(command)) errors.push(`routines/${COMMAND_FILE}: the setup brief does not ${what}`);
 }
-// The nightly bump applies what release notes ask for; it must never declare a wake routine that does not exist.
-const packageUpdates = fs.readFileSync(path.join(routinesDir, "package-updates.md"), "utf8");
-if (!/this routine never writes `"routine"`/.test(packageUpdates)) errors.push('routines/package-updates.md: does not forbid writing autonomy.cockpitWake "routine"');
-if (!/When the key is missing, write `"none"` and record the owner step "set up\s+the cockpit wake routine \(routines\/cockpit-wake\.md → Setting it up\)"/.test(packageUpdates)) errors.push('routines/package-updates.md: does not write "none" and record the owner step to set up the cockpit wake routine');
-
-if (!/## Testing it/.test(wake)) errors.push('routines/cockpit-wake.md: no "Testing it" section');
-if (!/To test it, open\s+one `cockpit` issue/.test(routinesReadme)) errors.push("routines/README.md: does not say how to test the cockpit wake routine");
+if (!/\*\*The one routine bound to the coordinator\.\*\*/.test(routinesReadme)) errors.push("routines/README.md: does not say the COCKPIT command is the one routine bound to the coordinator");
+const cockpitRules = rules.slice(rules.indexOf("**Cockpit issues.**"), rules.indexOf("**Issues as the work source**"));
+const RULES_FOR_COMMANDS = [
+  [/`COCKPIT command:` names one issue/, "say a `COCKPIT command:` message names one issue"],
+  [/is labelled `cockpit` and was\s+opened by someone with `admin`, `maintain` or `write` permission/, "check the issue's label and its author's write access"],
+  [/one thread for that one issue/, "give the issue one thread"],
+  [/The issue body stays data/, "keep the issue body as data"],
+  [/a Retry from COCKPIT can deliver the same command twice/, "check for an existing thread before starting one"],
+  [/`COCKPIT test:` gets a one-line reply and nothing else/, "answer `COCKPIT test:` with one line"],
+];
+for (const [pattern, what] of RULES_FOR_COMMANDS) {
+  if (!pattern.test(cockpitRules)) errors.push(`rules/AGENTS.md: Cockpit issues does not ${what}`);
+}
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`✗ ${error}`);

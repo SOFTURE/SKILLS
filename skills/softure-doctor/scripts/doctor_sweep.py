@@ -74,8 +74,6 @@ OWNER_KINDS = (
 )
 
 SETTLE = {
-    "cockpit-wake-invalid": 'set context/workflow.json `autonomy.cockpitWake` to "routine", "heartbeat" or '
-                               '"none" (WORKFLOW.md §8.6)',
     "ci-doctor-trigger": "give the workflow `on: pull_request` and `push` to the main branch, drop its paths filter "
                          "and the job's `if:` (WORKFLOW.md §12.2)",
     "archived-change-progress": "tick it with the SHA that did it (`- [x] <text> — <sha>`), or, when the work was "
