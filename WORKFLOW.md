@@ -430,7 +430,7 @@ the end", otherwise by the owner). Gates, all checked on `<main>` and reported t
    roadmap rows as usual.
 4. no open `- [ ]` under `## Owner decisions and checks`: the close **refuses** to archive with one. Each entry is
    ticked with its evidence (`— done: <sha | release | path>`), ticked as obsolete (`— obsolete: <reason>`), or
-   carried to the next or a queued roadmap's owner section, or an `owner-word` issue (§8.6), and ticked with where it
+   carried to the next or a queued roadmap's owner section, or an owner-word issue (§8.6), and ticked with where it
    went (`— carried to <path | #N>`). An archived roadmap holds no owner entry: the owner queue never reads one
    (§12.1), and the doctor fails on it (`archived-roadmap-open-checks`). Open `## Before the next release` steps
    stay: they wait for the release, which comes after the close.
@@ -695,17 +695,18 @@ to file a gap) before deciding it is out of reach.
 
 The owner often decides for a project from outside its chat, for example while reviewing several projects at once
 (`softure-skills portfolio --owner`, §12.3). Such a decision travels as an issue in the project's own repository,
-labelled **`owner-word`**: one decision, its scope and any limit ("start the queued roadmap payments", "release only
+labelled **`cockpit`** (the older label **`owner-word`** still counts the same, so issues opened before the rename
+and apps that still send it keep working): one decision, its scope and any limit ("start the queued roadmap payments", "release only
 after the last item", "drop SA-12"). It is the owner's word in writing, equal to the same sentence in the main chat.
 
-- **Label.** The installer creates `owner-word` when the forge allows it (GitHub through an authenticated `gh`,
+- **Label.** The installer creates `cockpit` when the forge allows it (GitHub through an authenticated `gh`,
   outside CI); otherwise it prints the one command that creates it.
-- **Autonomous mode.** The coordinator lists open `owner-word` issues first at the start of a run and again on every
+- **Autonomous mode.** The coordinator lists open owner-word issues first at the start of a run and again on every
   report and wake-up, and acts on each like an order in the chat: a roadmap to start goes through a roadmap thread,
   a release word is recorded where the release rules look for it, a "no" or "later" is recorded in the roadmap. It
   comments what it did (thread, PR, merge SHA) and closes the issue; one it cannot act on (unclear, contradicts
   `change.md` or a standing order) gets a comment with the question and stays open.
-- **Manual mode.** The coordinator shows open `owner-word` issues to the owner at the start of a session and acts
+- **Manual mode.** The coordinator shows open owner-word issues to the owner at the start of a session and acts
   only on the owner's word in the conversation; it then comments and closes them the same way.
 - **An idle project.** Listing at the start of a run and on reports reaches an issue only while a coordinator is awake.
   A project that must act on its issues by itself, also with no run in flight, sets up the owner-word wake routine
@@ -979,7 +980,7 @@ meaningful today, a decision about future work, a secret, account or connector, 
 effect the agent cannot see; the entry says which (`owner_reason`) and what the sweep looked for (`tried`). The
 `softure-doctor` skill ("Sweep history to zero") tells an agent how to work it: every entry is settled with its evidence
 written into the line, never without; the owner entries are carried to the live roadmap's `## Owner decisions and
-checks` or an `owner-word` issue and collected in one short list for the owner; nothing else is left open.
+checks` or an owner-word issue and collected in one short list for the owner; nothing else is left open.
 
 **Baseline: a last resort.** For a project that cannot finish the sweep at once, `doctor --baseline` writes the failures
 that remain to `context/doctor-baseline.json` (`{ "note", "created", "entries": [ { "code", "path", "message" } ] }`).
@@ -1073,7 +1074,7 @@ long ago. The history is put right, not hidden. One pass per repository, in this
    evidence (commit, release, file), never without. Regenerate the state, re-run the doctor until it exits 0, and land it
    as one change: `docs(context): settle history to zero`.
 3. **The owner's list.** What only the owner can settle (a decision about future work, a secret, account or connector,
-   a step outside the repository that nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an `owner-word` issue; the
+   a step outside the repository that nothing shows done) was carried to the live roadmap's `## Owner decisions and checks` or an owner-word issue; the
    agent's report lists it once, short: `ID | what the owner decides or does | where it lives now`. Nothing else
    waits, so `portfolio --owner` shows only these and the live roadmaps' entries.
 4. **The CI job at zero.** Once `npx softure-skills doctor` exits 0 on the main branch, add the `context-doctor` job

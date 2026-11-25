@@ -56,17 +56,17 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 - **READY threads:** pull requests whose checks are green and that wait for the coordinator's go.
 - **Threads to nudge:** an item whose go produced no merge SHA for 30 minutes; an item whose branch or pull request
   has not moved for 45 minutes or more.
-- **Owner-word issues:** every open issue labelled `owner-word` (number and title).
+- **Owner-word issues:** every open issue labelled `cockpit` or `owner-word` (number and title).
 
 ### 3. Facts, issue mode
 
-- **The queue:** every open issue of the repository that is not labelled `owner-word`, with its labels.
+- **The queue:** every open issue of the repository that is labelled neither `cockpit` nor `owner-word`, with its labels.
 - **New issues:** open issues without `status: in progress` and without an open pull request that closes them; each
   one becomes one thread with one change when the coordinator finds it well-founded.
 - **In flight:** issues labelled `status: in progress` or `status: blocked`, their pull requests and checks; READY
   pull requests (green, waiting for the go); threads to nudge, as in roadmap mode.
 - **Owner-word issues:** as in roadmap mode.
-- **Idle:** no open issue outside `owner-word` and nothing in flight; say since when, from the last closed issue or
+- **Idle:** no open issue outside `cockpit` and `owner-word` and nothing in flight; say since when, from the last closed issue or
   merged pull request.
 
 ### 4. One message to the coordinator
@@ -89,7 +89,7 @@ the same text, and nothing else is done.
 
 ## What the coordinator does with it
 
-The coordinator (`AGENTS.md` → Roadmap reports, `softure-worktree-manager`) acts on every open `owner-word` issue
+The coordinator (`AGENTS.md` → Roadmap reports, `softure-worktree-manager`) acts on every open owner-word issue
 first, starts a thread for every startable item (in issue mode: every well-founded new issue, one thread per issue),
 gives the go to every READY thread, nudges the stalled ones, and posts the report in the standard shape. The routine
 never does any of that itself.

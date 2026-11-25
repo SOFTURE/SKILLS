@@ -53,6 +53,11 @@ class InstallerNoticeTest(unittest.TestCase):
         self.assertIn("open one owner-word issue and check that the routine's run shows up", out)
         self.assertLess(out.index("once the task shows the GitHub trigger"), out.index('"ownerWordWake": "routine"'))
 
+    def test_installer_creates_the_cockpit_label(self) -> None:
+        out = install({**self.BASE, "mode": "autonomous"})
+        self.assertIn("label cockpit (created on the forge when gh can)", out)
+        self.assertNotIn("label owner-word", out)
+
     def test_declared_project_gets_no_notice(self) -> None:
         for value in ("routine", "heartbeat", "none"):
             with self.subTest(value=value):
@@ -108,7 +113,7 @@ class SetupBriefGateTest(unittest.TestCase):
                 self.assertIn("routines/owner-word-wake.md", result.stderr)
 
     def test_readme_without_the_test_steps_fails(self) -> None:
-        result = validate(("routines/README.md", "To test it, open\none `owner-word` issue", "Then wait"))
+        result = validate(("routines/README.md", "To test it, open\none `cockpit` issue", "Then wait"))
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("does not say how to test the owner-word wake routine", result.stderr)
 

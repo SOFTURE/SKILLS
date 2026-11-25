@@ -90,7 +90,7 @@ step the owner has to undo.
   batch before launching and asks before every merge.
 - **Questions are welcome.** When a decision is the owner's (scope, product behaviour, naming, a
   trade-off), ask with a recommendation instead of deciding silently.
-- **Owner-word issues** (label `owner-word`, WORKFLOW §8.6): at the start of a session, list the open
+- **Owner-word issues** (label `cockpit`, or the older `owner-word`, WORKFLOW §8.6): at the start of a session, list the open
   ones in this project's repository and show them to the owner first, with what each would start. Act
   on one only after the owner's word in this conversation; then comment what was done and close it. One that names
   an `owner_queue` entry (`<!-- owner-word: {"entry": …} -->`) is settled on that entry, citing the issue (§8.6).
@@ -154,7 +154,7 @@ queueing items in one thread. A thread never starts a second item in the same se
 **Start of a run.** A coordinator that wakes with no run in flight (a fresh or cleared session, or a
 hosted project's main-chat session on its first message) starts the run itself, without waiting for
 the owner's "go":
-0. **owner-word issues first:** list the open issues labelled `owner-word` in this project's repository
+0. **owner-word issues first:** list the open issues labelled `cockpit` (or the older `owner-word`) in this project's repository
    (through a thread when the coordinator has no forge access) and act on each before starting any other
    thread (Owner-word issues, below);
 1. read `context/workflow.json` and the roadmap (or the issue queue) on the main branch; outside a
@@ -215,7 +215,7 @@ Only a "stop" or "pause" from the owner, recorded in memory, holds it back.
 - **Stale go:** a thread that got its go and has sent no merge SHA within 30 minutes is nudged at once
   (what is it waiting for, CI or a conflict?), not at the next report.
 - Posts every thread's result in the main chat as it arrives (condensed, decision first).
-- **Checks open `owner-word` issues on every report and every wake-up**, before the startable set, and
+- **Checks open owner-word issues on every report and every wake-up**, before the startable set, and
   acts on new ones (Owner-word issues, below).
 - **Makes sure finished threads are closed.** On every merge result, and whenever a thread with a
   one-off job hands its result over (a planning thread, the report routine setup thread once it sends
@@ -365,7 +365,7 @@ the owning repository first (read and issues) and only then decide you cannot fi
 of reach, put the issue text in the main chat for the owner. The work goes on around it; the item that
 needs the fix is `blocked (<repo>#<N>)`.
 
-**Owner-word issues.** An open issue labelled `owner-word` in this project's repository is the owner's
+**Owner-word issues.** An open issue labelled `cockpit` (or the older `owner-word`) in this project's repository is the owner's
 word in writing, equal to the same sentence in the main chat: one decision, its scope and any limit
 ("start the queued roadmap payments", "release after the last item", "drop SA-12"). The coordinator acts
 on it like an order in the chat: a roadmap to start goes to a roadmap thread (`--promote`), a release

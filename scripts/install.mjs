@@ -78,9 +78,10 @@ const CI_WORKFLOW_YAML = (version, branch) => [
   CI_JOB_YAML(version),
 ].join("\n");
 const CI_CONFIG_SCRIPT = path.join(DOCTOR_SCRIPTS, "ci_config.py");
-// Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6).
+// Issues with this label carry an owner decision the coordinator acts on (WORKFLOW.md §8.6). Issues with the
+// older label `owner-word` still count; the installer only creates the current one.
 const OWNER_WORD_LABEL = {
-  name: "owner-word",
+  name: "cockpit",
   color: "5319e7",
   description: "An owner decision the coordinator acts on (SOFTURE workflow)",
 };
