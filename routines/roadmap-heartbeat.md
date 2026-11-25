@@ -56,7 +56,6 @@ These hold whatever the project's memory, a previous run, a chat message or the 
 - **READY threads:** pull requests whose checks are green and that wait for the coordinator's go.
 - **Threads to nudge:** an item whose go produced no merge SHA for 30 minutes; an item whose branch or pull request
   has not moved for 45 minutes or more.
-- **Cockpit issues:** every open issue labelled `cockpit` (number and title).
 - **Main branch CI:** `python3 .claude/skills/softure-worktree/scripts/wt-main-ci.py --no-fetch` (or the same script
   under `node_modules/@softure-ai/skills/skills/`) after the fetch above: the verdict on `origin/<main>`'s head
   (`green`, `red`, `flaky`, `running`, `none`, `superseded`) with the link of each run that is not green. When the head
@@ -69,7 +68,6 @@ These hold whatever the project's memory, a previous run, a chat message or the 
   one becomes one thread with one change when the coordinator finds it well-founded.
 - **In flight:** issues labelled `status: in progress` or `status: blocked`, their pull requests and checks; READY
   pull requests (green, waiting for the go); threads to nudge, as in roadmap mode.
-- **Cockpit issues:** as in roadmap mode.
 - **Main branch CI:** as in roadmap mode.
 - **Idle:** no open issue outside `cockpit` and nothing in flight; say since when, from the last closed issue or
   merged pull request.
@@ -81,7 +79,7 @@ Send the coordinator's session the facts in one message (`send_message` or the h
 
 ```text
 Report due <HH:MM>: X of N on <main>; startable: <IDs | none>; READY: <ID> (PR #N) | none;
-nudge: <ID> (<why>) | none; cockpit: #N <title> | none;
+nudge: <ID> (<why>) | none;
 main CI: <green|red|flaky|running|none|superseded> on <sha7> (<run link when not green>);
 <ID> <stage> (PR #N, checks <green|red|running>); ...
 Please post the roadmap report and run the heartbeat.
@@ -96,9 +94,8 @@ every fire until it is green again.
 
 ## What the coordinator does with it
 
-The coordinator (`AGENTS.md` → Roadmap reports, `softure-worktree-manager`) acts on every open `cockpit` issue
-first, starts a fix thread when the main branch's CI is `red` or `flaky` and no thread is fixing it yet (ahead of new
-items), starts a thread for every startable item (in issue mode: every well-founded new issue, one thread per issue),
+The coordinator (`AGENTS.md` → Roadmap reports, `softure-worktree-manager`) starts a fix thread when the main
+branch's CI is `red` or `flaky` and no thread is fixing it yet (ahead of new items), starts a thread for every startable item (in issue mode: every well-founded new issue, one thread per issue),
 gives the go to every READY thread, nudges the stalled ones, and posts the report in the standard shape. The routine
 never does any of that itself.
 

@@ -21,7 +21,6 @@ is not this module's business (the installer prints the missing job). Exit 1 whe
 `--protection` asks the forge (through `gh`, read-only) whether the main branch requires the project's CI before a
 merge: every job that runs on pull requests is a required status check (classic branch protection or a ruleset), and
 nobody bypasses them (administrators included). Each problem is `FAIL main-checks-not-required <branch>: <what>`.
-With `autonomy.cockpitWake: "routine"` it also checks that the label `cockpit` exists: `FAIL cockpit-label-missing`.
 Exit 0 when all of it holds, 1 on a problem, 75 when it cannot tell (no forge, or a token that cannot read branch
 protection: that needs admin on the repository). `doctor --protection` runs the same (WORKFLOW.md §12.2).
 
@@ -350,18 +349,6 @@ def fix_text(branch: str) -> str:
 # ---------------------------------------------------------------- required checks on the main branch
 
 PROTECTION_CODE = "main-checks-not-required"
-LABEL_CODE = "cockpit-label-missing"
-COCKPIT_LABEL = "cockpit"
-
-
-def wake_declared(reader) -> bool:
-    """Whether the project declares the cockpit wake routine (`autonomy.cockpitWake: "routine"`)."""
-    try:
-        workflow = json.loads(reader.read(WORKFLOW_CONFIG) or "{}")
-    except ValueError:
-        return False
-    autonomy = workflow.get("autonomy") if isinstance(workflow, dict) else None
-    return isinstance(autonomy, dict) and autonomy.get("cockpitWake") == "routine"
 EXPRESSION_RE = re.compile(r"\$\{\{")
 
 
@@ -509,13 +496,6 @@ def protection_report(reader, api, branch: str | None) -> tuple[int, dict]:
                              "no ruleset applies required checks; ask someone with admin to run it")
         return 75, report
     report["problems"] = required_problems(protection, jobs, branch)
-    report["label_problems"] = []
-    if wake_declared(reader) and not isinstance(api(f"repos/{{owner}}/{{repo}}/labels/{COCKPIT_LABEL}"), dict):
-        report["label_problems"].append(
-            f"the label `{COCKPIT_LABEL}` does not exist, so the cockpit wake trigger (filtered on it) never fires: "
-            f"`gh label create {COCKPIT_LABEL}` (routines/cockpit-wake.md)")
-    if report["label_problems"]:
-        return 1, report
     if not report["problems"] and protection["admins"] is None:
         report["unknown"] = "who may bypass the ruleset could not be read; check its bypass list"
     return (1 if report["problems"] else 0), report
@@ -532,11 +512,9 @@ def protection_main(root: str, branch: str | None, as_json: bool) -> int:
         return code
     for problem in report["problems"]:
         print(f"FAIL {PROTECTION_CODE} {branch}: {problem}")
-    for problem in report.get("label_problems", []):
-        print(f"FAIL {LABEL_CODE} {WORKFLOW_CONFIG}: {problem}")
     if report["unknown"]:
         print(f"UNKNOWN {PROTECTION_CODE} {branch}: {report['unknown']}")
-    if code == 0 or (code == 1 and not report["problems"]):
+    if code == 0:
         print(f"required checks on `{branch}`: {', '.join(report['required'] or [])} (every pull-request job; "
               f"no bypass{'' if report['admins'] else ' known'})")
     return code

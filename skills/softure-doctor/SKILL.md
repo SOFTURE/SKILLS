@@ -28,7 +28,7 @@ backlog), §5.2 (closing a roadmap), §6 (Progress). Two scripts next to this fi
 | `python3 <S>/doctor.py --fix [--write]` | the mechanical repairs of history, printed edit by edit; a dry run unless `--write` |
 | `python3 <S>/doctor.py --sweep [--json]` | every remaining failure as a worklist entry with evidence pointers; read-only |
 | `python3 <S>/doctor.py --baseline` | last resort only: accept today's failures in `context/doctor-baseline.json`; it only shrinks |
-| `python3 <S>/doctor.py --protection [--json]` | asks the forge (`gh`, read-only) whether the main branch requires every pull-request CI job before a merge, administrators included (`FAIL main-checks-not-required` per gap), and, with `cockpitWake: "routine"`, whether the label `cockpit` exists (`FAIL cockpit-label-missing`); exit 75 when it cannot tell. Same as `npx softure-skills doctor --protection` |
+| `python3 <S>/doctor.py --protection [--json]` | asks the forge (`gh`, read-only) whether the main branch requires every pull-request CI job before a merge, administrators included (`FAIL main-checks-not-required` per gap); exit 75 when it cannot tell. Same as `npx softure-skills doctor --protection` |
 | `python3 <S>/context_state.py write` | regenerate `context/state.json` from the working tree |
 | `python3 <S>/context_state.py write --staged` | regenerate it from what is staged, and stage it (use right before a commit) |
 | `python3 <S>/context_state.py print` / `check` | show it / exit 1 when it is missing or stale |
@@ -75,7 +75,6 @@ Each problem is one line `FAIL <code> <path>: <what>`. Fix the file it names, ne
 | `state-missing` / `state-stale` | `context_state.py write`, commit `context/state.json` |
 | `baseline-stale` | a baselined failure is fixed: `doctor.py --baseline` rewrites the file without it (commit it) |
 | `ci-doctor-trigger` | the workflow's `context-doctor` job misses pushes to `mainBranch`: give its `on:` `pull_request` and `push` with `branches: [<mainBranch>]`, drop any `paths`/`paths-ignore` filter and the job's `if:` (never baselined) |
-| `cockpit-wake-invalid` | `autonomy.cockpitWake` in `context/workflow.json` holds another value: set `"routine"` (the cockpit wake routine is set up and its GitHub trigger verified, `routines/cockpit-wake.md`; `"none"` until then), `"heartbeat"` or `"none"` (never baselined). An autonomous project without the key gets the note `cockpit-wake-undeclared`, not a failure |
 | `owner-entry-put-off` | a note, not a failure: an open `## Owner decisions and checks` entry that still carries `(later: #N)` (the settle shape before 0.37.0). Move the item to `roadmaps/roadmap-later.md` under a new ID and tick the entry `— later: #N → <new ID>` (WORKFLOW §8.6) |
 
 ## Mechanical repairs: `--fix`

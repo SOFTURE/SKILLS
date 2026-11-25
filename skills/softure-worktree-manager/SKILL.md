@@ -193,7 +193,8 @@ this repository (`gh issue list --label cockpit --state open`, WORKFLOW §8.6)
 and act on them before anything else: autonomous mode carries each out like an
 order in the conversation, comments what was done and closes it (one it cannot
 act on gets a comment with the question and stays open); manual mode shows them
-to the owner and waits for the word. Repeat this on every status firing (M4).
+to the owner and waits for the word. Later cockpit issues arrive as a
+`COCKPIT command:` message in the coordinator's chat (`AGENTS.md` → Cockpit issues).
 Read `context/foundation/roadmap.md`:
 the header note (run-wide orders from the owner such as parallelism or the
 final push), `## At a glance`, `## Order`, each candidate's `### <ID>` block.
