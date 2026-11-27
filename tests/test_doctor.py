@@ -1028,8 +1028,6 @@ class StateTest(unittest.TestCase):
                 "**SR-5**: pick the ranking provider and open an account there. Gates SR-5.",
             "Set `SEARCH_INDEX_URL` in production (**SR-1**)":
                 "Set `SEARCH_INDEX_URL` in the production environment (**SR-1**)",
-            "start queued roadmap payments: the owner opens a payment provider account":
-                "start queued roadmap payments: the owner opens an account with a payment provider",
         }
         moved = next(text for text in before if text.startswith("**SR-4**"))
         pairs[moved] = next(text for text in after if text.startswith("**SR-4**"))
@@ -1070,7 +1068,8 @@ class StateTest(unittest.TestCase):
         self.assertNotIn(("decision", "BK-2"), kinds, "a ticked entry of an archived roadmap is not waiting")
         self.assertFalse(any("/archive/" in entry["source"] for entry in queue))
         self.assertTrue(any(entry["kind"] == "word" and entry["text"].startswith("release: SR-4") for entry in queue))
-        self.assertTrue(any(entry["kind"] == "word" and "payments" in entry["text"] for entry in queue))
+        self.assertFalse(any(entry["source"].endswith("roadmap-payments.md") for entry in queue),
+                         "a queued roadmap is listed in queued, not in owner_queue")
         self.assertFalse(any("Run the reindex" in entry["text"] for entry in queue), "ticked lines are not waiting")
         self.assertEqual([entry["since"] for entry in queue], sorted(entry["since"] for entry in queue))
 

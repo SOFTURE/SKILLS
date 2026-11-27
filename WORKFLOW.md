@@ -407,7 +407,11 @@ context/backlog/roadmap-<slug>/<change-id>/change.md   §4 format with `status: 
 - An entry that got done or rejected elsewhere moves into that change's archive folder as `backlog-input.md`.
 - **The later roadmap** (`roadmaps/roadmap-later.md`, slug `later`) is the one place for what the owner put off: every
   `later` answer to an owner-queue entry lands there as a new item (§8.6). It is queued like any other, but it is
-  never promoted as a whole and puts no "start" word in the owner queue; an item leaves it when the owner raises it.
+  never promoted as a whole; an item leaves it when the owner raises it.
+- **A queued roadmap is not an owner-queue entry.** It waits for the owner's word by definition, so `state.json`
+  lists it only under `queued` (with its `start_condition`), never as an `owner_queue` entry, and a project whose only
+  open owner item is a queued roadmap is not waiting for the owner. Its own `## Owner decisions and checks` entries
+  do feed the owner queue (§12.1).
 
 ### 5.2 Closing a roadmap
 
@@ -759,8 +763,8 @@ after the last item", "drop SA-12"). It is the owner's word in writing, equal to
     block that says where it came from (`from <old ID> in <roadmap>, cockpit #N`), and the item's backlog entry
     moved with `git mv` to `context/backlog/roadmap-later/<change-id>/`. The old row becomes `carried (to
     roadmaps/roadmap-later.md <new ID>, #N)` and the entry is ticked `— later: #N → <new ID>`. The new item is
-    detached from the old one: it keeps no old ID, and the later roadmap never adds a "start queued roadmap" word
-    to the owner queue (§12.1). The owner raises an item from it when they want it.
+    detached from the old one: it keeps no old ID, and like every queued roadmap the later roadmap adds no entry
+    of its own to the owner queue (§5.1, §12.1). The owner raises an item from it when they want it.
 
   Then it regenerates `state.json` in the same commit, comments what it did and closes the issue. An `entry` that is
   not in the current `state.json` (already settled, or an unknown id) gets a comment saying so, and the issue is
@@ -908,10 +912,14 @@ recorded, and the owner work the package-update routine records in `context/work
 
 | `kind` | Comes from |
 | --- | --- |
-| `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word); every queued roadmap except `roadmap-later.md` (the word to start it, with its `trigger`) |
+| `word` | rows `done_code (…; waiting: release)` of the main roadmap (one entry: the release word) |
 | `decision` | open `- [ ]` entries under `## Owner decisions and checks` that are not owner steps; `routines.packageUpdates.hold` entries with `owner` (a bump held for the owner's decision, routines/package-updates.md) |
 | `step` | `owner step:` entries and manual-mode owner checks `(Manual N.M)`; open `## Before the next release` entries; `done_code` rows waiting for an owner step that has no entry; `**Owner step:**` / `**Owner check:**` lines of an open change's `## Roadmap handoff`; `routines.packageUpdates.ownerSteps` entries without `confirmed` |
 | `secret` | a `step` (or an owner hold) whose text names a secret, key, token, credential or password, also inside an environment variable name (`SOFTURE_EMAIL_KEY_SECRET`) |
+
+A queued roadmap itself is never an entry: it waits for the owner's word by definition and is listed only under
+`queued` (§5.1). The queue holds only what really blocks work: owner steps, secrets, the release word and owner
+decisions, including those under a queued roadmap's `## Owner decisions and checks`.
 
 The idle placeholder `roadmap.md` (`status: idle` or `roadmap: none`) is no active roadmap, but a project between
 roadmaps still has owner steps: its open `## Owner decisions and checks` and `## Before the next release` entries

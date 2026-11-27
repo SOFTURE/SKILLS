@@ -121,9 +121,9 @@ class PortfolioTest(unittest.TestCase):
         lines = result.stdout.splitlines()
         self.assertEqual(lines[0], "| project | active roadmap X/N | queued | open changes | owner queue | "
                                    "last release | doctor |")
-        self.assertIn("| alpha | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | ok |", lines)
-        self.assertIn("| beta* | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | 1 failing |", lines)
-        self.assertIn("| gamma | search 2/5 | 1 | 1 | 6 | v1.2.0 | ok |", lines, "a tag beats the roadmap value")
+        self.assertIn("| alpha | search 2/5 | 1 | 1 | 5 | v1.4.0 (roadmap, 2026-10-02) | ok |", lines)
+        self.assertIn("| beta* | search 2/5 | 1 | 1 | 5 | v1.4.0 (roadmap, 2026-10-02) | 1 failing |", lines)
+        self.assertIn("| gamma | search 2/5 | 1 | 1 | 5 | v1.2.0 | ok |", lines, "a tag beats the roadmap value")
         self.assertIn("no context/state.json", result.stdout)
         self.assertEqual(snapshot(self.alpha), before)
 
@@ -131,7 +131,7 @@ class PortfolioTest(unittest.TestCase):
         result = self.run_portfolio(self.alpha, self.beta, "--owner", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         queue = json.loads(result.stdout)["owner_queue"]
-        self.assertEqual(len(queue), 12)
+        self.assertEqual(len(queue), 10)
         self.assertEqual({entry["project"] for entry in queue}, {"alpha", "beta"})
         self.assertEqual([entry["since"] for entry in queue], sorted(entry["since"] for entry in queue))
         text = self.run_portfolio(self.alpha, "--owner").stdout
@@ -216,10 +216,10 @@ class PortfolioTest(unittest.TestCase):
         self.assertEqual(rows["red"]["doctor_check_codes"], ["archived-change-progress", "state-stale"])
         self.assertEqual(rows["shop"]["doctor_check_codes"], [])
         lines = self.run_portfolio("acme/shop", "acme/red", "acme/old", "--source", "api").stdout.splitlines()
-        self.assertIn("| shop | search 2/5 | 1 | 1 | 6 | v1.6.0 (2026-11-20), drift: SR-4 waits for a release since "
+        self.assertIn("| shop | search 2/5 | 1 | 1 | 5 | v1.6.0 (2026-11-20), drift: SR-4 waits for a release since "
                       "2026-11-09 | ok |", lines)
         self.assertIn("| red | no state.json | — | — | — | — | failing: archived-change-progress, state-stale |", lines)
-        self.assertIn("| old | search 2/5 | 1 | 1 | 6 | v1.4.0 (roadmap, 2026-10-02) | missing |", lines)
+        self.assertIn("| old | search 2/5 | 1 | 1 | 5 | v1.4.0 (roadmap, 2026-10-02) | missing |", lines)
 
     def test_api_source_falls_back_to_the_actions_api_when_checks_are_forbidden(self) -> None:
         """A fine-grained token cannot read check runs (403); the job and its log need only Actions: read."""
