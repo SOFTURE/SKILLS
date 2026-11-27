@@ -85,14 +85,6 @@
   ],
   "owner_queue": [
     {
-      "id": "oq-bfe20288d8",
-      "kind": "word",
-      "source": "context/foundation/roadmaps/roadmap-payments.md",
-      "item": null,
-      "since": "2026-10-15",
-      "text": "start queued roadmap payments: the owner opens a payment provider account"
-    },
-    {
       "id": "oq-ae618ec1ba",
       "kind": "decision",
       "source": "context/foundation/roadmaps/roadmap-payments.md#Owner decisions and checks",

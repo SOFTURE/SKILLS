@@ -57,12 +57,13 @@ class LaterAnswerTest(unittest.TestCase):
         self.project.state("write")
         return json.loads(self.project.read(context_state.STATE_PATH))["owner_queue"]
 
-    def test_the_later_roadmap_adds_no_start_word(self) -> None:
+    def test_no_queued_roadmap_adds_a_start_word(self) -> None:
         self.project.write(LATER, LATER_ROADMAP)
         queue = self.queue()
         self.assertFalse(any(entry["source"] == LATER for entry in queue), queue)
-        self.assertTrue(any(entry["kind"] == "word" and "payments" in entry["text"] for entry in queue),
-                        "another queued roadmap still asks for its start word")
+        self.assertFalse(any(entry["source"] == PAYMENTS for entry in queue), "a queued roadmap is no owner entry")
+        self.assertTrue(any(entry["source"] == f"{PAYMENTS}#Owner decisions and checks" for entry in queue),
+                        "a queued roadmap's own owner entries stay in the queue")
         state = json.loads(self.project.read(context_state.STATE_PATH))
         self.assertIn("later", [roadmap["slug"] for roadmap in state["queued"]], "the later roadmap is still listed")
 
